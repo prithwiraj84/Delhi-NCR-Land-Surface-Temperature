@@ -423,5 +423,5 @@ Not yet tested:
 
 Run the notebook on Kaggle as described above, and read the `manifest.notes` and data-source provenance
 before interpreting real results.
-#   D e l h i - N C R - L a n d - S u r f a c e - T e m p e r a t u r e  
+ 
  
