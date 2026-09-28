@@ -1228,26 +1228,49 @@ def _remap(image, source: str):
     return image.remap(list(table.keys()), list(table.values()), 0).rename("lc")
 
 
+def _grid_ee_geom(grid: GridSpec):
+    """Bounding polygon of a GridSpec in EPSG:4326 as an ee.Geometry."""
+    x0, y0 = grid.x0, grid.y0
+    x1, y1 = x0 + grid.width * grid.res, y0 - grid.height * grid.res
+    lons, lats = _grid_xy_to_lonlat([x0, x1, x1, x0, x0], [y0, y0, y1, y1, y0], grid.crs)
+    ring = [[float(lo), float(la)] for lo, la in zip(lons, lats)]
+    return ee.Geometry.Polygon([ring], None, False)
+
+
 def _gee_landcover_image(source: str, year: int, roi_geom, fine_grid: GridSpec):
     """Harmonised fine land cover for one epoch as a uint8 ee.Image (band 'lc'), plus provenance."""
+    grid_geom = _grid_ee_geom(fine_grid)
+
     if source == "glc_fcs30d":
-        col = ee.ImageCollection(_GLC_ANNUAL).filterBounds(roi_geom)
-        band_names = retry(lambda: col.first().bandNames().getInfo(), tries=4, base_delay=2.0, max_delay=30.0)
-        band_year = int(min(max(year, 2000), 2000 + len(band_names) - 1))
-        band = f"b{band_year - 1999}" if f"b{band_year - 1999}" in band_names else band_names[band_year - 2000]
-        if len(band_names) != 23:
-            log(f"GLC_FCS30D tiles expose {len(band_names)} bands (expected 23 for 2000-2022)", "WARNING")
-        native = col.first().select(band).projection()
-        classes = _remap(col.select(band).mosaic(), source).setDefaultProjection(native)
-        prov = f"{_GLC_ANNUAL} band {band} (= {band_year}), remapped to harmonised classes"
-        if band_year != year:
-            prov += f" [nearest available year to {year}]"
+        col = ee.ImageCollection(_GLC_ANNUAL).filterBounds(grid_geom)
+        band_names = []
+        try:
+            first_img = col.first()
+            band_names = retry(lambda: first_img.bandNames().getInfo(), tries=2, base_delay=1.0, max_delay=5.0)
+        except Exception as exc:
+            log(f"GLC_FCS30D tiles query failed or empty ({exc!r}); falling back to alternative source", "WARNING")
+            band_names = []
+
+        if band_names:
+            band_year = int(min(max(year, 2000), 2000 + len(band_names) - 1))
+            band = f"b{band_year - 1999}" if f"b{band_year - 1999}" in band_names else band_names[min(band_year - 2000, len(band_names) - 1)]
+            if len(band_names) != 23:
+                log(f"GLC_FCS30D tiles expose {len(band_names)} bands (expected 23 for 2000-2022)", "WARNING")
+            classes = _remap(col.select(band).mosaic(), source).setDefaultProjection(ee.Projection(CFG.CRS).atScale(30))
+            prov = f"{_GLC_ANNUAL} band {band} (= {band_year}), remapped to harmonised classes"
+            if band_year != year:
+                prov += f" [nearest available year to {year}]"
+        else:
+            fallback_source = "dynamic_world" if year >= 2015 else "esa_worldcover"
+            log(f"GLC_FCS30D unavailable for {year}; falling back to {fallback_source}", "WARNING")
+            return _gee_landcover_image(fallback_source, year, roi_geom, fine_grid)
     elif source == "esa_worldcover":
-        image = ee.ImageCollection("ESA/WorldCover/v100").first().select("Map")
-        classes = _remap(image, source).setDefaultProjection(image.projection())
-        prov = "ESA/WorldCover/v100 (2020) Map, remapped to harmonised classes"
+        col = ee.ImageCollection("ESA/WorldCover/v100").filterBounds(grid_geom)
+        image = col.select("Map").mosaic()
+        classes = _remap(image, source).setDefaultProjection(ee.Projection(CFG.CRS).atScale(10))
+        prov = f"ESA/WorldCover/v100 (2020) Map mosaic, remapped to harmonised classes"
     elif source == "dynamic_world":
-        col = (ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1").filterBounds(roi_geom)
+        col = (ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1").filterBounds(grid_geom)
                .filterDate(f"{year}-01-01", f"{year + 1}-01-01").select("label"))
         mode = col.reduce(ee.Reducer.mode()).rename("label")
         classes = _remap(mode, source).setDefaultProjection(ee.Projection(CFG.CRS).atScale(10))
@@ -1292,7 +1315,7 @@ def _gee_build_roi(res: int):
         boundary = _gee_boundary_geojson(roi_fc, districts.keys())
         grid = GridSpec.from_lonlat_points(_geojson_lonlat_points(boundary), CFG.CRS, res)
         asset = _GEOBOUNDARIES_ADM2 if source == "geoboundaries" else _GAUL_ADM2
-        return {"source": asset, "fc": roi_fc, "geom": roi_fc.geometry(100), "boundary": boundary,
+        return {"source": asset, "fc": roi_fc, "geom": roi_fc.geometry(), "boundary": boundary,
                 "grid": grid, "area_km2": area, "local_districts": None}
     log("No administrative boundary source usable; falling back to the approximate NCR outline + "
         "nearest-HQ (Voronoi) districts", "WARNING")
