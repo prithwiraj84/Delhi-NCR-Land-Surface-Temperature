@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Thermal twin">
+  <defs>
+    <linearGradient id="t" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="0.5" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#fb7185"/>
+    </linearGradient>
+    <filter id="g" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#090d16"/>
+  <path d="M32 6 54 19v26L32 58 10 45V19Z" fill="none" stroke="url(#t)" stroke-width="2.5" stroke-linejoin="round" opacity="0.55"/>
+  <g filter="url(#g)">
+    <rect x="28" y="15" width="8" height="24" rx="4" fill="none" stroke="url(#t)" stroke-width="3"/>
+    <circle cx="32" cy="43" r="7" fill="#fb7185"/>
+    <rect x="30.5" y="25" width="3" height="16" rx="1.5" fill="#fb7185"/>
+  </g>
+</svg>

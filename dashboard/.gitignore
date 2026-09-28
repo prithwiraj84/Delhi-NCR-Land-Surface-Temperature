@@ -1,0 +1,20 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.local
+.env
+.env.*
+!.env.example
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.vite/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+# public/data/ is NOT ignored: it ships the SYNTHETIC demo bundle (decision D5; labelled
+# SYNTHETIC in the manifest, the UI and the README). Large files are gzip-compressed (D3).

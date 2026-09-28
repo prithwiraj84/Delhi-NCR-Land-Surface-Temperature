@@ -1,0 +1,227 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens (mirror tailwind.config.js and src/lib/colors.js THEME).
+ * Dark-only UI: the thermal ramps are tuned for a dark basemap, so there is no light theme.
+ */
+:root {
+  color-scheme: dark;
+  --bg: #090d16;
+  --bg-deep: #05080f;
+  --bg-raised: #0f1624;
+  --panel: #1e293b;
+  --panel-rgb: 30 41 59;
+  --border: rgba(148, 163, 184, 0.16);
+  --ink: #e2e8f0;
+  --ink-strong: #f8fafc;
+  --ink-muted: #94a3b8;
+  --ink-faint: #8a97ab; /* >= 4.5:1 on all panel surfaces (WCAG AA small text) */
+  --cyan: #22d3ee;
+  --violet: #a78bfa;
+  --emerald: #34d399;
+  --rose: #fb7185;
+  --amber: #fbbf24;
+  --grid-line: rgba(34, 211, 238, 0.055);
+  --grid-line-strong: rgba(167, 139, 250, 0.07);
+  --focus: #22d3ee;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-bg font-sans text-ink antialiased;
+    background-color: #090d16;
+    min-height: 100dvh;
+    overflow: hidden;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display;
+  }
+
+  code {
+    @apply rounded bg-bg-deep/70 px-1 py-px font-mono text-[0.85em] text-violet-soft;
+  }
+
+  ::selection {
+    background: rgba(34, 211, 238, 0.3);
+    color: #f8fafc;
+  }
+
+  /* Keyboard focus is always visible; mouse focus stays clean. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Glass surfaces: translucent slate + blur, hairline border, faint top highlight. */
+  .glass {
+    background: linear-gradient(180deg, rgb(var(--panel-rgb) / 0.62), rgb(var(--panel-rgb) / 0.5));
+    border-color: var(--border);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    backdrop-filter: blur(14px) saturate(140%);
+    box-shadow:
+      0 8px 32px -8px rgba(2, 6, 23, 0.65),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .glass-strong {
+    background: linear-gradient(180deg, rgb(15 22 36 / 0.86), rgb(15 22 36 / 0.78));
+    border-color: var(--border);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    backdrop-filter: blur(20px) saturate(150%);
+  }
+
+  .neon-text {
+    color: var(--cyan);
+    text-shadow:
+      0 0 12px rgba(34, 211, 238, 0.45),
+      0 0 2px rgba(34, 211, 238, 0.6);
+  }
+
+  /* Two offset line grids (48 px cyan + 240 px violet majors) that fade towards the edges. */
+  .grid-glow {
+    background-image:
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: 48px 48px, 48px 48px;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 35%, #000 25%, transparent 78%);
+    mask-image: radial-gradient(ellipse at 50% 35%, #000 25%, transparent 78%);
+  }
+
+  .kpi-number {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "zero" 1;
+    letter-spacing: -0.01em;
+  }
+
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.28);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(34, 211, 238, 0.45);
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(148, 163, 184, 0.08) 25%,
+      rgba(148, 163, 184, 0.18) 37%,
+      rgba(148, 163, 184, 0.08) 63%
+    );
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.8s linear infinite;
+  }
+
+  .tooltip-pop {
+    transform-origin: var(--radix-tooltip-content-transform-origin);
+    animation: tooltip-pop 140ms ease-out;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+@keyframes tooltip-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ---- MapLibre chrome restyled for the dark glass UI ------------------------------------ */
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  background: rgba(9, 13, 22, 0.72) !important;
+  color: var(--ink-faint);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 10px;
+  border-radius: 8px;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--ink-muted) !important;
+}
+.maplibregl-ctrl-attrib a:hover {
+  color: var(--cyan) !important;
+}
+.maplibregl-ctrl-attrib-button {
+  filter: invert(0.85);
+}
+.maplibregl-ctrl-group {
+  background: rgba(15, 22, 36, 0.85) !important;
+  border: 1px solid var(--border);
+}
+.maplibregl-ctrl-group button + button {
+  border-top-color: var(--border) !important;
+}
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(0.85);
+}
+
+/* ---- Motion preferences ----------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- Forced colours (Windows high contrast): keep structure visible ---------------------- */
+@media (forced-colors: active) {
+  .glass,
+  .glass-strong {
+    border: 1px solid CanvasText;
+  }
+  .grid-glow {
+    display: none;
+  }
+}
