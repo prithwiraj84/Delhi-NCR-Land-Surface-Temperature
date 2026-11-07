@@ -38,15 +38,35 @@ const OPTIONAL_FLOAT_COLUMNS = new Set(["lst_pred_oof", "resid_oof"]);
 const jsonCache = new Map();
 const epochCache = new Map();
 
+/** Base URL chosen at run time by the v2 bundle resolver (`src/data/bundle.js`); null = default. */
+let runtimeBaseUrl = null;
+
 /**
- * Base URL of the web bundle, without trailing slash.
- * `VITE_DATA_BASE_URL` wins when set to a non-empty value, else `${BASE_URL}data`.
+ * Point every loader of this module at another bundle directory (e.g. `/demo` for the synthetic
+ * v2 demo bundle chosen with `?bundle=demo`). `null` restores the default. Cached responses of
+ * the previous base stay keyed by their full URL, so switching back is instant.
  */
-export function getDataBaseUrl() {
+export function setDataBaseUrl(base) {
+  runtimeBaseUrl = typeof base === "string" && base.trim() ? base.trim().replace(/\/+$/, "") : null;
+}
+
+/**
+ * Default bundle base: `VITE_DATA_BASE_URL` when set to a non-empty value, else `${BASE_URL}data`.
+ * (Ignores the runtime override; the resolver uses it to probe the default location.)
+ */
+export function getDefaultDataBaseUrl() {
   const env = import.meta.env ?? {};
   const configured = typeof env.VITE_DATA_BASE_URL === "string" ? env.VITE_DATA_BASE_URL.trim() : "";
   const base = configured || `${env.BASE_URL ?? "/"}data`;
   return base.replace(/\/+$/, "");
+}
+
+/**
+ * Base URL of the web bundle, without trailing slash: the runtime override set by the bundle
+ * resolver when present, else the default (`VITE_DATA_BASE_URL` or `${BASE_URL}data`).
+ */
+export function getDataBaseUrl() {
+  return runtimeBaseUrl ?? getDefaultDataBaseUrl();
 }
 
 /** Join the base URL and a bundle-relative file name. */
@@ -78,8 +98,31 @@ export async function gunzipToText(bytes) {
   if (typeof DecompressionStream !== "function") {
     throw new Error("this browser cannot decompress gzip (DecompressionStream is unavailable)");
   }
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-  return new Response(stream).text();
+  const source = new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+  return new Response(source.pipeThrough(new DecompressionStream("gzip"))).text();
+}
+
+/**
+ * Inflate gzip bytes to a Uint8Array (same platform requirement as `gunzipToText`; the source is a
+ * plain ReadableStream so it also works where Blob lacks `stream()`, e.g. jsdom).
+ */
+export async function gunzipToBytes(bytes) {
+  if (typeof DecompressionStream !== "function") {
+    throw new Error("this browser cannot decompress gzip (DecompressionStream is unavailable)");
+  }
+  const source = new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+  const stream = source.pipeThrough(new DecompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 /**
@@ -144,13 +187,22 @@ function cached(cache, key, factory) {
   return promise;
 }
 
+/**
+ * True for a structurally usable manifest of either schema: v1 (`epochs` list, SPEC_v1 §4.1)
+ * or v2 (`timeline.frames` list, SPEC §5.3); both need a `files` map.
+ */
+export function isUsableManifest(manifest) {
+  if (!manifest || typeof manifest !== "object" || !manifest.files || typeof manifest.files !== "object") return false;
+  return Array.isArray(manifest.epochs) || Array.isArray(manifest.timeline?.frames);
+}
+
 /** Load `manifest.json`. Rejects with DataLoadError(status "empty") when the bundle is absent. */
 export function loadManifest() {
   const url = dataUrl("manifest.json");
   return cached(jsonCache, url, async () => {
     const manifest = await fetchJson(url, { missingIsEmpty: true });
-    if (!manifest || typeof manifest !== "object" || !Array.isArray(manifest.epochs) || !manifest.files) {
-      throw new DataLoadError(`manifest.json at ${url} is malformed (missing "epochs" or "files").`, { url });
+    if (!isUsableManifest(manifest)) {
+      throw new DataLoadError(`manifest.json at ${url} is malformed (missing "epochs"/"timeline.frames" or "files").`, { url });
     }
     return manifest;
   });

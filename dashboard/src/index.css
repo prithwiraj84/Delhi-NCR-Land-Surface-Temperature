@@ -1,42 +1,54 @@
+/*
+ * NCR THERMAL/OPS v2 - global styles (UI_SPEC_v2 §4.5 surfaces, §12 preferences).
+ *
+ * Colour/motion custom properties come from src/design/tokens.css (generated from tokens.js,
+ * imported first in src/main.jsx). This file only composes them: base typography, glass
+ * panels with HUD corner brackets, scanline skeleton, grain, vignette, focus ring, MapLibre
+ * chrome, and the user-preference / perf-tier / motion-level overrides.
+ *
+ * Root attributes written by the shell (AppShell + SettingsMenu):
+ *   html[data-motion="full|reduced|off"]   effective motion level (§5.3)
+ *   html[data-perf-tier="0..3"]            perf governor tier (§6.6): >= 1 => solid panels
+ *   html[data-playing="true"]              playback running => panels solid (§3.2, budget)
+ */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/*
- * Design tokens (mirror tailwind.config.js and src/lib/colors.js THEME).
- * Dark-only UI: the thermal ramps are tuned for a dark basemap, so there is no light theme.
- */
+/* --mode-accent animates between solar and lunar (Day<->Night sweep, §5.2 D). */
+@property --mode-accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ffe27a;
+}
+
 :root {
   color-scheme: dark;
-  --bg: #090d16;
-  --bg-deep: #05080f;
-  --bg-raised: #0f1624;
-  --panel: #1e293b;
-  --panel-rgb: 30 41 59;
-  --border: rgba(148, 163, 184, 0.16);
-  --ink: #e2e8f0;
-  --ink-strong: #f8fafc;
-  --ink-muted: #94a3b8;
-  --ink-faint: #8a97ab; /* >= 4.5:1 on all panel surfaces (WCAG AA small text) */
-  --cyan: #22d3ee;
-  --violet: #a78bfa;
-  --emerald: #34d399;
-  --rose: #fb7185;
-  --amber: #fbbf24;
-  --grid-line: rgba(34, 211, 238, 0.055);
-  --grid-line-strong: rgba(167, 139, 250, 0.07);
-  --focus: #22d3ee;
+  --focus: var(--signal);
+  --bracket: var(--hairline-strong);
+  --scan-line: rgba(69, 224, 255, 0.3);
+  --grain-opacity: 0.03;
+  --panel-blur: 12px;
+  transition: --mode-accent var(--motion-terminator) var(--ease-sine-in-out);
+}
+
+:root[data-mode="night"],
+:root[data-mode="dtr"] {
+  --mode-accent: var(--lunar);
 }
 
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
+    background-color: #070b14;
   }
 
   body {
-    @apply bg-bg font-sans text-ink antialiased;
-    background-color: #090d16;
+    @apply font-sans text-ink antialiased;
+    background-color: var(--bg, #070b14);
+    font-size: 14px;
+    line-height: 21px;
     min-height: 100dvh;
     overflow: hidden;
   }
@@ -53,70 +65,173 @@
   }
 
   code {
-    @apply rounded bg-bg-deep/70 px-1 py-px font-mono text-[0.85em] text-violet-soft;
+    @apply rounded bg-void/70 px-1 py-px font-mono text-[0.85em] text-lunar;
   }
 
   ::selection {
-    background: rgba(34, 211, 238, 0.3);
-    color: #f8fafc;
+    background: rgba(69, 224, 255, 0.3);
+    color: var(--ink-strong);
   }
 
-  /* Keyboard focus is always visible; mouse focus stays clean. */
+  /* Keyboard focus is always visible (2 px signal, 2 px offset); mouse focus stays clean. */
   :focus-visible {
     outline: 2px solid var(--focus);
     outline-offset: 2px;
   }
+
+  /* Tabular, slashed-zero numerals everywhere numbers are compared. */
+  .tnum,
+  .kpi-number {
+    font-variant-numeric: tabular-nums slashed-zero;
+    font-feature-settings: "tnum" 1, "zero" 1;
+  }
 }
 
 @layer components {
-  /* Glass surfaces: translucent slate + blur, hairline border, faint top highlight. */
-  .glass {
-    background: linear-gradient(180deg, rgb(var(--panel-rgb) / 0.62), rgb(var(--panel-rgb) / 0.5));
-    border-color: var(--border);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
-    backdrop-filter: blur(14px) saturate(140%);
-    box-shadow:
-      0 8px 32px -8px rgba(2, 6, 23, 0.65),
-      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  /* ---- Glass panel (§4.5): surface-1 @ 72 % + blur 12 + saturate 140 %, hairline, radius 12 */
+  .glass,
+  .glass-panel {
+    background-color: var(--surface-1-glass);
+    border: 1px solid var(--hairline);
+    -webkit-backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+    backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+    box-shadow: var(--shadow-panel);
   }
 
-  .glass-strong {
-    background: linear-gradient(180deg, rgb(15 22 36 / 0.86), rgb(15 22 36 / 0.78));
-    border-color: var(--border);
-    -webkit-backdrop-filter: blur(20px) saturate(150%);
-    backdrop-filter: blur(20px) saturate(150%);
+  /* Solid variant (cards, menus, T1+ perf tiers, playback). */
+  .glass-strong,
+  .solid-panel {
+    background-color: var(--surface-2-solid);
+    border: 1px solid var(--hairline);
+    box-shadow: var(--shadow-panel);
   }
 
-  .neon-text {
-    color: var(--cyan);
-    text-shadow:
-      0 0 12px rgba(34, 211, 238, 0.45),
-      0 0 2px rgba(34, 211, 238, 0.6);
+  /*
+   * HUD corner brackets: 8 px L-ticks at each corner drawn by eight gradient layers on a
+   * pseudo-element (no extra DOM). `.hud-active` turns them signal @ 60 %.
+   */
+  .hud {
+    position: relative;
+  }
+  .hud::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      linear-gradient(var(--bracket), var(--bracket)) top left / 8px 1px no-repeat,
+      linear-gradient(var(--bracket), var(--bracket)) top left / 1px 8px no-repeat,
+      linear-gradient(var(--bracket), var(--bracket)) top right / 8px 1px no-repeat,
+      linear-gradient(var(--bracket), var(--bracket)) top right / 1px 8px no-repeat,
+      linear-gradient(var(--bracket), var(--bracket)) bottom left / 8px 1px no-repeat,
+      linear-gradient(var(--bracket), var(--bracket)) bottom left / 1px 8px no-repeat,
+      linear-gradient(var(--bracket), var(--bracket)) bottom right / 8px 1px no-repeat,
+      linear-gradient(var(--bracket), var(--bracket)) bottom right / 1px 8px no-repeat;
+  }
+  .hud-active {
+    --bracket: rgba(69, 224, 255, 0.6);
   }
 
-  /* Two offset line grids (48 px cyan + 240 px violet majors) that fade towards the edges. */
-  .grid-glow {
-    background-image:
-      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
-    background-size: 48px 48px, 48px 48px;
-    -webkit-mask-image: radial-gradient(ellipse at 50% 35%, #000 25%, transparent 78%);
-    mask-image: radial-gradient(ellipse at 50% 35%, #000 25%, transparent 78%);
+  /* One-time mount scan (§4.5 B): a 1 px signal line sweeps the panel top -> bottom. */
+  .mount-scan {
+    position: relative;
+    overflow: hidden;
+  }
+  .mount-scan::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 1px;
+    background: var(--scan-line);
+    pointer-events: none;
+    animation: mount-scan 600ms linear 1 forwards;
   }
 
-  .kpi-number {
-    font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum" 1, "zero" 1;
-    letter-spacing: -0.01em;
+  /* Scanline skeleton (§5.2 K): surface-2 block with a 1 px signal line sweeping in 1.6 s. */
+  .scan-skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--surface-2);
+    border-radius: var(--radius-md);
+  }
+  .scan-skeleton::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 1px;
+    background: var(--scan-line);
+    animation: skeleton-scan 1.6s linear infinite;
+  }
+  /* v1 name */
+  .skeleton {
+    background-color: var(--surface-3);
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 1px;
+    background: var(--scan-line);
+    animation: skeleton-scan 1.6s linear infinite;
+  }
+
+  /* Micro label: JetBrains Mono 11 px, 0.14em, uppercase, ink-faint; never below 11 px. */
+  .micro-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.3;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* Units at 0.7 em in ink-muted (§4.3). */
+  .unit {
+    font-size: 0.7em;
+    color: var(--ink-muted);
+    font-weight: 500;
+    margin-left: 0.15em;
   }
 
   .focus-ring {
-    @apply outline-none focus-visible:ring-2 focus-visible:ring-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-signal focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
+  }
+
+  /* Static grain (§4.5): 128 px feTurbulence tile at 3 %, overlay blend, chrome only. */
+  .grain {
+    position: relative;
+    isolation: isolate;
+  }
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: var(--grain-opacity);
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1 0'/></filter><rect width='128' height='128' filter='url(%23n)'/></svg>");
+    background-size: 128px 128px;
+  }
+
+  /* Stage vignette (transparent at 55 % to void @ 70 %) + one static sky glow in --mode-accent @ 6 %. */
+  .stage-vignette {
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(5, 7, 13, 0.7) 100%),
+      radial-gradient(ellipse at 50% -10%, color-mix(in srgb, var(--mode-accent) 6%, transparent) 0%, transparent 60%);
   }
 
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+    scrollbar-color: rgba(160, 185, 225, 0.28) transparent;
   }
   .scrollbar-thin::-webkit-scrollbar {
     width: 8px;
@@ -126,38 +241,59 @@
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.28);
+    background: rgba(160, 185, 225, 0.28);
     border-radius: 9999px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(34, 211, 238, 0.45);
-  }
-
-  .skeleton {
-    background: linear-gradient(
-      90deg,
-      rgba(148, 163, 184, 0.08) 25%,
-      rgba(148, 163, 184, 0.18) 37%,
-      rgba(148, 163, 184, 0.08) 63%
-    );
-    background-size: 400% 100%;
-    animation: skeleton-shimmer 1.8s linear infinite;
+    background-color: rgba(69, 224, 255, 0.45);
   }
 
   .tooltip-pop {
     transform-origin: var(--radix-tooltip-content-transform-origin);
-    animation: tooltip-pop 140ms ease-out;
+    animation: tooltip-pop var(--motion-quick) var(--ease-quick);
+  }
+
+  /* v1 helpers kept (restyled): no neon glow, no drifting grid (removed in v2, §4.5). */
+  .neon-text {
+    color: var(--signal);
+  }
+  .grid-glow {
+    display: none;
+  }
+
+  /* Visually hidden but available to assistive technology. */
+  .sr-only-focusable:not(:focus):not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 }
 
-@keyframes skeleton-shimmer {
-  0% {
-    background-position: 100% 0;
+@keyframes mount-scan {
+  from {
+    transform: translateY(0);
+    opacity: 1;
   }
-  100% {
-    background-position: 0 0;
+  to {
+    transform: translateY(var(--scan-distance, 600px));
+    opacity: 0;
+  }
+}
+
+@keyframes skeleton-scan {
+  from {
+    top: 0;
+  }
+  to {
+    top: 100%;
   }
 }
 
@@ -172,56 +308,148 @@
   }
 }
 
+@keyframes boot-sweep {
+  from {
+    transform: translate(-30%, -30%) rotate(-28deg);
+  }
+  to {
+    transform: translate(130%, 130%) rotate(-28deg);
+  }
+}
+
+@keyframes graticule-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 /* ---- MapLibre chrome restyled for the dark glass UI ------------------------------------ */
 .maplibregl-ctrl-attrib,
 .maplibregl-ctrl-attrib.maplibregl-compact {
-  background: rgba(9, 13, 22, 0.72) !important;
+  background: rgba(7, 11, 20, 0.78) !important;
   color: var(--ink-faint);
-  font-family: "Inter", system-ui, sans-serif;
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: 11px;
   border-radius: 8px;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
 }
 .maplibregl-ctrl-attrib a {
   color: var(--ink-muted) !important;
 }
 .maplibregl-ctrl-attrib a:hover {
-  color: var(--cyan) !important;
+  color: var(--signal) !important;
 }
 .maplibregl-ctrl-attrib-button {
   filter: invert(0.85);
 }
 .maplibregl-ctrl-group {
-  background: rgba(15, 22, 36, 0.85) !important;
-  border: 1px solid var(--border);
+  background: var(--surface-2-solid) !important;
+  border: 1px solid var(--hairline);
 }
 .maplibregl-ctrl-group button + button {
-  border-top-color: var(--border) !important;
+  border-top-color: var(--hairline) !important;
 }
 .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
   filter: invert(0.85);
 }
 
-/* ---- Motion preferences ----------------------------------------------------------------- */
+/* ---- Performance tiers + playback: solid panels (no backdrop blur), §6.6 / §3.2 ---------- */
+:root[data-perf-tier="1"] .glass,
+:root[data-perf-tier="2"] .glass,
+:root[data-perf-tier="3"] .glass,
+:root[data-perf-tier="1"] .glass-panel,
+:root[data-perf-tier="2"] .glass-panel,
+:root[data-perf-tier="3"] .glass-panel,
+:root[data-playing="true"] .glass,
+:root[data-playing="true"] .glass-panel {
+  background-color: var(--surface-2-solid);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-perf-tier="2"] .grain::after,
+:root[data-perf-tier="3"] .grain::after {
+  display: none;
+}
+
+/* ---- Motion levels (§5.3). "off" kills every CSS animation/transition; "reduced" keeps
+        opacity-only transitions short and removes looping decoration. -------------------- */
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+:root[data-motion="reduced"] .mount-scan::after,
+:root[data-motion="reduced"] .scan-skeleton::after,
+:root[data-motion="reduced"] .skeleton::after,
+:root[data-motion="reduced"] .animate-live-pulse,
+:root[data-motion="reduced"] .animate-glow-pulse,
+:root[data-motion="reduced"] .animate-scan-sweep {
+  animation: none !important;
+}
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  transition-duration: 120ms !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
+  :root:not([data-motion="full"]) *,
+  :root:not([data-motion="full"]) *::before,
+  :root:not([data-motion="full"]) *::after {
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
 }
 
-/* ---- Forced colours (Windows high contrast): keep structure visible ---------------------- */
+/* ---- User preferences (§12) ----------------------------------------------------------- */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-panel {
+    background-color: var(--surface-2-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --ink-faint: var(--ink-muted);
+    --hairline: rgba(160, 185, 225, 0.32);
+    --hairline-strong: rgba(160, 185, 225, 0.45);
+  }
+  .grain::after {
+    display: none;
+  }
+}
+
 @media (forced-colors: active) {
   .glass,
-  .glass-strong {
+  .glass-panel,
+  .glass-strong,
+  .solid-panel {
     border: 1px solid CanvasText;
+    background: Canvas;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
-  .grid-glow {
+  .grain::after,
+  .stage-vignette,
+  .hud::before {
+    display: none;
+  }
+  .shadow-glow-signal,
+  .shadow-glow-alert {
+    box-shadow: none;
+  }
+}
+
+@media print {
+  .grain::after,
+  .stage-vignette {
     display: none;
   }
 }

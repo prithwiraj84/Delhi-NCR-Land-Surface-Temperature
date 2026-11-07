@@ -24,13 +24,13 @@ export function DataModeBanner({ manifest, className }) {
     <div
       role="note"
       aria-label="Synthetic demo data notice"
-      className={cn("border-b border-amber/30 bg-amber/10 text-amber-soft backdrop-blur-md", className)}
+      className={cn("border-b border-warn/40 bg-surface-2 text-ink", className)}
     >
       <div className="mx-auto flex max-w-[1800px] items-start gap-3 px-3 py-2 sm:px-5">
-        <FlaskConical aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber" />
+        <FlaskConical aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warn" />
         <div className="min-w-0 flex-1 text-xs leading-relaxed sm:text-[13px]">
           <p>
-            <strong className="font-semibold text-amber">SYNTHETIC demo data.</strong>{" "}
+            <strong className="font-semibold text-warn">SYNTHETIC demo data.</strong>{" "}
             <span className="text-ink sm:hidden">Simulated values, not satellite observations.</span>
             <span className="hidden text-ink sm:inline">
               {reason} Every value here comes from a simulated Delhi NCR with a planted temperature response. Use it to
@@ -60,7 +60,7 @@ export function DataModeBanner({ manifest, className }) {
                 {truthEntries.length > 0 && (
                   <ul className="mt-1.5 flex flex-wrap gap-1.5">
                     {truthEntries.map(([key, value]) => (
-                      <li key={key} className="rounded-md border border-amber/30 bg-bg/40 px-2 py-0.5 font-mono text-[11px] text-ink">
+                      <li key={key} className="rounded-md border border-warn/30 bg-void/40 px-2 py-0.5 font-mono text-[11px] text-ink">
                         {key} = {typeof value === "object" ? JSON.stringify(value) : String(value)}
                       </li>
                     ))}
@@ -74,7 +74,7 @@ export function DataModeBanner({ manifest, className }) {
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className="focus-ring inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs text-amber hover:bg-amber/10"
+          className="focus-ring inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs text-warn hover:bg-warn/10"
         >
           {expanded ? "Less" : "Details"}
           <ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", expanded && "rotate-180")} />

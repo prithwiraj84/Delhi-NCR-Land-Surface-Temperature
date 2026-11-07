@@ -15,15 +15,8 @@ import { Component, useEffect, useRef } from "react";
 import MapGL from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-export const BASEMAP_STYLE_URL = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
-
-/**
- * Same Dark Matter style without place labels. Used while the dashboard's own district
- * labels are on, so basemap city names ("PANIPAT", "Rohtak", ...) do not print on top of
- * (or next to duplicates of) the district labels. With district labels off, the labelled
- * style returns to give geographic context.
- */
-export const BASEMAP_STYLE_NOLABELS_URL = "https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json";
+// Style URLs live in basemapStyles.js (no MapLibre dependency); re-exported for the v1 view.
+export { BASEMAP_STYLE_NOLABELS_URL, BASEMAP_STYLE_URL } from "./basemapStyles.js";
 
 /** A style that has not loaded after this long is reported as unavailable. */
 const STYLE_TIMEOUT_MS = 15000;

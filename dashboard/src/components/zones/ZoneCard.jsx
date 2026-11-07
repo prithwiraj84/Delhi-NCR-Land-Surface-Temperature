@@ -22,7 +22,8 @@ import {
   ShapSignature,
   Sparkline,
 } from "./ZoneCardParts.jsx";
-import { HEAT_CORE_ID } from "./zoneModel.js";
+import { HEAT_CORE_ID, zoneCaveat, zoneDisplayName } from "./zoneModel.js";
+import { ZoneLabelCaveat } from "./ZoneLabelCaveat.jsx";
 
 /**
  * Whether growth of this zone is good, bad or neutral for heat governance: the cool base
@@ -89,12 +90,19 @@ export function ZoneCard({ zone, summary, signature, signatureMax, manifest, yea
                 className="size-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: color, boxShadow: `0 0 10px ${withAlpha(color, 0.8)}` }}
               />
-              <span className="truncate">{zone.name}</span>
+              <span className="truncate">{zoneDisplayName(zone)}</span>
+              {zoneCaveat(zone) && <ZoneLabelCaveat caveat={zoneCaveat(zone)} name={zoneDisplayName(zone)} />}
             </h3>
             <span className="shrink-0 rounded border border-panel-border px-1.5 py-0.5 font-mono text-[10px] text-ink-faint">
               zone {zone.id}
             </span>
           </div>
+          {zoneCaveat(zone) && (
+            <p className="mt-1 text-[11px] leading-snug text-warn" data-testid="zone-caveat-note">
+              Label caveat: {zoneCaveat(zone)}
+              {zone.name && zone.name !== zoneDisplayName(zone) ? <> (canonical name &ldquo;{zone.name}&rdquo;)</> : null}
+            </p>
+          )}
           <ClampText text={zone.description} className="mt-1.5 text-xs text-ink-muted" />
         </header>
 
@@ -137,7 +145,7 @@ export function ZoneCard({ zone, summary, signature, signatureMax, manifest, yea
               currentYear={year}
               color={color}
               format={(v) => fmtPct(v, 1)}
-              label={`${zone.name} area share by epoch`}
+              label={`${zoneDisplayName(zone)} area share by epoch`}
             />
           </div>
           <div className="min-w-0">
@@ -147,7 +155,7 @@ export function ZoneCard({ zone, summary, signature, signatureMax, manifest, yea
               currentYear={year}
               color={color}
               format={(v) => fmtC(v, 1)}
-              label={`${zone.name} mean observed LST by epoch`}
+              label={`${zoneDisplayName(zone)} mean observed LST by epoch`}
             />
           </div>
           {isNum(summary.deltaLst) && (
@@ -160,7 +168,7 @@ export function ZoneCard({ zone, summary, signature, signatureMax, manifest, yea
         {/* SHAP signature */}
         <section aria-label="SHAP signature">
           <CardLabel right="mean SHAP, °C">SHAP signature · top {signature.length}</CardLabel>
-          <ShapSignature rows={signature} maxAbs={signatureMax} manifest={manifest} zoneName={zone.name} />
+          <ShapSignature rows={signature} maxAbs={signatureMax} manifest={manifest} zoneName={zoneDisplayName(zone)} />
         </section>
 
         <section aria-label="Top drivers">

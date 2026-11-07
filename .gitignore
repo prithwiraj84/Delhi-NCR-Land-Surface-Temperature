@@ -8,7 +8,11 @@ dist-ssr/
 outputs/
 outputs_*/
 web_bundle.zip
-# NOTE: dashboard/public/data/ (the SYNTHETIC demo web bundle) is intentionally NOT ignored (tracked on purpose).
+# NOTE: dashboard/public/data/ (the user's REAL bundle) and dashboard/public/demo/ (the SYNTHETIC v2 demo
+# bundle) are intentionally NOT ignored: both are tracked on purpose so a fresh clone shows the dashboard.
+
+# Headless-browser screenshots / scratch from local smoke runs
+screens*/
 
 # Python
 __pycache__/

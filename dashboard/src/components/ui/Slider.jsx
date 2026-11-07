@@ -3,21 +3,28 @@ import * as SliderPrimitive from "@radix-ui/react-slider";
 import { cn } from "../../lib/cn.js";
 
 const TONES = {
-  cyan: { range: "bg-gradient-to-r from-cyan/70 to-cyan", thumb: "border-cyan shadow-glow-cyan" },
-  violet: { range: "bg-gradient-to-r from-violet/70 to-violet", thumb: "border-violet shadow-glow-violet" },
-  emerald: { range: "bg-gradient-to-r from-emerald/70 to-emerald", thumb: "border-emerald shadow-glow-emerald" },
-  rose: { range: "bg-gradient-to-r from-rose/70 to-rose", thumb: "border-rose shadow-glow-rose" },
+  signal: { range: "bg-signal", thumb: "border-signal" },
+  solar: { range: "bg-solar", thumb: "border-solar" },
+  lunar: { range: "bg-lunar", thumb: "border-lunar" },
+  ok: { range: "bg-ok", thumb: "border-ok" },
+  crit: { range: "bg-crit", thumb: "border-crit" },
+  // v1 names
+  cyan: { range: "bg-signal", thumb: "border-signal" },
+  violet: { range: "bg-lunar", thumb: "border-lunar" },
+  emerald: { range: "bg-ok", thumb: "border-ok" },
+  rose: { range: "bg-crit", thumb: "border-crit" },
 };
 
 /**
  * Radix slider (keyboard: arrows, PageUp/Down, Home/End). Accepts `value`/`defaultValue`
  * as a number or an array; `onValueChange`/`onValueCommit` receive the same shape.
+ * Track: surface-3 with a control-border outline (>= 3:1); 24 px tall hit area.
  * @param {{value?: number|number[], defaultValue?: number|number[], onValueChange?: Function,
  *          onValueCommit?: Function, min?: number, max?: number, step?: number,
- *          tone?: "cyan"|"violet"|"emerald"|"rose", thumbLabel?: string, className?: string}} props
+ *          tone?: string, thumbLabel?: string, className?: string}} props
  */
 export const Slider = forwardRef(function Slider(
-  { className, value, defaultValue, onValueChange, onValueCommit, tone = "cyan", thumbLabel, ...props },
+  { className, value, defaultValue, onValueChange, onValueCommit, tone = "signal", thumbLabel, ...props },
   ref,
 ) {
   const scalar = typeof (value ?? defaultValue) === "number";
@@ -26,7 +33,7 @@ export const Slider = forwardRef(function Slider(
   const values = toArray(value);
   const defaults = toArray(defaultValue);
   const thumbCount = (values ?? defaults ?? [0]).length;
-  const styles = TONES[tone] ?? TONES.cyan;
+  const styles = TONES[tone] ?? TONES.signal;
 
   return (
     <SliderPrimitive.Root
@@ -35,13 +42,10 @@ export const Slider = forwardRef(function Slider(
       defaultValue={defaults}
       onValueChange={onValueChange ? (v) => onValueChange(fromArray(v)) : undefined}
       onValueCommit={onValueCommit ? (v) => onValueCommit(fromArray(v)) : undefined}
-      className={cn(
-        "relative flex h-5 w-full touch-none select-none items-center data-[disabled]:opacity-45",
-        className,
-      )}
+      className={cn("relative flex h-6 w-full touch-none select-none items-center data-[disabled]:opacity-45", className)}
       {...props}
     >
-      <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-panel-border">
+      <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full border border-control/70 bg-surface-3">
         <SliderPrimitive.Range className={cn("absolute h-full rounded-full", styles.range)} />
       </SliderPrimitive.Track>
       {Array.from({ length: thumbCount }, (_, i) => (
@@ -49,9 +53,9 @@ export const Slider = forwardRef(function Slider(
           key={i}
           aria-label={thumbLabel ?? props["aria-label"]}
           className={cn(
-            "block size-4 cursor-grab rounded-full border-2 bg-bg transition-transform duration-150",
+            "block size-4 cursor-grab rounded-full border-2 bg-bg transition-transform duration-instant",
             "hover:scale-110 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2",
-            "focus-visible:ring-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+            "focus-visible:ring-signal focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
             styles.thumb,
           )}
         />

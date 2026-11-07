@@ -15,9 +15,9 @@
 import { memo, useCallback, useEffect, useMemo } from "react";
 import { FlaskConical, Map as MapIcon, RotateCcw, Sparkles } from "lucide-react";
 import { useData } from "../../state/DataContext.jsx";
-import { SCENARIO_PRESETS, FRACTION_FEATURES, selectRegion } from "../../lib/scenario.js";
+import { SCENARIO_PRESETS, isFractionFeature, selectRegion } from "../../lib/scenario.js";
 import { zoneColor } from "../../lib/colors.js";
-import { fmt, isNum } from "../../lib/format.js";
+import { fmt, fmtSigned, isNum } from "../../lib/format.js";
 import { cn } from "../../lib/cn.js";
 import { Button } from "../ui/Button.jsx";
 import { InfoTip } from "../ui/InfoTip.jsx";
@@ -117,7 +117,12 @@ function RegionPicker({ region, districtOptions, zoneOptions, onChange }) {
   );
 }
 
-function ScenarioSimulator({ metaByName }) {
+/**
+ * @param {{metaByName: Map<string, object>, dependenceKeyFor?: (feature: string) => string}} props
+ *   v2 bundles pass the actionable BASE features (frac_built, frac_forest, …, ndvi, lm_*) as
+ *   `metaByName` and map a feature to its SHAP-group dependence curve with `dependenceKeyFor`.
+ */
+function ScenarioSimulator({ metaByName, dependenceKeyFor = (f) => f }) {
   const {
     epoch,
     year,
@@ -144,7 +149,7 @@ function ScenarioSimulator({ metaByName }) {
   const current = scenario ?? fallbackScenario;
   const meta = metaByName.get(current.feature) ?? actionable[0] ?? null;
   const spec = useMemo(() => deltaSpec(meta), [meta]);
-  const isFraction = FRACTION_FEATURES.includes(current.feature);
+  const isFraction = isFractionFeature(current.feature);
 
   // Ensure the shared scenario always exists (DataContext only runs a non-null scenario).
   useEffect(() => {
@@ -190,7 +195,7 @@ function ScenarioSimulator({ metaByName }) {
   // Additive curve-only estimate over the same changed cells (or the region, if no model).
   // Row indices are used only from a result computed for THIS scenario on THIS epoch
   // (DataContext hides results of other epochs).
-  const curve = useMemo(() => buildCurve(dependence?.features?.[current.feature]), [dependence, current.feature]);
+  const curve = useMemo(() => buildCurve(dependence?.features?.[dependenceKeyFor(current.feature)]), [dependence, current.feature, dependenceKeyFor]);
   const additive = useMemo(() => {
     if (!epoch) return { mean: NaN, count: 0 };
     const fresh = scenarioResult && scenarioResult.scenarioKey === scenario && scenarioResult.epochYear === epoch.year;
@@ -204,7 +209,8 @@ function ScenarioSimulator({ metaByName }) {
     }
     return additiveEstimate({
       curve,
-      values: epoch.features?.[current.feature],
+      // v2 epochs keep the 33 base features apart from the group-keyed facade columns.
+      values: epoch.baseFeatures?.[current.feature] ?? epoch.features?.[current.feature],
       indices,
       delta: Number(current.delta),
       meta,
@@ -298,7 +304,7 @@ function ScenarioSimulator({ metaByName }) {
             description={
               isFraction
                 ? coupling
-                  ? "NDVI / NDWI / NDBI follow the land-cover change via OLS partial slopes."
+                  ? "Spectral indices (NDVI, NDWI/MNDWI, NDBI, albedo) follow the land-cover change via OLS partial slopes."
                   : "Coupling table not exported – toggling has no effect."
                 : "Applies to land-cover fractions only."
             }
@@ -344,6 +350,15 @@ function ScenarioSimulator({ metaByName }) {
           hasModel={Boolean(model)}
           stale={scenarioPending}
         />
+        {scenarioResult?.engine === "v2-focal" ? (
+          <p className="rounded-lg border border-panel-border bg-slate-950/30 p-2.5 text-[11px] leading-snug text-ink-muted">
+            <span className="font-medium text-ink">Neighbourhood effect.</span>{" "}
+            {scenarioResult.spillover?.count
+              ? `${scenarioResult.spillover.count.toLocaleString("en-US")} cells outside the region whose neighbourhood inputs changed (the 3- and 15-cell focal means were recomputed on the grid): mean ${fmtSigned(scenarioResult.spillover.mean, 3)} °C over all of them, zeros included${Number.isFinite(scenarioResult.spillover.movedCount) ? `; ${scenarioResult.spillover.movedCount.toLocaleString("en-US")} of them move by more than 0.001 °C` : ""}.`
+              : "Focal means were recomputed on the grid; no cell outside the region had its neighbourhood inputs changed."}{" "}
+            Distances to water and urban cores are held fixed.
+          </p>
+        ) : null}
       </div>
 
       {fidelity ? (

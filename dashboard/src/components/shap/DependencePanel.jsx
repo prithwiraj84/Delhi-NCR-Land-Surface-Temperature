@@ -19,7 +19,7 @@ import { fmt, fmtFeatureValue, fmtInt, isNum } from "../../lib/format.js";
 import { Select } from "../ui/Select.jsx";
 import DependenceChart from "./DependenceChart.jsx";
 import SegmentedToggle from "./SegmentedToggle.jsx";
-import { FEATURE_GROUPS, SEMANTIC, buildEpochScatter, buildExportScatter, robustExtent } from "./shapMath.js";
+import { featureGroupsFor, SEMANTIC, buildEpochScatter, buildExportScatter, robustExtent } from "./shapMath.js";
 
 /** Single-hue violet ramp for the partner feature; the low end stays visible on the dark panel. */
 const PARTNER_STOPS = ["#5b3fd1", "#a78bfa", "#f3e8ff"];
@@ -29,9 +29,10 @@ const MISSING_COLOR = "rgba(100, 116, 139, 0.55)";
 
 /** Feature <select> options grouped by manifest group (optgroups). */
 function groupedOptions(metaList, exclude) {
-  const known = new Set(FEATURE_GROUPS.map((g) => g.id));
+  const vocabulary = featureGroupsFor(metaList);
+  const known = new Set(vocabulary.map((g) => g.id));
   const toOption = (m) => ({ value: m.name, label: m.label ?? m.name });
-  const groups = FEATURE_GROUPS.map((g) => ({
+  const groups = vocabulary.map((g) => ({
     label: g.label,
     options: metaList.filter((m) => m.group === g.id && m.name !== exclude).map(toOption),
   }));

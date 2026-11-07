@@ -14,6 +14,7 @@ import { cn } from "../../lib/cn.js";
 import { fmt, fmtKm2, fmtPct, fmtSigned, isNum, MISSING } from "../../lib/format.js";
 import { StatTile } from "../ui/StatTile.jsx";
 import { silhouetteQuality } from "./zoneModel.js";
+import { ZoneLabelCaveat } from "./ZoneLabelCaveat.jsx";
 
 /**
  * @param {{summaries: ReturnType<import("./zoneModel.js").zoneSummaries>, k: number|null,
@@ -99,7 +100,7 @@ export function ZoneHeader({ summaries, k, silhouette, total, prevTotal, year, p
             </motion.div>
           ))}
         </div>
-        <ul className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-4" aria-label="Zone area legend">
+        <ul className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2 min-[1800px]:grid-cols-4" aria-label="Zone area legend">
           {summaries.map((s) => (
             <li
               key={s.id}
@@ -111,7 +112,8 @@ export function ZoneHeader({ summaries, k, silhouette, total, prevTotal, year, p
               )}
             >
               <span aria-hidden="true" className="size-2.5 shrink-0 translate-y-px rounded-[3px]" style={{ backgroundColor: s.color }} />
-              <span className="min-w-0 truncate text-ink">{s.name}</span>
+              <span className="min-w-0 truncate text-ink" title={s.name}>{s.name}</span>
+              {s.caveat && <ZoneLabelCaveat caveat={s.caveat} name={s.name} />}
               <span className="kpi-number ml-auto shrink-0 font-mono text-ink-strong">{fmtPct(s.share, 1)}</span>
               <span className="kpi-number shrink-0 font-mono text-[11px] text-ink-faint">
                 {isNum(s.deltaSharePp) ? `${fmtSigned(s.deltaSharePp, 1)} pp` : ""}

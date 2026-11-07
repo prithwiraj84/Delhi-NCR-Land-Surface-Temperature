@@ -237,11 +237,27 @@ export function compileModel(modelJson) {
     targetMode: modelJson.target_mode ?? "anomaly",
     objective: modelJson.objective ?? "reg:squarederror",
     fidelity: modelJson.fidelity ?? null,
+    /** v2: FOCAL_SPEC the focal features were built with ({bases, windows}); null for v1. */
+    focal: modelFocalSpec(modelJson),
+    /** v2: physical mode of the model ("day" | "night"); null for v1 (day only). */
+    mode: typeof modelJson.mode === "string" ? modelJson.mode : null,
     predictRow,
     predictMany,
     predictTrees,
     treesUsingFeatures,
   };
+}
+
+/**
+ * FOCAL_SPEC of a v2 web model (SPEC §5.2: model_web_<mode>.json carries "focal"), validated;
+ * null when absent or malformed (v1 models).
+ */
+export function modelFocalSpec(modelJson) {
+  const f = modelJson?.focal;
+  if (!f || !Array.isArray(f.bases) || !Array.isArray(f.windows)) return null;
+  const bases = f.bases.map(String).filter(Boolean);
+  const windows = f.windows.map(Number).filter((w) => Number.isInteger(w) && w >= 1 && w % 2 === 1);
+  return bases.length && windows.length ? { bases, windows } : null;
 }
 
 /**

@@ -20,7 +20,7 @@ import { Button } from "../ui/Button.jsx";
 import { Select } from "../ui/Select.jsx";
 import SegmentedToggle from "../shap/SegmentedToggle.jsx";
 import { ActionVerb, DeltaWithCi, PriorityBadge } from "./ZoneCardParts.jsx";
-import { PRIORITIES } from "./zoneModel.js";
+import { PRIORITIES, zoneDisplayName } from "./zoneModel.js";
 
 function SortIcon({ state }) {
   if (state === "asc") return <ArrowUp aria-hidden="true" className="size-3 text-cyan" />;
@@ -222,7 +222,7 @@ export function PolicyTable({ rows, zoneList, manifest, ciLabel = "95% CI" }) {
                     className={cn("size-2 rounded-full transition-opacity", on ? "opacity-100" : "opacity-30")}
                     style={{ backgroundColor: z.color }}
                   />
-                  {z.name}
+                  {zoneDisplayName(z)}
                 </button>
               );
             })}

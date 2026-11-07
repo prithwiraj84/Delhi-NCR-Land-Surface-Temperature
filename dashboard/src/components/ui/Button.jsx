@@ -3,30 +3,35 @@ import { cva } from "class-variance-authority";
 import { LoaderCircle } from "lucide-react";
 import { cn } from "../../lib/cn.js";
 
-/** shadcn-style button with neon accents and a visible keyboard focus ring. */
+/**
+ * Button with a visible keyboard focus ring (2 px signal, 2 px offset). Hit targets are
+ * >= 24 px (WCAG 2.2 2.5.8); `size="touch"` gives 44 px for touch layouts. No glow (the glow
+ * budget is reserved for the playhead, the selection reticle and one alert).
+ */
 // eslint-disable-next-line react-refresh/only-export-components -- shadcn convention: variants are reusable
 export const buttonVariants = cva(
   [
-    "focus-ring inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg",
-    "font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150",
-    "active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-4 [&_svg]:shrink-0",
+    "focus-ring inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-md",
+    "font-medium transition-[background-color,border-color,color] duration-instant",
+    "disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-4 [&_svg]:shrink-0",
   ],
   {
     variants: {
       variant: {
-        primary:
-          "border border-cyan/50 bg-cyan/15 text-cyan-soft hover:bg-cyan/25 hover:shadow-glow-cyan",
-        secondary: "border border-panel-border bg-panel/70 text-ink hover:border-ink-faint/60 hover:bg-panel-hover",
-        ghost: "border border-transparent text-ink-muted hover:bg-panel/60 hover:text-ink",
-        outline: "border border-panel-border bg-transparent text-ink hover:border-cyan/45 hover:text-cyan-soft",
-        violet: "border border-violet/50 bg-violet/15 text-violet-soft hover:bg-violet/25 hover:shadow-glow-violet",
-        danger: "border border-rose/50 bg-rose/15 text-rose-soft hover:bg-rose/25 hover:shadow-glow-rose",
+        primary: "border border-signal/55 bg-signal/15 text-ink-strong hover:bg-signal/25",
+        secondary: "border border-control bg-surface-3 text-ink hover:border-ink-faint hover:bg-panel-hover",
+        ghost: "border border-transparent text-ink-muted hover:bg-surface-3/70 hover:text-ink",
+        outline: "border border-control bg-transparent text-ink hover:border-signal/60",
+        danger: "border border-crit/55 bg-crit/15 text-ink-strong hover:bg-crit/25",
+        // v1 name
+        violet: "border border-lunar/55 bg-lunar/15 text-ink-strong hover:bg-lunar/25",
       },
       size: {
         xs: "h-7 px-2 text-xs",
         sm: "h-8 px-3 text-xs",
         md: "h-9 px-4 text-sm",
         lg: "h-11 px-5 text-sm",
+        touch: "h-11 min-w-11 px-4 text-sm",
         icon: "size-9 p-0",
         "icon-sm": "size-8 p-0",
       },

@@ -16,5 +16,7 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
-# public/data/ is NOT ignored: it ships the SYNTHETIC demo bundle (decision D5; labelled
+# public/data/ and public/demo/ are NOT ignored (decision D5). In v1, public/data/ shipped the SYNTHETIC demo (labelled
 # SYNTHETIC in the manifest, the UI and the README). Large files are gzip-compressed (D3).
+# Since v2, public/data/ holds the user's REAL bundle and the synthetic v2 demo lives in public/demo/
+# (also tracked on purpose).

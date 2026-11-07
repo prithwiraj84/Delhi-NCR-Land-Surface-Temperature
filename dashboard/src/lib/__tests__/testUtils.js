@@ -19,6 +19,19 @@ export const PUBLIC_DATA_DIR = process.env.LST_BUNDLE_DIR
   ? path.resolve(process.env.LST_BUNDLE_DIR)
   : path.resolve(here, "../../../public/data");
 
+/**
+ * The synthetic v2 demo bundle the notebook writes in synthetic mode (dashboard/public/demo),
+ * present only after a local synthetic notebook run. LST_DEMO_DIR overrides it.
+ */
+export const PUBLIC_DEMO_DIR = process.env.LST_DEMO_DIR
+  ? path.resolve(process.env.LST_DEMO_DIR)
+  : path.resolve(here, "../../../public/demo");
+
+/** True when the synthetic v2 demo bundle has been generated (public/demo/manifest.json). */
+export function publicDemoExists(name = "manifest.json") {
+  return fs.existsSync(path.join(PUBLIC_DEMO_DIR, name));
+}
+
 /** Parse JSON from raw file bytes, inflating gzip (magic bytes 0x1f 0x8b) like the dashboard loader. */
 export function parseJsonBytes(buffer) {
   const gzip = buffer.length >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b;
@@ -67,7 +80,7 @@ function response(status, body, contentType = "application/json") {
 }
 
 /**
- * fetch() stub serving files from `dir` for URLs under `/data/`.
+ * fetch() stub serving files from `dir` for URLs under `/data/` or `/demo/` (the bundle bases).
  * `overrides` maps a file name to {status, body (string | Uint8Array), contentType} or to an
  * Error (network failure). Files are served as raw bytes (a `.gz` file arrives compressed).
  */
@@ -75,13 +88,13 @@ export function createFsFetch(dir, overrides = {}) {
   const calls = [];
   const fetchImpl = async (url) => {
     calls.push(url);
-    const name = decodeURIComponent(String(url).replace(/^.*\/data\//, ""));
+    const name = decodeURIComponent(String(url).replace(/^.*?\/(?:data|demo)\//, ""));
     const override = overrides[name];
     if (override instanceof Error) throw override;
     if (override) return response(override.status, override.body ?? "", override.contentType);
     const file = path.join(dir, name);
     if (!fs.existsSync(file)) return response(404, "Not Found", "text/plain");
-    const type = name.endsWith(".gz") ? "application/gzip" : "application/json";
+    const type = name.endsWith(".gz") ? "application/gzip" : name.endsWith(".png") ? "image/png" : "application/json";
     return response(200, new Uint8Array(fs.readFileSync(file)), type);
   };
   fetchImpl.calls = calls;

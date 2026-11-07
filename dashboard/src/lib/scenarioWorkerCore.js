@@ -11,8 +11,9 @@
  */
 import { compileModel } from "./model.js";
 import { runScenario } from "./scenario.js";
+import { MAX_EPOCHS } from "./scenarioProtocol.js";
 
-export const MAX_EPOCHS = 4;
+export { MAX_EPOCHS };
 
 /** Fresh worker state. */
 export function createWorkerState() {
@@ -27,6 +28,8 @@ export function resultTransferList(result) {
     const arr = result[key];
     if (ArrayBuffer.isView(arr) && arr.buffer instanceof ArrayBuffer) buffers.add(arr.buffer);
   }
+  const spill = result.spillover?.indices;
+  if (ArrayBuffer.isView(spill) && spill.buffer instanceof ArrayBuffer) buffers.add(spill.buffer);
   return [...buffers];
 }
 

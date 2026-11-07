@@ -46,7 +46,7 @@ export function DataCaveatsButton({ manifest }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="focus-ring inline-flex h-7 items-center gap-1.5 rounded-lg border border-panel-border bg-bg-raised/70 px-2.5 font-mono text-[11px] uppercase tracking-wider text-ink-muted hover:text-ink"
+        className="focus-ring inline-flex h-7 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-2.5 font-mono text-[11px] uppercase tracking-wider text-ink-muted hover:text-ink"
       >
         <Info aria-hidden="true" className="size-3.5" />
         <span className="hidden sm:inline">Caveats{notes.length ? ` (${notes.length})` : ""}</span>
@@ -61,7 +61,7 @@ export function DataCaveatsButton({ manifest }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
-            className="glass-strong absolute right-0 top-9 z-50 w-[min(30rem,calc(100vw-1.5rem))] rounded-xl border p-3 shadow-glass"
+            className="glass-strong absolute right-0 top-9 z-50 w-[min(30rem,calc(100vw-1.5rem))] rounded-panel p-3 shadow-panel"
           >
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="font-display text-sm font-semibold text-ink-strong">Data caveats</p>
@@ -82,8 +82,8 @@ export function DataCaveatsButton({ manifest }) {
               {notes.length ? (
                 <ul className="space-y-1.5 text-xs leading-snug text-ink">
                   {notes.map((note, i) => (
-                    <li key={i} className="flex gap-2 rounded-md bg-bg-deep/60 px-2 py-1.5">
-                      <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-amber" />
+                    <li key={i} className="flex gap-2 rounded-md bg-void/60 px-2 py-1.5">
+                      <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-warn" />
                       <span>{note}</span>
                     </li>
                   ))}
@@ -92,14 +92,14 @@ export function DataCaveatsButton({ manifest }) {
                 <p className="text-xs text-ink-muted">This bundle carries no caveat notes.</p>
               )}
               {sources.length ? (
-                <details className="rounded-md border border-panel-border text-xs">
+                <details className="rounded-md border border-hairline text-xs">
                   <summary className="focus-ring cursor-pointer select-none rounded-md px-2 py-1.5 text-ink-muted hover:text-ink">
                     Data sources ({sources.length} variables)
                   </summary>
                   <dl className="space-y-2 px-2 pb-2">
                     {sources.map((row) => (
                       <div key={row.variable}>
-                        <dt className="font-mono text-[11px] text-cyan-soft">{row.variable}</dt>
+                        <dt className="font-mono text-[11px] text-signal">{row.variable}</dt>
                         {row.entries.map((e) => (
                           <dd key={e.key} className="break-words pl-2 text-[11px] leading-snug text-ink-muted">
                             <span className="font-mono text-ink">{e.key}</span>: {e.value}
@@ -125,9 +125,9 @@ export function CrossEpochCaveat({ manifest, className }) {
   return (
     <div
       role="note"
-      className={cn("flex gap-2 rounded-lg border border-amber/25 bg-amber/5 px-2.5 py-2 text-[11px] leading-snug", className)}
+      className={cn("flex gap-2 rounded-lg border border-warn/25 bg-warn/5 px-2.5 py-2 text-[11px] leading-snug", className)}
     >
-      <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-amber" />
+      <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-warn" />
       <div className="min-w-0 space-y-1 text-ink-muted">
         <p className="text-ink">
           Part of any change between epochs can come from the data sources themselves, not from the ground:

@@ -1,25 +1,23 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" data-motion="full" data-perf-tier="0" data-mode="day">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#090d16" />
+    <meta name="theme-color" content="#070B14" />
     <meta name="color-scheme" content="dark" />
     <meta
       name="description"
-      content="Delhi NCR land surface temperature digital twin: explainable-AI drivers, thresholds, governance zones and model diagnostics."
+      content="NCR THERMAL/OPS: Delhi NCR land surface temperature 1990-2050, day and night, with SSP projections, explainable-AI drivers, governance zones and honest model diagnostics."
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap"
-    />
-    <title>Delhi NCR - Thermal Intelligence Twin</title>
+    <title>NCR Thermal Ops</title>
+    <style>
+      /* First paint before the CSS bundle: void background, no white flash. */
+      html, body { background: #070B14; color: #DFE7F2; margin: 0; }
+    </style>
   </head>
   <body>
-    <noscript>This dashboard needs JavaScript and WebGL to render the thermal digital twin.</noscript>
+    <noscript>NCR THERMAL/OPS needs JavaScript and WebGL to render the land-surface-temperature map.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

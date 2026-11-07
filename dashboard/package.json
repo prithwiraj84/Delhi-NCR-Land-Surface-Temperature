@@ -1,24 +1,30 @@
 {
   "name": "delhi-ncr-lst-dashboard",
   "private": true,
-  "version": "1.0.0",
-  "description": "Delhi NCR Land Surface Temperature digital twin: explainable-AI (TreeSHAP) thresholds, governance zones and model diagnostics.",
+  "version": "2.0.0",
+  "description": "NCR THERMAL/OPS v2: Delhi NCR land surface temperature 1990-2050 (day + night, SSP projections) with explainable-AI drivers, governance zones and honest model diagnostics.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "tokens": "node src/design/writeTokensCss.mjs",
+    "tokens:check": "node src/design/writeTokensCss.mjs --check",
+    "budget": "node scripts/check-budgets.mjs"
   },
   "dependencies": {
-    "@deck.gl/aggregation-layers": "^9.1.0",
-    "@deck.gl/core": "^9.1.0",
-    "@deck.gl/extensions": "^9.1.0",
-    "@deck.gl/geo-layers": "^9.1.0",
-    "@deck.gl/layers": "^9.1.0",
-    "@deck.gl/mesh-layers": "^9.1.0",
-    "@deck.gl/react": "^9.1.0",
+    "@deck.gl/aggregation-layers": "~9.4.0",
+    "@deck.gl/core": "~9.4.0",
+    "@deck.gl/extensions": "~9.4.0",
+    "@deck.gl/geo-layers": "~9.4.0",
+    "@deck.gl/layers": "~9.4.0",
+    "@deck.gl/mesh-layers": "~9.4.0",
+    "@deck.gl/react": "~9.4.0",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/space-grotesk": "^5.3.0",
     "@radix-ui/react-slider": "^1.2.1",
     "@radix-ui/react-switch": "^1.1.1",
     "@radix-ui/react-tabs": "^1.1.1",
@@ -30,7 +36,8 @@
     "d3-interpolate": "^3.0.1",
     "d3-scale": "^4.0.2",
     "d3-scale-chromatic": "^3.1.0",
-    "deck.gl": "^9.1.0",
+    "d3-shape": "^3.2.0",
+    "deck.gl": "~9.4.0",
     "framer-motion": "^11.11.0",
     "h3-js": "^4.1.0",
     "lucide-react": "^0.460.0",
@@ -39,7 +46,8 @@
     "react-dom": "^18.3.1",
     "react-map-gl": "^7.1.7",
     "recharts": "^2.13.0",
-    "tailwind-merge": "^2.5.4"
+    "tailwind-merge": "^2.5.4",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
@@ -50,9 +58,11 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
+    "jsdom": "^26.1.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "vite": "^5.4.10",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "vitest-axe": "^0.1.0"
   }
 }

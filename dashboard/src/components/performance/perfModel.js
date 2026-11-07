@@ -71,6 +71,38 @@ export const SCHEME_META = Object.freeze({
     color: THEME.rose,
     description: "Train on earlier epochs, test on the last epoch; tests transfer through time.",
   },
+  // v2 schemes (SPEC §4.2). Spatial schemes share the spatial identity colour, temporal ones
+  // the temporal colour, so the v1 scheme legend keeps its meaning; labels tell them apart.
+  block20: {
+    label: "Block 20 km",
+    long: "Spatial 20 km blocks (pooled)",
+    color: THEME.cyan,
+    description: "20 km blocks held out together; pooled out-of-fold skill in unseen areas (v2 headline).",
+  },
+  block5: {
+    label: "Block 5×5",
+    long: "Spatial 5×5 blocks (v1-comparable)",
+    color: THEME.cyan,
+    description: "The v1 blocking, scored pooled.",
+  },
+  district: {
+    label: "District",
+    long: "Leave-one-district-out",
+    color: THEME.cyan,
+    description: "Whole districts held out.",
+  },
+  loeo: {
+    label: "LOEO",
+    long: "Leave-one-epoch-out (recentred)",
+    color: THEME.rose,
+    description: "Each training frame held out in turn; recentred anomaly pattern transfer (v2 temporal headline).",
+  },
+  place_time: {
+    label: "Place + time",
+    long: "Unseen place and time",
+    color: THEME.rose,
+    description: "Train on earlier frames and other folds; test the last frame in the held-out fold.",
+  },
 });
 
 export function schemeMeta(scheme) {

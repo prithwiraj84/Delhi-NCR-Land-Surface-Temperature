@@ -1,587 +1,857 @@
-# Delhi NCR LST × Explainable AI Platform — Architecture & Data Contract
+# Delhi NCR LST × Explainable AI — v2 Architecture & Data Contract (1990–2050, Day + Night)
 
-This file is the **single source of truth** for everything shared between the Kaggle notebook
-(`delhi_ncr_lst_pipeline.ipynb`, built from `notebook/sections/*.py`) and the React dashboard
-(`dashboard/`). Any name, file, column, or JSON key listed here must be used exactly as written.
+**This file is the single source of truth for v2.** It overrides every older text (v1 contract: `docs/SPEC_v1.md`;
+UI design: `docs/UI_SPEC_v2.md`; evidence: `docs/research/*.md`). Where this file and the UI spec disagree on data,
+**this file wins**; the UI spec governs look, motion and interaction. Names, shapes, dtypes, file names and JSON keys
+below are binding. If you believe something here is wrong, implement it as written and report the concern.
+
+Why v2 looks the way it does (evidence, all in `docs/research/`):
+* Real-data experiments on the user's v1 Kaggle bundle (`real_data_accuracy_experiments.md`): v1's weak spatial-CV
+  (XGB R² 0.62 ± 0.31) came from **missing neighbourhood context** (one cool north-east fold) — 3 + 15 km focal means
+  together with distance and relative-elevation features lifted 5×5 block CV R² from 0.63 to 0.83 (focal means alone
+  about 0.79; pooled 0.90); in v2 the distance/TPI features are base features, so the 07 base-only ablation isolates
+  the 14 focal means only; recentring predicted anomaly maps lifts temporal transfer 0.80 → 0.89;
+  hyper-parameters/stacking change < 0.01; mixing land-cover products causes ~1 °C offsets.
+* Dataset research (`gee_datasets_v2.md`): Landsat C2 L2 is the only consistent day-LST record from 1990 (3-year
+  windows needed in the 1990s); Terra/Aqua drifted ~1 h by 2025; VIIRS VNP21 is the stable night successor; GHSL
+  P2023A gives consistent built-up/population 1975–2030; GEE's GDDP-CMIP6 has ssp245/ssp585 only.
+* Methods research (`methods_v2.md`): pooled OOF metrics, ~20 km blocks, leave-one-epoch-out (LOEO) as the timeline
+  headline, AOA, DMS downscaling with block-conserving residual correction, CA land projections with figure-of-merit
+  validation, CMIP6 deltas × empirical dLST/dTair, Monte-Carlo uncertainty.
 
 ---
 
-## 0. Repository layout
+## 0. Repository layout (v2)
 
 ```
 LST replication study/
-├── delhi_ncr_lst_pipeline.ipynb        # BUILT artifact (python notebook/build_notebook.py)
+├── delhi_ncr_lst_pipeline.ipynb      # BUILT from notebook/sections (python notebook/build_notebook.py --check)
 ├── notebook/
-│   ├── sections/                       # jupytext "percent" format sources, executed in order
-│   │   ├── 00_setup.py                 # config, env/GPU detection, utilities
-│   │   ├── 01_data_acquisition.py      # ROI, grid, GEE extraction, synthetic generator
-│   │   ├── 02_features.py              # land-cover fractions, landscape metrics, feature table
-│   │   ├── 03_models_validation.py     # benchmarks, triple CV, Moran's I, GNN
-│   │   ├── 04_shap_zoning.py           # final model, TreeSHAP, interactions, bootstrap, thresholds, K-means zones
-│   │   └── 05_export.py                # parquet / GeoJSON / web bundle / compact model
-│   ├── build_notebook.py               # sections -> .ipynb
-│   ├── run_local.py                    # executes all sections as one script (local smoke test)
-│   └── validate_bundle.py              # standalone §4 validator for a web bundle (numpy only)
-├── dashboard/                          # React 18 + Vite dashboard
-│   └── public/data/                    # web bundle (copied from outputs/web/); the committed demo bundle is SYNTHETIC
-└── docs/SPEC.md
+│   ├── sections/                     # jupytext percent format, executed IN ORDER in ONE shared namespace
+│   │   ├── 00_setup.py               # CFG v2, ENV, utilities, stage cache, LSTB writer/reader
+│   │   ├── 01_study_area.py          # ROI, districts, 1 km + fine grids, GEE init, data-mode decision
+│   │   ├── 02_synthetic_world.py     # synthetic world 1990–2025 + future inputs (synthetic mode only)
+│   │   ├── 03_gee_landsat.py         # Landsat C2 L2 day LST + spectral composites (gee mode only)
+│   │   ├── 04_gee_thermal.py         # MODIS/VIIRS night (+ MODIS day validation), calibrations, annual series
+│   │   ├── 05_gee_drivers.py         # GHSL, GLC_FCS30D, terrain, water, ERA5-Land, future inputs (CMIP6, SSP urban)
+│   │   ├── 06_features.py            # feature grids, focal/distance features, landscape metrics, DF, folds, masks
+│   │   ├── 07_models.py              # validation suite, benchmarks, final models, persistent residual, AOA, conformal
+│   │   ├── 08_explain.py             # SHAP (grouped), interactions, bootstrap, dependence/thresholds, zones, recs, web models
+│   │   ├── 09_timeline.py            # absolute levels, night hindcast, tiers, frame fields, β (dLST/dTair), trends, series
+│   │   ├── 10_downscaling.py         # 250 m day (Landsat) + night (DMS downscaling), validation, EPSG:4326 rasters
+│   │   ├── 11_projections.py         # land-change CA, derived predictors, CMIP6 deltas, Monte-Carlo projections
+│   │   └── 12_export.py              # web bundle v2 + parquet/geo/models + validation + zip
+│   ├── build_notebook.py, run_local.py   # unchanged tooling (run_local exposes LST_* env, see §1.6)
+│   ├── kaggle_runner.py              # runs the sections inside kaggle_launcher.ipynb (Jupyter cell semantics;
+│   │                                 #   per-file sha1 check against BUNDLE_INFO.json, EXPECTED_BUNDLE, fail-soft)
+│   ├── kaggle_launcher_src.py, build_launcher.py   # source + builder of kaggle_launcher.ipynb (~12 KB)
+│   ├── make_kaggle_code_bundle.py    # -> outputs/kaggle/ncr-lst-v2-code.zip (the Kaggle code dataset, bundle id)
+│   │                                 #   + the launcher stamped with EXPECTED_BUNDLE; --verify checks the zip
+│   └── validate_bundle.py            # v2 + v1 bundle validator (CLI)
+├── dashboard/                        # React 18 + Vite 5 + deck.gl ~9.4 + maplibre + zustand (UI_SPEC_v2)
+│   ├── public/data/                  # the USER's bundle (today: real v1 GEE bundle; later: real v2 bundle)
+│   └── public/demo/                  # SYNTHETIC v2 demo bundle produced by the notebook in synthetic mode
+└── docs/  SPEC.md (this) · SPEC_v1.md · UI_SPEC_v2.md · research/{gee_datasets_v2,methods_v2,real_data_accuracy_experiments}.md
 ```
 
-### Section file format (jupytext percent)
-```python
-# %% [markdown]
-# ## 2.1 Heading
-# Markdown text, every line prefixed with "# ".
-
-# %%
-python_code()
-```
-Rules for section code (it is also executed as a plain script by `run_local.py`):
-* **No IPython magics / shell escapes** (`%pip`, `!pip`, `%%time` are forbidden). Install with the
-  `pip_install()` helper from 00 (subprocess). Use `display()` only via `from IPython.display import display`
-  inside try/except (fallback to `print`).
-* All sections share ONE global namespace. Only the globals listed in §3 are the inter-section interface;
-  prefix other module-level helpers/temporaries with `_` or keep them inside functions.
-* Every heavy stage ends with `free_memory()`.
-* Figures: matplotlib only; always `savefig` into `CFG.FIG_DIR` and then `plt.show()` + `plt.close(fig)`
-  (works headless under the Agg backend).
+Section-file rules (unchanged from v1): no IPython magics; one shared namespace; only the globals listed in §3 are the
+inter-section interface (prefix private helpers `_<section>_...` to avoid collisions — e.g. `_s06_focal`); every heavy
+stage ends with `free_memory()`; figures via matplotlib → `CFG.FIG_DIR`, `plt.show()`, `plt.close()`.
+**Mode gating:** sections 03–05 do nothing in synthetic mode; section 02 does nothing in gee mode. Both paths must
+produce **identical globals, keys, shapes and dtypes** (§3.2).
 
 ---
 
-## 1. Study design (decisions — do not change silently)
+## 1. Study design (decisions)
 
+### 1.1 Space
 | Item | Decision |
 |---|---|
-| Study area | Delhi NCR, ~55,000 km², 25 districts (list in §1.1) |
-| Grid | `CFG.CRS = "EPSG:32643"` (UTM 43N), square cells of `CFG.GRID_RES_M` (1000 m default), grid snapped to multiples of the cell size |
-| Epochs | `CFG.EPOCHS = [2010, 2015, 2020, 2025]` |
-| Season | Pre-monsoon summer, `CFG.SEASON = ("04-01", "06-30")` within each epoch year |
-| Target | MODIS LST day (°C). `CFG.TARGET_MODE = "anomaly"` (default): target = LST − epoch spatial mean (removes inter-annual climate offset so the temporal split tests spatial-pattern transfer). `"absolute"` is supported. |
-| Model | ONE pooled model over all epochs (no `year` feature: trees cannot extrapolate time) |
-| Land-cover classes (harmonized) | `0` nodata, `1` built/impervious, `2` tree/forest, `3` water, `4` cropland, `5` barren/bare, `6` other vegetation (grass/shrub/wetland/snow/moss) |
-| Fine land-cover resolution | `CFG.FINE_RES_M` must divide `CFG.GRID_RES_M`. GEE default 25 m (40×40 px per cell). Synthetic default 100 m. |
-| Zones | K=4, fixed canonical ids: `0` Ecological Cool Base, `1` Riparian Buffer, `2` Transition, `3` Heat Extreme Core |
+| Study area | Delhi NCR, 25 canonical districts — table, aliases and synthetic outline unchanged: **`SPEC_v1.md` §1.1–§1.2** (incl. `samli`) |
+| CRS | `EPSG:32643` (UTM 43N) for all analysis grids |
+| Analysis grid | `GRID`: square cells of `CFG.GRID_RES_M` (1000 m; the same snapped grid as v1 — real data: W 297, H 366, x0 545000, y_top 3321000) |
+| Fine grid | `GRID_FINE = GRID.fine(CFG.GRID_RES_M // CFG.FINE_FACTOR)`; `FINE_FACTOR = 4` → 250 m at 1 km (500 m at the 2 km smoke grid). Fine pixel (r, c) belongs to coarse cell (r // 4, c // 4). |
+| Land-cover fine grid | `LC_FINE` at `CFG.LC_FINE_RES_M` (gee 50 m, synthetic 100 m; must divide GRID_RES_M) — only for landscape metrics |
+| Canonical cell order | all ROI cells (`ROI_MASK`) sorted by `cell_id = row * W + col`; `N_CELLS` = their count. Every exported per-cell array uses this order and length (missing values = nodata), **including frames with partial coverage** |
+| Fixed masks | **Mask frames** = training frames of the mode whose valid-target share of ROI cells ≥ `LST_FRAME_MIN_COVERAGE` (0.5). `FIXED_MASK[mode]` (H,W) bool = ROI cells with a valid target in **every** mask frame (strict intersection); if it keeps < 80 % of ROI cells → warning + `DATA_CAVEATS` entry (each frame's missing share); fewer than 2 mask frames, or a mask keeping < 1 % of the ROI cells (valid sets that barely overlap), → error listing each frame's coverage. Training frames below the threshold get weight 0. Frame levels and anomalies use this mask; frames that do not fully cover it get a model-based composition correction of their level in section 09 (§4.7). |
 
-### 1.1 Canonical districts (display name, state, approx. HQ lon/lat, GAUL/geoBoundaries aliases)
-District id = index in this list. Delhi's 9–11 sub-districts are merged into one "Delhi NCT".
+### 1.2 Time: frames, windows, tiers
+* `CFG.FRAMES_OBS = [1990, 1995, 2000, 2005, 2010, 2015, 2020, 2025]` (observation frames, each an Apr–Jun
+  multi-year window): `CFG.WINDOWS = {1990:(1989,1992), 1995:(1994,1996), 2000:(1999,2001), 2005:(2004,2006),
+  2010:(2009,2011), 2015:(2014,2016), 2020:(2019,2021), 2025:(2024,2026)}`. Season `CFG.SEASON = ("04-01","06-30")`.
+* `CFG.FRAMES_PROJ = [2030, 2035, 2040, 2045, 2050]`; `CFG.SCENARIOS = ["ssp126","ssp245","ssp585"]`
+  (ssp126 climate is pattern-scaled from ssp245, §4.10). `CFG.NOW = 2025`. `CFG.REFERENCE_PERIOD = (2000, 2020)`.
+* `CFG.MODES = ["day","night"]`.
+* **Evidence tiers** (vocabulary, exact strings): `observed`, `observed-sparse`, `reconstructed`, `modelled`,
+  `projected`. They are computed by section 09 from `FRAME_META` (never hard-coded in the UI):
 
-| id | name | state | HQ lon, lat | aliases (case/space-insensitive) |
+| mode | 1990 | 1995 | 2000 | 2005 | 2010–2025 | 2030–2050 |
+|---|---|---|---|---|---|---|
+| day | observed-sparse (Landsat 5, < 6 scenes on some path/row) | observed-sparse | observed | observed (L7 SLC-off) | observed | projected |
+| night | modelled (hindcast) | modelled | reconstructed (Terra 22:30 → Aqua-equivalent) | observed (Aqua) | observed (Aqua; 2025 VIIRS calibrated) | projected |
+
+  Rule: day = `observed-sparse` if any of the 5 WRS-2 path/rows has < 6 clear scenes in the window, else `observed`.
+  Night = `observed` for Aqua/VIIRS sources, `reconstructed` for calibrated Terra, `modelled` when no night product
+  exists. In synthetic mode the same rules run on synthetic `FRAME_META` (the dashboard adds the SIMULATED overlay
+  from `manifest.data_mode`).
+  Day frames are always observed or observed-sparse: section 03 stops when a frame's ROI fine-pixel Landsat coverage
+  is below `LST_DAY_MIN_FRAME_COVERAGE` (0.2) and section 06 refuses a day frame without any valid target
+  (acquisition fault).
+
+### 1.3 Modes (what "day" and "night" mean)
+* **day** = pre-monsoon **mid-morning (~10:30 IST)** land surface temperature: harmonised **Landsat C2 L2 ST**
+  composites (30 m → fine grid → 1 km), path-offset harmonised and corrected to a 10:45 IST reference overpass
+  (§2.1). Consistent 1990–2025 and natively fine, so the day 250 m layer is observed (not downscaled).
+  MODIS Terra day (QC, view-time filtered) is kept as an **independent validation** product (2000–2025) and for the
+  downscaling demonstration.
+* **night** = pre-monsoon **~01:30–02:00 IST** LST on the 1 km grid in **Aqua-equivalent** units: Aqua MYD11A2
+  (2003–2021), VIIRS VNP21A1N calibrated to Aqua (2025 frame), Terra MOD11A2 22:30 calibrated to Aqua (2000 frame);
+  1990/1995 hindcast by the night model. The night 250 m layer is **downscaled** (§4.8).
+* Targets are **anomalies** per frame: `anom(i,t) = LST(i,t) − mean_{FIXED_MASK}(LST(·,t))` (mean over the fixed mask
+  is exactly 0). Absolute °C = anomaly + frame level `L(t)` (§4.7). One **pooled** model per mode (no year feature).
+
+### 1.4 Modelling decisions (from the real-data experiments)
+* Feature set = 33 base + 14 focal features (§4.1). **No raw coordinates / eigenvectors** in any model (they help
+  unseen-place CV by +0.05 but contaminate SHAP and future extrapolation; ERA5-Land climate covariates carry the
+  regional gradient instead).
+* Final model per mode: XGBoost (depth 6, min_child_weight 20, eta 0.03, subsample 0.8, colsample 0.8, lambda 1,
+  early stopping on inner 10 km blocks), with **monotone constraints** (§4.3).
+* **Recentring:** every predicted anomaly map is recentred to zero mean over the fixed mask before use (LOEO metrics,
+  hindcast); projections recentre relative to the 2025 prediction mean so the land-driven mean shift is kept (§4.10).
+* Headline accuracy = **pooled** out-of-fold R²/RMSE under 20 km-block spatial CV (10 folds) and LOEO (recentred);
+  v1-comparable 5×5 blocks, leave-one-district-out, unseen place+time and random CV are also reported (§4.2).
+* One land-cover product for all frames (GLC_FCS30D; 2025 uses its 2022 map), built-up from GHSL (§2.3).
+
+### 1.5 Zones & governance (per mode)
+K = 4 K-means on grouped-SHAP vectors (18 groups, §4.4) pooled over the observed frames. Labelling (both modes):
+(1) **3 Heat Extreme Core** = highest mean total SHAP. (2) Among the other three a cluster is **riparian-eligible** if
+its mean `frac_water` ≥ 0.05, **or** ≥ 25 % of its rows have `frac_water` ≥ 0.2, **or** the `water` group has the
+largest mean |SHAP| of its 18 groups and that value is ≥ 0.25 °C. If any cluster is eligible: **1 Riparian Buffer** =
+the eligible cluster with the highest mean `frac_water`, **0 Ecological Cool Base** = lower mean total SHAP of the
+remaining two, **2 Transition** = last. If none is eligible, the three are ordered by mean total SHAP: lowest → 0,
+middle → 1, highest → 2. Canonical ids, names and colours are unchanged (v1: `#34d399 #22d3ee #a78bfa #fb7185`).
+`ZONE_PROFILES[m][k]` adds `display_name` (equal to the name, except zone 1 when no cluster meets the criterion:
+`"Moderate mosaic (no riparian signal)"`) and `label_caveat` (null, or when the criterion is not met: *"Named Riparian
+Buffer by the SPEC zone rule, but no cluster shows a riparian signature (mean water x.x %); this is the middle-heat
+cluster of the three non-core zones."*); the zone-1 description starts with the display name and the caveat. Every
+place that shows a zone name (09 scope labels, the dashboard) uses `display_name` (falling back to `name`) and shows
+`label_caveat` when present. Every frame (observed and projected) gets zone ids by nearest centroid in the same SHAP
+space.
+
+### 1.6 Configuration (`CFG`, env overrides)
+| Field | Env | full (Kaggle default) | fast (`LST_FAST_DEV=1`) | pilot |
 |---|---|---|---|---|
-| 0 | Delhi NCT | Delhi | 77.21, 28.61 | any ADM2 inside ADM1 "Delhi"/"NCT of Delhi" |
-| 1 | Gurugram | Haryana | 77.03, 28.46 | gurgaon, gurugram |
-| 2 | Faridabad | Haryana | 77.31, 28.41 | faridabad |
-| 3 | Palwal | Haryana | 77.33, 28.14 | palwal |
-| 4 | Nuh | Haryana | 77.00, 28.10 | mewat, nuh |
-| 5 | Rewari | Haryana | 76.62, 28.19 | rewari |
-| 6 | Jhajjar | Haryana | 76.66, 28.61 | jhajjar |
-| 7 | Rohtak | Haryana | 76.61, 28.90 | rohtak |
-| 8 | Sonipat | Haryana | 77.02, 28.99 | sonipat, sonepat |
-| 9 | Panipat | Haryana | 76.97, 29.39 | panipat |
-| 10 | Karnal | Haryana | 76.99, 29.69 | karnal |
-| 11 | Jind | Haryana | 76.32, 29.32 | jind |
-| 12 | Bhiwani | Haryana | 76.13, 28.79 | bhiwani |
-| 13 | Charkhi Dadri | Haryana | 76.27, 28.59 | charkhi dadri, dadri (Haryana only) |
-| 14 | Mahendragarh | Haryana | 76.11, 28.05 | mahendragarh, mahendergarh, narnaul |
-| 15 | Meerut | Uttar Pradesh | 77.71, 28.98 | meerut |
-| 16 | Ghaziabad | Uttar Pradesh | 77.44, 28.67 | ghaziabad |
-| 17 | Gautam Buddh Nagar | Uttar Pradesh | 77.49, 28.47 | gautam buddha nagar, gautam buddh nagar, gautambudhnagar, noida |
-| 18 | Bulandshahr | Uttar Pradesh | 77.85, 28.40 | bulandshahr, bulandshahar |
-| 19 | Baghpat | Uttar Pradesh | 77.22, 28.94 | baghpat, bagpat |
-| 20 | Hapur | Uttar Pradesh | 77.78, 28.73 | hapur, panchsheel nagar |
-| 21 | Shamli | Uttar Pradesh | 77.31, 29.45 | shamli, samli (geoBoundaries v6 spelling), prabudh nagar, prabuddh nagar |
-| 22 | Muzaffarnagar | Uttar Pradesh | 77.70, 29.47 | muzaffarnagar |
-| 23 | Alwar | Rajasthan | 76.60, 27.55 | alwar |
-| 24 | Bharatpur | Rajasthan | 77.49, 27.22 | bharatpur |
+| `PROFILE` | `LST_PROFILE` | `full` | `fast` | `pilot` (frames `[1990, 2000, 2020, 2025]`, no projections, ridge + XGBoost, CMIP6 pattern probe — GEE cost/runtime probe) |
+| `FRAMES_OBS` | `LST_FRAMES_OBS` (comma list, any profile) | the 8 frames | the 8 frames | `[1990, 2000, 2020, 2025]` (subset of the 8 SPEC frames, ≥ 2 frames, ≥ 2 night training frames, always 2025 (`NOW`), and also 2005 and 2015 when projections are on; else error) |
+| `RUN_MODE` | `LST_RUN_MODE` | `auto` | | |
+| `GRID_RES_M` | `LST_GRID_RES_M` | 1000 | (run_local passes 2000) | 1000 |
+| `FINE_FACTOR` | `LST_FINE_FACTOR` | 4 | 4 | 4 |
+| `LC_FINE_RES_M` | `LST_LC_FINE_RES_M` | 50 (gee) / 100 (synthetic) | 200 | 50 |
+| `N_BOOTSTRAP` | `LST_N_BOOTSTRAP` | 50 | 6 | 10 |
+| `N_MC` | `LST_N_MC` | 500 | 120 | — |
+| `N_LAND_REAL` | `LST_N_LAND_REAL` | 20 | 4 | — |
+| `BLOCK_KM` / `N_FOLDS_BLOCK` | | 20 / 10 | 20 / 5 | 20 / 5 |
+| `XGB_MAX_ROUNDS` / `XGB_EARLY_STOP` | | 4000 / 100 | 400 / 30 | 1500 / 60 |
+| `GNN_EPOCHS` | | 300 | 30 | 60 |
+| `MORAN_PERMS` | | 999 | 99 | 199 |
+| `BENCHMARKS` | `LST_BENCHMARKS` | `ridge,random_forest,lightgbm,xgboost,gnn` | same | `ridge,xgboost` |
+| `GEE_EXPORT` | `LST_GEE_EXPORT` | `interactive` (tiled computePixels) or `asset` (batch `Export.image.toAsset`, needs *Earth Engine Resource Writer*) | | |
+| `GEE_ASSET_ROOT` | `LST_GEE_ASSET_ROOT` | `projects/<GEE_PROJECT>/assets/ncr_lst_v2` | | |
+| `GEE_ENDPOINT` | `LST_GEE_ENDPOINT` | `standard` (`highvolume` is opt-in; both have the same 40-concurrent-request quota; any other value is an error) | | |
+| `GEE_DEADLINE_S` | `LST_GEE_DEADLINE_S` | 420 (Earth Engine request deadline; minimum 330) | | |
+| — | `LST_GEE_EXPORT_TIMEOUT_S` | 10800 (asset mode, section 03: per **running** batch task) | | |
+| — | `LST_GEE_EXPORT_QUEUE_S` | 14400 (asset mode, section 03: per task not yet running) | | |
+| — | `LST_GEE_EXPORT_TIMEOUT_0405_S` | 3600 (asset mode, sections 04/05 running tasks; 7200 s queued) | | |
+| — | `LST_PILOT_PROBES` | `1` when profile pilot and gee mode, else `0` (section 05 CMIP6 pattern probe → `FUTURE_INPUTS_DIAG["probes"]`) | | `1` |
+| `TIME_BUDGET_H` | `LST_TIME_BUDGET_H` | 11 on Kaggle, unlimited elsewhere (`0`/`none`/`off` = unlimited): no new work starts after it; the run stops cleanly, packs the cache and writes `RUN_STOPPED.json` | | |
+| `TIME_RESERVE_S` | `LST_TIME_RESERVE_S` | 1800 (time kept free before the budget for the clean stop) | | |
+| `STOP_AFTER` | `LST_STOP_AFTER` | none (`01`…`11`: stop cleanly after that section) | | |
+| — | `LST_INVALIDATE` | none (comma tokens; stages whose name starts with a token or with `s` + token are recomputed; Earth Engine tiles and GDDP blocks never) | | |
+| — | `LST_PACK_CACHE` | `1` on Kaggle, `0` elsewhere (pack the cache into `CACHE_DIR/packed/*.tar` at the end and on a clean stop) | | |
+| — | `LST_FRAME_MIN_COVERAGE` | 0.5 (valid-target share a training frame needs to define the fixed mask; below → weight 0) | | |
+| — | `LST_DAY_MIN_FRAME_COVERAGE` | 0.2 (minimum ROI fine-pixel Landsat coverage of a day frame; below → section 03 stops) | | |
+| `RESUME` | `LST_RESUME` | 1 (reuse a stage-cache entry whose key matches; key = configuration + data fingerprints + per-section code hash; `0` recomputes every stage, Earth Engine tiles and GDDP blocks stay cached) | | |
+| `CACHE_IMPORT` | `LST_CACHE_IMPORT` | `auto` (the shallowest `/kaggle/input/*/**/cache` with content; only one folder is imported), or any folder containing a previous cache (e.g. a path copied from Kaggle's Input panel; an explicit path that is not a folder or holds no cache raises at once); packed tars are unpacked; `0` disables | | |
+| — | `LST_VALIDATOR` | none (path of `validate_bundle.py` for the standalone check of section 12; otherwise `./notebook/`, `./`, `../notebook/` and `/kaggle/input/*/` are searched) | | |
 
-Districts that exist only in newer boundary sets (Palwal, Charkhi Dadri, Hapur, Shamli) may be absent from
-older layers (their parent district covers the area) — that is acceptable; keep their id reserved (0 cells).
-"Absent" is verified, not assumed: for every canonical district left unmatched by name, the layer is queried for the
-polygon containing its HQ point. An *unmatched* polygon there (unknown spelling) is matched by location with a
-WARNING (add the spelling to this table); a polygon already matched to another district means "merged into that
-parent" (INFO, acceptable); no polygon at all is logged as an ERROR (territory missing from the ROI).
-The dashboard presets resolve "Gurugram" and "Noida" via these aliases (Noida → id 17).
-
-### 1.2 Approximate NCR outline (lon, lat) — used ONLY by synthetic mode / as fallback ROI
-```
-(76.45,29.95) (76.85,29.95) (77.20,29.75) (77.55,29.75) (78.10,29.55) (78.20,29.20) (78.45,28.60)
-(78.45,28.20) (78.00,28.05) (77.55,27.95) (77.55,27.50) (77.85,27.20) (77.65,26.75) (77.20,26.70)
-(76.90,27.05) (76.25,27.05) (76.10,27.40) (76.20,27.90) (75.95,28.00) (75.45,28.40) (75.55,28.90)
-(75.85,29.05) (75.95,29.55) (76.20,29.60) (76.45,29.95)
-```
-Synthetic mode partitions this outline into districts by nearest HQ (Voronoi). The GEE path uses the same outline and
-partition only as a last resort (both boundary layers failed); it then adds an "APPROXIMATE district boundaries"
-caveat to `manifest.notes` and sets `manifest.study_area.boundary_approximate = true` (also true in synthetic mode).
-Yamuna (approx polyline): (77.19,29.95) (77.13,29.55) (77.12,29.20) (77.22,28.85) (77.25,28.62) (77.30,28.45) (77.45,28.20) (77.52,27.90) (77.68,27.55).
-Ganga: (78.03,29.75) (78.10,29.30) (78.18,28.95) (78.32,28.60) (78.45,28.30).
-Aravalli ridge axis: (77.17,28.62) (77.10,28.40) (76.85,28.15) (76.60,27.80) (76.40,27.35).
+v1 fields that remain (SEED, GEE_*, OUTPUT_DIR/derived dirs, USE_RAPIDS, MORAN_K, DEP_BINS, K_ZONES=4, SHAP_BATCH, …)
+keep their v1 meaning. `LST_FAST_DEV=1` ⇒ profile `fast`. `run_local.py` keeps working unchanged.
 
 ---
 
-## 2. Data sources (GEE mode)
+## 2. Data sources and processing (gee mode)
 
-| Variable(s) | GEE asset | Processing |
+All recipes below were verified against the Earth Engine catalog (see `docs/research/gee_datasets_v2.md`, which has
+the exact band lists, scale factors, QA bits and code snippets — **read it before implementing 03–05**). Extraction
+uses v1's `fetch_grid` (tiled `ee.data.computePixels`, retry/backoff, quartering, on-disk tile cache keyed by a hash
+of the serialized expression) or, with `GEE_EXPORT=asset`, `Export.image.toAsset` per frame (poll tasks; then
+computePixels from the asset — saves EECU and avoids interactive timeouts). Every variable/frame writes a provenance
+string into `DATA_SOURCES[var][year]`, and caveats go to `DATA_CAVEATS`.
+
+**Earth Engine session.** Interactive extraction runs on the **standard** Earth Engine endpoint (the
+high-volume endpoint is opt-in via `LST_GEE_ENDPOINT=highvolume`; both share the 40-concurrent-request quota) with a
+420 s request deadline (`LST_GEE_DEADLINE_S`, `ee.data.setDeadline`) and 3 client retries. The Earth Engine work of
+sections 03, 04 and 05 runs under the workload tags `lst-v2-s03`, `lst-v2-s04`, `lst-v2-s05`, so Google Cloud
+Monitoring (Earth Engine → *Completed EECU-seconds*, grouped by `workload_tag` and `compute_type`) splits the EECU per
+section; the Earth Engine task list only shows batch exports. **Asset mode:** noncommercial projects run about 2 batch
+tasks at a time. Each task has a running timeout (`LST_GEE_EXPORT_TIMEOUT_S`, 3 h, section 03; 1 h for 04/05 via
+`LST_GEE_EXPORT_TIMEOUT_0405_S`) counted from the first poll that sees it RUNNING, and a queued timeout
+(`LST_GEE_EXPORT_QUEUE_S`, 4 h; 2 h for 04/05) counted from the start of the wait; a failed, cancelled or timed-out
+job is cancelled (when still READY/RUNNING) and extracted interactively instead, while the other tasks keep being
+polled. Assets persist across sessions, and a later session attaches to still-running tasks by description. The
+maximum observed export concurrency is logged and stored (`_S03_QA["export_concurrency"]`, the 04/05 diagnostics).
+
+### 2.1 Day LST + spectral (Landsat C2 L2), section 03
+* Collections `LANDSAT/LT05|LE07|LC08|LC09/C02/T1_L2`; Landsat 7 only `< 2021-01-01`; Apr–Jun of the frame window.
+  Mask: QA_PIXEL bits 0–4 clear, QA_RADSAT == 0, ST_QA×0.01 ≤ 3 K, ST_CDIST×0.01 ≥ 1 km, SR in [0,1].
+  Scale: SR ×2.75e-05 − 0.2; ST ×0.00341802 + 149 K → °C. TM/ETM+ SR → OLI with Roy et al. 2016 OLS coefficients.
+* **Per-path composites + offset harmonisation:** median composite per WRS-2 path (146, 147; rows within a path share
+  dates). Estimate the path offset from the overlap zone (median of the 146 − 147 difference over the overlap at
+  ≥ 250 m), split it symmetrically (+δ/2, −δ/2), apply, and mosaic (mean where both exist). Record `path_offsets`.
+* Bands at the fine grid (mean-aggregated from 30 m with `reduceResolution`): `lst_day_f` (°C, harmonised, not yet
+  overpass-corrected), `lst_day_nobs_f` (clear-scene count), `ndvi_f`, `ndbi_f`, `mndwi_f` (green/SWIR1),
+  `albedo_f` (Liang 2001), and `ndvi_spring_f` (same sensors/masks, **Feb–Mar** of the window).
+* Overpass metadata: scene list with `SCENE_CENTER_TIME`, path/row, date → `FRAME_META[y]["day"]`: `sensors`,
+  `scenes`, `scenes_per_pathrow`, `mean_overpass_ist_h` (mean of scene local IST hours), `coverage` (fraction of ROI
+  fine pixels valid), `path_offsets`.
+* **Heating rate** for the overpass correction: from `ECMWF/ERA5_LAND/HOURLY` `skin_temperature` over the ROI,
+  Apr–Jun of the window, mean at 04 and 06 UTC (09:30 / 11:30 IST): `heating_rate_k_per_h = (T06 − T04)/2` →
+  `FRAME_META[y]["day"]["heating_rate_k_per_h"]`.
+* MODIS Terra day validation (section 04): `MODIS/061/MOD11A2` `LST_Day_1km` QC bits0–1 ≤ 1 and 6–7 ≤ 1,
+  `Day_view_time`×0.1 within 10.0–11.5 h local solar time, Apr–Jun window median at 1 km → `lst_day_modis` (NaN where
+  absent; frames 2000–2020 meaningful, 2025 kept but flagged drifted).
+
+### 2.2 Night LST, section 04
+* Aqua `MODIS/061/MYD11A2` `LST_Night_1km` (QC bits0–1 ≤ 1, 6–7 ≤ 1) Apr–Jun window median → frames 2005–2020;
+  count of valid composites → `lst_night_nobs`.
+* **2025:** VIIRS `NASA/VIIRS/002/VNP21A1N` `LST_1KM` (QC mandatory ≤ 1 and LST-accuracy bits 14–15 ≥ 2; **check the
+  scale at run time**: if values > 1000 multiply by 0.02) Apr–Jun 2024–2026 median, calibrated to Aqua.
+* **2000:** Terra `MOD11A2` night (22:30) Apr–Jun 2000–2001 median, calibrated to Aqua.
+* **Calibration** (`NIGHT_CALIBRATION`): fit on annual Apr–Jun medians in the overlap (VIIRS↔Aqua 2013–2021,
+  Terra↔Aqua 2003–2019): per dominant GLC class a linear map `aqua = a + b·src`, plus a per-cell mean residual shrunk
+  with weight `n/(n+3)`; report R², RMSE, n. Applied to produce Aqua-equivalent values.
+* Annual series 1990–2025 (`ANNUAL_SERIES`, via `reduceRegions` at 1 km / native ERA5 scale over NCR + 25 districts):
+  `era5_skin_day` (05 UTC Apr–Jun mean), `era5_skin_night` (20 UTC), `era5_tmax`, `era5_tmin` (daily aggregates, Apr–Jun
+  mean of daily max/min 2 m temperature), `era5_swvl1`; satellites: `modis_terra_day` (QC + view-time filter, 2000–),
+  `modis_aqua_night` (2002–; an annual night median needs ≥ 1 valid 8-day composite, because real data give ≥ 3 on only
+  13–50 % of the NCR cells per year), `viirs_night_cal` (2012–, Aqua-calibrated), with `flag = "drift"` for Terra ≥ 2022 and
+  Aqua ≥ 2022.
+
+### 2.3 Drivers, section 05
+| Variable (RAW key) | Source | Processing |
 |---|---|---|
-| `lst_day_c`, `lst_obs_count` | `MODIS/061/MOD11A2` `LST_Day_1km`, `QC_Day` | keep QC bits0-1 ∈ {0,1} AND bits6-7 (LST error) ≤ 1; ×0.02 − 273.15; seasonal **median**; count of valid composites. Native pixels need ≥ `CFG.LST_MIN_OBS` (3) valid composites and a grid cell needs ≥ `CFG.LST_MIN_COVERAGE` (0.5) valid area, else its LST is NaN (no target); section 02 also drops rows with `lst_obs_count < LST_MIN_OBS` |
-| `ndvi`, `ndwi`, `ndbi` | `MODIS/061/MOD09A1` | StateQA: cloud bits0-1 == 0, shadow bit2 == 0, internal cloud bit10 == 0; ×0.0001; NDVI=(b02−b01)/(b02+b01); NDWI (McFeeters)=(b04−b02)/(b04+b02); NDBI=(b06−b02)/(b06+b02); seasonal median of each index; mean-aggregate 500 m → 1 km |
-| `elevation`, `slope`, `aspect_sin`, `aspect_cos` | `USGS/SRTMGL1_003` | `ee.Terrain.products`; sin/cos of aspect computed at 30 m BEFORE averaging (circular variable); mean-aggregate to 1 km; static (copied to every epoch) |
-| `ntl` | 2015/2020/2025: `NOAA/VIIRS/DNB/MONTHLY_V1/VCMSLCFG` `avg_rad` annual median over the months with cloud-free coverage (`cf_cvg > 0`; other months masked), clamp ≥0, `log1p`. 2010: `NOAA/DMSP-OLS/NIGHTTIME_LIGHTS` `stable_lights` F18 2010, (1) **intercalibrated to F18 2013** (DMSP has no on-board calibration) with a robust quadratic DN fit on pseudo-invariant pixels (lit and unsaturated in both years; trimmed least squares keeping the 80 % best-fitting pixels), then (2) mapped into VIIRS log1p space with **isotonic regression** fitted inside the ROI on **DMSP F18 2013 vs the first VIIRS VCMSLCFG year (2014)** — VIIRS monthly composites start in January 2014, so this is a one-year offset, not a true overlap | single harmonized scale = log1p(nW·cm⁻²·sr⁻¹) |
-| `pop_density` | 2010/2015/2020: `WorldPop/GP/100m/pop` (country IND, year). 2025: `JRC/GHSL/P2023A/GHS_POP` (epoch 2025) × (ROI total WorldPop2020 / ROI total GHS-POP2020) | sum 100 m → 1 km ⇒ persons/km² |
-| land cover (fine, harmonized) | `CFG.LC_SOURCES = {2010:"glc_fcs30d", 2015:"glc_fcs30d", 2020:"esa_worldcover", 2025:"dynamic_world"}`. GLC_FCS30D: `projects/sat-io/open-datasets/GLC-FCS30D/annual`; WorldCover: `ESA/WorldCover/v100`; Dynamic World: `GOOGLE/DYNAMICWORLD/V1` annual **mode** of `label` | remap to harmonized classes (§1) → mode-resample to `FINE_RES_M` |
-| ROI & districts | preferred `WM/geoLab/geoBoundaries/600/ADM2` (IND), fallback `FAO/GAUL/2015/level2`, final fallback §1.2 outline | alias matching §1.1 + HQ-location check of unmatched districts; print matched names & area |
-
-Class remaps (→ harmonized): WorldCover {10:2, 20:6, 30:6, 40:4, 50:1, 60:5, 70:6, 80:3, 90:6, 95:2, 100:6};
-Dynamic World label {0:3, 1:2, 2:6, 3:6, 4:4, 5:6, 6:1, 7:5, 8:6};
-GLC_FCS30D {10,11,12,20:4; 51,52,61,62,71,72,81,82,91,92:2; 120,121,122,130,140,150,152,153,181-187:6; 190:1; 200,201,202:5; 210:3; 220:6}.
-Provenance of every variable/epoch goes into `DATA_SOURCES` and the manifest.
-Known caveats to print & export in `manifest.notes` (section 1 publishes them as `DATA_CAVEATS`): cross-product
-land-cover inconsistency, DMSP saturation in urban cores and the approximate 2010→2013→VIIRS calibration, Terra orbit
-drift after 2022 (earlier overpass), GHS-POP 2025 is a projection; plus run-specific ones (approximate district
-boundaries, a DMSP year that could not be intercalibrated, an epoch served by the nearest available source year).
-Epoch availability is validated before extraction: MODIS needs 2000 ≤ year ≤ present, population needs WorldPop
-(2000–2020) or a GHS-POP epoch (≤ 2030); a pre-2014 year outside DMSP F18's 2010–2013 uses the nearest F18 year
-with a caveat.
-
-GEE extraction MUST use `ee.data.computePixels` with `fileFormat="NUMPY_NDARRAY"` on an explicit grid
-(`crsCode` + `affineTransform` + `dimensions`), tiled (`CFG.GEE_TILE_PX` for 1 km stacks, `CFG.GEE_FINE_TILE_PX`
-for fine land cover), in a thread pool (`CFG.GEE_WORKERS`), with exponential-backoff retry and recursive
-tile subdivision on "memory"/"timed out"/"too large" errors, and on-disk tile caching for resumability.
-Masked pixels are made explicit via `.unmask(NODATA)`. Error classes: load-related errors (HTTP 429/5xx, "Too many
-concurrent aggregations", "Earth Engine (memory) capacity exceeded", timeouts, connection resets) are transient
-(retried); size/memory errors split the tile and are permanent once it cannot be split further (timeouts stay
-retryable); everything else is permanent. The first permanent failure cancels the queued tiles and stops in-flight
-retries. The tile-cache folder name hashes the grid, the band list and the **serialised Earth Engine expression**
-(`image.serialize()`), so any change of dates/season, QA rules, scale factors or the district mapping invalidates
-the cache (`_GEE_CACHE_VERSION = "v2"`). In `auto` mode an extraction failure falls back to synthetic data only
-when no service-account key was supplied; with a key the error is raised.
+| `built_f` (fine), → `frac_built` | `JRC/GHSL/P2023A/GHS_BUILT_S/<frame>` `built_surface` | /10000 at 100 m → mean to fine grid (fraction) |
+| `built_v` (1 km) | `GHS_BUILT_V/<frame>` `built_volume_total` | m³ per m² ground: /10000 at 100 m → mean to 1 km |
+| `pop` (1 km) | `GHS_POP/<frame>` `population_count` | ×100 → persons/km² at 100 m → mean to 1 km |
+| `glc_built, glc_forest, glc_water, glc_cropland, glc_barren, glc_otherveg` (1 km, sum = 1) | `projects/sat-io/open-datasets/GLC-FCS30D/five-years-map` (b1=1985, b2=1990, b3=1995) and `/annual` (b1=2000 … b23=2022; 2025 → b23) | v1 class remap (SPEC_v1 §2) → class-indicator means (30 m → 1 km, two-step reduceResolution) |
+| `LC_FINE[y]` | GLC_FCS30D same bands | harmonised classes, mode-resampled to `LC_FINE_RES_M` (landscape metrics) |
+| `elevation, slope, aspect_sin, aspect_cos` (1 km static), `elevation_f` (fine) | `USGS/SRTMGL1_003` | v1 recipe (sin/cos at 30 m before averaging) |
+| `water_occ` (1 km), `water_occ_f` (fine) | `JRC/GSW1_4/GlobalSurfaceWater` `occurrence` | /100, mean |
+| `era5_t2m, era5_rh, era5_vpd, era5_swvl1, era5_evap, era5_ssr, era5_wind, era5_tmax, era5_tmin` (1 km) | `ECMWF/ERA5_LAND/MONTHLY_AGGR` (+ `DAILY_AGGR` for tmax/tmin) Apr–Jun of the window | bilinear-resampled to 1 km; °C, %, kPa (Magnus), m³ m⁻³, mm day⁻¹ (positive = evaporation), MJ m⁻² day⁻¹ (`surface_net_solar_radiation_sum`), m s⁻¹ (√(u²+v²)) |
+| `era5_precip_jfm` (1 km) | ERA5-Land monthly `total_precipitation_sum` Jan–Mar of the window | mm (sum per year, mean over window years) |
+| Future (`FUTURE_INPUTS`, §3.2) | `NASA/GDDP-CMIP6` (historical+ssp245+ssp585, 34 models), `projects/sat-io/open-datasets/FUTURE-URBAN-LAND/CHEN_2020_2100` (SSP1/2/5), GHSL 2030, IIASA SSP v3 India urban population | §4.10. GDDP-CMIP6 values are built from per-(scenario, model, 5-year block) Apr–Jun means (blocks 2016–2020 … 2056–2060; windows starting ≤ 2014 join the historical scenario), each one `computePixels` of `[mean(tasmax, tasmin), count]` requested on a small EPSG:4326 grid aligned to the native 0.25° lattice and cached under `CACHE_DIR/gddp/`; a window field is the n-weighted mean of its 4 blocks, bilinear to the 1 km cell centres; the `cmip6` table is the ROI mean of that field and `cmip6_pattern` is computed from the same fields (median over complete ssp245 models of W(target) − W(NOW), divided by its ROI mean) |
 
 ---
 
-## 3. Inter-section global interface (Python)
+## 3. Python inter-section interface
 
-Row order convention: `DF` is sorted by (`year`, `cell_id`) with a RangeIndex 0..N−1. **Every per-row array
-(`SHAP_VALUES`, `ZONES`, `OOF_PRED[...]`) is aligned to this order.**
+### 3.1 Produced by 00/01 (extends v1)
+* 00: `CFG` (v2 fields §1.6 + v1 fields), `ENV`, `TIMINGS`, v1 utilities (`log, timer, free_memory, retry, set_seeds,
+  save_json, gpu_mem_report, xgb_device_for, gpu_pool_map, is_oom_error, is_gpu_oom_error, pip_install`) plus:
+  * `stage_cache(name, key_obj)` → context object with `.hit` (bool), `.load()`, `.save(obj)`: pickles under
+    `CFG.CACHE_DIR/stages/<name>-<sha1(key_obj)[:12]>.pkl` (key_obj = JSON-able config subset); honours `CFG.RESUME`.
+    **Key semantics:** `CFG.key()` always adds the code identity `code = {"sec": _CURRENT_SECTION, "sha":
+    _CODE_SHA[_CURRENT_SECTION]}` and `shared = SHARED_CODE_TAG` (bumped by hand when a 00/01/02 helper changes
+    results), plus `code01` for sections 03–05. `_CODE_SHA` (`{"00".."12": sha12}`) is injected by
+    `build_notebook.py` as the notebook's first code cell (by `run_local.py`, and by `kaggle_runner.py` from the
+    bundle's `BUNDLE_INFO.json`): per section, the sha1 of a version-independent AST dump (`_stable_dump`: no
+    empty or None fields, so Python 3.11-3.14 give the same hash) of its code cells without docstrings, so comments
+    and markdown never change it; a missing `_CODE_SHA` gives
+    `code = None` and one warning. Cross-section compute dependencies are added explicitly by their owners
+    (`09_day_hindcast` adds `code07`; `11_land_<ssp>` adds `code07` and `code08`; `s04_thermal` adds `code03`;
+    `s05_drivers` and `s05_future` add `code03` and `code04`, because 04/05 fetch through the section-03 helpers). `LST_INVALIDATE` (comma tokens)
+    forces a MISS for every stage whose name starts with a token or with `s` + token (Earth Engine tiles and GDDP
+    blocks are never invalidated). Before computing a MISS, `get_or_compute` checks the time budget (expected =
+    1.25 × the last compute time of the normalised stage name; before its first compute in a session, the
+    `compute_s` of the newest sidecar of that name in `stages/`, else 0).
+  * Run control (time budget, clean stop, resume): `LSTStop` (BaseException), `time_left_s()` (inf without a
+    budget), `budget_exhausted(expected_s=0.0)` (True when stopped or `time_left_s() < expected_s +
+    CFG.TIME_RESERVE_S`), `check_budget(where, expected_s=0.0)` (raises `LSTStop` on exhaustion), `request_stop(reason)`
+    (thread-safe, idempotent; never packs), `finalize_stop()` (writes `OUTPUT_DIR/RUN_STOPPED.json` {reason, section,
+    elapsed_h, time_budget_h, stop_after, profile, utc}, calls `pack_cache()`, logs resume instructions), `section_code_hash(*ids)` (sha1
+    of the joined `id:sha` pairs [:12], None without `_CODE_SHA`), `pack_cache(force=False)` (when `LST_PACK_CACHE`
+    is on: `CACHE_DIR/packed/stages_<group>.tar`, `tiles_<group>.tar`, `gddp.tar`, written atomically and verified,
+    loose files of a group deleted after its tar; never touches `web/` or `web_bundle.zip`) and `import_cache`
+    (copies `stages/`, `tiles/`, `gddp/` from `LST_CACHE_IMPORT` — any ancestor folder is searched for a `cache`
+    folder — and extracts `packed/*.tar` members restricted to those prefixes; the output dir's own `packed/*.tar`
+    are extracted at setup). In Jupyter every cell after 00 is wrapped so that an `LSTStop` ends the run cleanly
+    (later cells print `skipped: run stopped (<reason>)`); `run_local.py` does the same per cell. Section 12 deletes
+    a stale `RUN_STOPPED.json` at its start and calls `pack_cache()` as its last statement.
+  * `lstb_write(path, columns, meta=None)` / `lstb_read(path)` — the LSTB container (§5.1). `columns` is a list of
+    dicts `{name, array (numpy), dtype ("int16"|"uint8"|"int32"|"float32"), scale=1.0, offset=0.0, nodata=None}`;
+    quantisation `raw = round((value − offset)/scale)`, NaN → nodata, clipped to the dtype range. `lstb_read` returns
+    `{"header": {...}, "columns": {name: float32 array (decoded, NaN for nodata)}}`.
+  * `quant_params(values, dtype="int16")` → `(scale, offset)` covering p0–p100 of finite values with headroom.
+* 01: `DATA_MODE`, `DATA_MODE_REASON`, `DATA_SOURCES`, `DATA_CAVEATS`, `BOUNDARY_APPROXIMATE`, `GRID`, `GRID_FINE`,
+  `ROI_MASK`, `ROI_MASK_FINE`, `DISTRICT_IDX` (H,W int16, −1 outside), `DISTRICTS` (25), `BOUNDARY_GEOJSON`,
+  `N_CELLS`, `CELL_ROWS`, `CELL_COLS`, `CELL_IDS` (int32 arrays in canonical order), `CELL_LON`, `CELL_LAT`
+  (float64), `EE_DISTRICTS` (ee.FeatureCollection with `did`, gee mode; None in synthetic). v1's GEE init, district
+  matching (incl. HQ-point fallback) and grid code move here unchanged.
 
-### 00_setup.py produces
-* `CFG` — dataclass instance. Fields (env override in brackets):
-  `RUN_MODE` ["LST_RUN_MODE"; "auto"|"gee"|"synthetic"; default "auto" — auto tries GEE, falls back to synthetic with a LOUD banner],
-  `FAST_DEV` ["LST_FAST_DEV"; bool; shrinks all loops for smoke tests],
-  `EPOCHS`, `SEASON`, `CRS`, `GRID_RES_M` ["LST_GRID_RES_M"], `FINE_RES_M` ["LST_FINE_RES_M"; default 25 in gee mode, 100 in synthetic — resolve after mode is known via `CFG.fine_res()`],
-  `LM_WINDOW_CELLS` (1), `TARGET_MODE`, `SEED` (42), `N_FOLDS` (5), `SPATIAL_BLOCKS` ((5,5)),
-  `INNER_BLOCK_KM` (10), `BOOT_BLOCK_KM` ["LST_BOOT_BLOCK_KM"; None = derived from the residual correlogram in 04],
-  `N_BOOTSTRAP` ["LST_N_BOOTSTRAP"; 100; FAST_DEV → 8], `K_ZONES` (4),
-  `LST_MIN_OBS` ["LST_LST_MIN_OBS"; 3], `LST_MIN_COVERAGE` (0.5),
-  `DEP_BINS` (40), `MORAN_K` (8), `MORAN_PERMS` (999; FAST_DEV 99), `XGB_PARAMS` (dict, see 03), `XGB_MAX_ROUNDS` (3000; FAST_DEV 300),
-  `XGB_EARLY_STOP` (100; FAST_DEV 30), `GNN_EPOCHS` (300; FAST_DEV 40), `SHAP_BATCH` (16384),
-  `SHAP_INTERACTION_MAX_ROWS` (None on GPU / 4000 on CPU), `GEE_PROJECT` ["LST_GEE_PROJECT" or Kaggle secret `GEE_PROJECT`],
-  `GEE_TILE_PX` (128), `GEE_FINE_TILE_PX` (2048), `GEE_WORKERS` (6), `GEE_MAX_RETRIES` (6),
-  `LC_SOURCES`, `INSTALL_RAPIDS` ["LST_INSTALL_RAPIDS"; False; installs cuDF/cuML in section 0.1 **before numpy is
-  imported**, constrained to the installed numpy/pandas, `LST_RAPIDS_VERSION` pins the release], `USE_RAPIDS`
-  ["LST_USE_RAPIDS"; False; True when INSTALL_RAPIDS — the cuDF/cuML paths are opt-in even where RAPIDS is
-  preinstalled, as on Kaggle], `OUTPUT_DIR` ["LST_OUTPUT_DIR"; `/kaggle/working/outputs` on Kaggle else `./outputs`],
-  derived dirs `CACHE_DIR`, `FIG_DIR`, `PARQUET_DIR`, `GEO_DIR`, `MODEL_DIR`, `NPZ_DIR`, `WEB_DIR`.
-* `ENV` — dict: `is_kaggle`, `n_gpus`, `gpu_names`, `gpu_mem_mib`, `has_cuda`, `torch_device_count`, `has_cudf`, `has_cuml`
-  (both False unless `CFG.USE_RAPIDS`), `has_cupy`, `rapids_used` (set of RAPIDS backends that actually ran:
-  "cudf", "cuml_random_forest", "cuml_kmeans"), `xgb_version`, `xgb_device` ("cuda"|"cpu"), `lgbm_device`
-  (resolved later, "gpu"|"cpu"), `python`, `platform`. `n_gpus` is the **CUDA runtime** count (torch, else CuPy),
-  which honours `CUDA_VISIBLE_DEVICES`; nvidia-smi (filtered by `CUDA_VISIBLE_DEVICES`) is only the fallback.
-* Utilities: `log(msg, level="INFO")`, `timer(name)` (context manager, records into `TIMINGS` dict), `free_memory()`,
-  `retry(fn, *, tries, base_delay, max_delay, retry_on=(Exception,), on_retry=None)`, `set_seeds(seed)`,
-  `save_json(obj, path, *, round_floats=None)` (handles numpy/pandas types, NaN→null), `gpu_mem_report()`,
-  `xgb_device_for(gpu_id)` → "cuda:{i}" or "cpu", `gpu_pool_map(fn, items)` (thread pool with one worker per GPU;
-  calls `fn(item, gpu_id)`; sequential with gpu_id=0 when ≤1 GPU), `is_oom_error(exc)` (host or GPU OOM),
-  `is_gpu_oom_error(exc)` (GPU only — used for every GPU→CPU retry; a host `MemoryError` propagates),
-  `pip_install(pkgs, extra_args=())`. `free_memory()` frees the CuPy pool of **every** device.
-* `TIMINGS` dict.
+### 3.2 Produced by the acquisition layer (02 synthetic **or** 03–05 gee) — identical structure
+* `RAW_STATIC` = `{elevation, slope, aspect_sin, aspect_cos, water_occ}` (H,W) float32 and
+  `{elevation_f, water_occ_f}` (Hf,Wf) float32.
+* `RAW_OBS[year]` for every year in `CFG.FRAMES_OBS`:
+  * fine (Hf,Wf) float32: `lst_day_f, lst_day_nobs_f, ndvi_f, ndbi_f, mndwi_f, albedo_f, ndvi_spring_f, built_f`
+  * 1 km (H,W) float32: `lst_night` (°C Aqua-equivalent, NaN if no product), `lst_night_nobs`, `lst_day_modis`,
+    `built_v`, `pop`, `glc_built, glc_forest, glc_water, glc_cropland, glc_barren, glc_otherveg`,
+    `era5_t2m, era5_rh, era5_vpd, era5_swvl1, era5_evap, era5_ssr, era5_wind, era5_tmax, era5_tmin, era5_precip_jfm`
+  * NaN = nodata; everything outside the ROI is NaN.
+* `LC_FINE[year]` uint8 (harmonised classes 0–6; 0 outside ROI).
+* `FRAME_META[year]` = `{"window": (y0, y1), "day": {"sensors": [str], "scenes": int, "scenes_per_pathrow":
+  {"146/040": int, …}, "mean_overpass_ist_h": float, "coverage": float, "heating_rate_k_per_h": float,
+  "path_offsets": {"146": float, "147": float}}, "night": {"source": "aqua"|"terra_cal"|"viirs_cal"|None,
+  "sensor": str|None, "overpass_ist_h": float|None, "composites": int, "coverage": float}}`.
+* `NIGHT_CALIBRATION` = `{"terra_to_aqua": {"r2", "rmse", "n", "by_class": [{class, a, b, n}]}, "viirs_to_aqua": {...}}`.
+* `ANNUAL_SERIES`: DataFrame `[year:int, scope:str ("ncr"|"d:<id>"), variable:str, value:float, flag:str|None]`
+  (variables §2.2; years 1990–2025 where available).
+* `FUTURE_INPUTS` = {
+  `"cmip6"`: DataFrame `[scenario ("ssp245"|"ssp585"), model, frame (2025 baseline + FRAMES_PROJ), var ("tasmax"|"tasmin"),
+  value_k]` = Apr–Jun mean of the GCM's daily values over the 20-year window centred on the frame
+  (2025: 2016–2035, 2030: 2021–2040, …, 2050: 2041–2060; historical 1950–2014 + scenario 2015–2060 joined), ROI mean;
+  `"cmip6_pattern"`: `{"tasmax": (H,W), "tasmin": (H,W)}` float32 = ensemble-median 2050 ssp245 delta field divided by
+  its ROI mean (bilinear to 1 km; ≈ 1 everywhere);
+  `"urban_growth"`: DataFrame `[scenario ("ssp126"|"ssp245"|"ssp585"), district, frame, ratio]` = urban area (Chen et
+  al. 2020, value 2) in the district at the frame divided by 2020 (decades interpolated geometrically to 5-year frames;
+  SSP1→ssp126, SSP2→ssp245, SSP5→ssp585);
+  `"ghsl_2030"`: `{"built": (H,W), "pop": (H,W)}`;
+  `"pop_growth"`: DataFrame `[scenario, frame, factor]` NCR urban-population factor vs 2025 (IIASA SSP v3 India urban
+  population, cite the version in `DATA_SOURCES`);
+  `"gsat_increment"`: `{scenario: {frame: K}}` AR6 WG1 assessed GSAT increment of the frame window over the 2016–2035
+  window (used for the ssp126 pattern scaling; cite AR6 Table 4.5 and interpolate between assessed windows) }.
+* `SYNTHETIC_TRUTH` — None (gee) or dict of planted facts (thresholds, β_day/β_night, UHI signs, path offsets,
+  calibration slopes, heating rate) used by later sections for "planted vs recovered" reports.
 
-### 01_data_acquisition.py produces
-* `DATA_MODE` ("gee"|"synthetic"), `DATA_MODE_REASON` (str: why this mode was used, e.g. "LST_RUN_MODE=synthetic",
-  "Earth Engine unavailable (…)", "Earth Engine extraction failed: …", "Earth Engine initialised via …"; exported as
-  `manifest.data_mode_reason`), `DATA_SOURCES` (dict variable → {year: provenance str}).
-* `GRID` — `GridSpec` dataclass: `crs`, `res` (m), `x0` (left edge, m), `y0` (top edge, m), `width`, `height`;
-  methods `cell_centers_xy()` → (X, Y) 2-D arrays, `lonlat()` → (LON, LAT) 2-D arrays (pyproj; fallback formula),
-  `affine()` → dict for computePixels, `fine(res)` → GridSpec at fine resolution sharing the origin.
-* `ROI_MASK` (H,W) bool, `DISTRICT_IDX` (H,W) int16 (−1 outside), `DISTRICTS` list of dicts
-  `{"id","name","state"}` exactly as §1.1 (all 25), `BOUNDARY_GEOJSON` (FeatureCollection, one Feature per district
-  with properties `id,name,state`, EPSG:4326, simplified to ≤ ~200 m).
-* `RAW_STACKS` — `{year: {band: (H,W) float32}}` with bands
-  `lst_day_c, lst_obs_count, ndvi, ndwi, ndbi, elevation, slope, aspect_sin, aspect_cos, ntl, pop_density` (NaN = nodata).
-* `LC_FINE` — `{year: (H*f, W*f) uint8}` harmonized classes, `f = GRID_RES_M // FINE_RES_M`, 0 outside ROI.
-* `SYNTHETIC_TRUTH` — None in gee mode; in synthetic mode a dict describing the planted response
-  (e.g. `{"ndvi_saturation": 0.45, "water_cooling_scale": 0.08, ...}`) so section 04 can report recovery.
-* `DATA_CAVEATS` — list of caveat strings (static + run-specific, §2) → `manifest.notes`.
-* `BOUNDARY_APPROXIMATE` — bool: districts are the §1.2 outline + nearest-HQ partition (synthetic, or GEE fallback).
+### 3.3 Produced by 06_features
+* `FEATURES` (47, fixed order §4.1), `BASE_FEATURES` (33), `FOCAL_SPEC = {"bases": [...7], "windows": [3, 15]}`,
+  `FEATURE_META` (v1 keys + `family`, `group`, `base` bool; `actionable` true only for the 5 fractions, NDVI and the
+  3 landscape metrics), `SHAP_GROUPS` (ordered dict group → member features, §4.4), `GROUP_META` (`label`, `primary`,
+  `family`, `actionable`), `FEATURE_STATS`, `LM_VALIDATION`.
+* `FEATURE_GRIDS[year][feature]` (H,W) float32 for every observed frame (focal/distances computed here; reused by 11).
+* `DF`: one row per ROI cell × observed frame (ALL ROI cells, sorted by (year, cell_id), RangeIndex). Columns:
+  `cell_id, row, col, x, y, lon, lat, district, year`, all `FEATURES` (float32), `lst_day`, `lst_night` (°C, NaN if
+  missing), `w_day`, `w_night` (sample weights; 0 = not a training target), `anom_day`, `anom_night`,
+  `fold_block5` (v1 5×5 greedy, 5 folds), `fold_block20` (20 km blocks, greedy size-balanced into `N_FOLDS_BLOCK`),
+  `fold_random` (5), `block10_id`, `block20_id`, `fold_district` (= district id).
+  Day target valid: `lst_day_nobs ≥ 2` (1 km mean of fine counts) and ≥ 50 % valid fine pixels; `w_day = clip(nobs/5,
+  0.4, 1)`. Night target valid: `lst_night_nobs ≥ 3` (Aqua composites passing QC; lowered from 6 after the first real run, where a
+  3-year Apr–Jun window gave a median of 4.8 per cell and ≥ 6 in only 30 % of the ROI; the Terra-reconstructed frame:
+  ≥ 1, its weight is 0; VIIRS: ≥ 20 daily obs), `w_night =
+  clip(nobs/12, 0.5, 1)`. **Night training frames = 2005–2025** (`CFG.NIGHT_TRAIN_FRAMES`); 2000 night (Terra
+  reconstructed) is held out as the hindcast check; 1990/1995 have no night target.
+* `FIXED_MASK[mode]`, `RAW_LEVELS[mode][year]` (mean over the fixed mask of the raw absolute target — day before the
+  overpass correction; mean over `FIXED_MASK & valid`). `FIXED_MASK[mode]` = ROI cells valid in **every** mask frame
+  (strict intersection; mask frames = training frames whose valid-target share of ROI cells ≥ `LST_FRAME_MIN_COVERAGE`,
+  0.5, a part of the 06 stage key); training frames below that threshold get `w_<mode> = 0` (warning + caveat).
+  Fewer than 2 mask frames or a `FIXED_MASK` with < 1 % of the ROI cells is a `RuntimeError` (per-frame coverages).
+  `FIXED_MASK_COVERAGE[mode][year]` (float) = share of `FIXED_MASK` cells with a valid target at that frame, for every
+  frame (1.0 for mask frames). A day frame without any valid target is an error.
 
-### 02_features.py produces
-* `FEATURES` (ordered list, the model's column order — never reorder):
-  `["ndvi","ndwi","ndbi","elevation","slope","aspect_sin","aspect_cos","ntl","log_pop",
-    "frac_impervious","frac_forest","frac_water","frac_cropland","frac_barren","lm_pd","lm_ed","lm_contag"]`
-* `FEATURE_META` — `{name: {"label","unit","group","description","source","actionable","display"}}`;
-  `group ∈ {"spectral","terrain","socioeconomic","landcover","landscape"}`,
-  `display ∈ {"index","percent","number"}` (fractions → "percent"). **actionable = the 5 land-cover fractions, the 3
-  landscape metrics and NDVI.** NDWI and NDBI are spectral diagnostics (`actionable = false`): they change only through
-  land-cover change (coupled scenarios, §4.8), so neither the recommendations nor the dashboard simulator offer them
-  as levers. Terrain and socio-economic features are not actionable.
-* `DF` — pandas DataFrame, one row per ROI cell × epoch with valid target (`lst_obs_count ≥ CFG.LST_MIN_OBS`). Columns:
-  `cell_id` int32 (= row*W+col), `row`, `col` int32, `x`, `y` float64 (UTM m), `lon`, `lat` float64,
-  `district` int16 (id, −1 unknown), `year` int16, all `FEATURES` float32 (NaN allowed),
-  `pop_density` float32, `lst` float32 (°C), `lst_obs_count` float32, `epoch_mean` float32, `target` float32,
-  `spatial_block` int16 (0..24, 5×5 over grid extent), `fold_spatial` int8 (0..4, greedy size-balanced assignment of blocks),
-  `fold_random` int8 (0..4), `block10_id` int32 (id of 10×10 km block; used only for the inner early-stopping splits —
-  the SHAP block bootstrap derives its own, larger blocks in 04).
-* `EPOCH_MEANS` `{year: float}`, `TARGET_COL = "target"`, `FEATURE_STATS` `{name: {min,max,p01,p99,median,mean,std}}` over DF.
-* `LM_VALIDATION` dict (pylandstats vs vectorized metrics on a random window sample: max/mean abs diff per metric, n).
-Landscape metrics definitions (per window of `LM_WINDOW_CELLS` cells, valid pixels only, ≥50% valid else NaN):
-PD = patches / area_ha × 100 (8-connectivity patches, per class, all classes 1–6);
-ED = total edge length (m) between different valid classes (4-neighbour, interior only, landscape boundary
-not counted) / area_ha  [m/ha];
-CONTAG (FRAGSTATS, 4-neighbour double-count adjacency incl. like adjacencies) in %; single-class window → 100.
+### 3.4 Produced by 07_models (per mode m)
+* `MODEL_RESULTS[m]` = `{"cv_fold_metrics": DataFrame[scheme, model, fold, r2, rmse, mae, bias, n_train, n_test,
+  fit_seconds, device], "cv_summary": DataFrame[scheme, model, r2_pooled, rmse_pooled, mae_pooled, r2_fold_mean,
+  r2_fold_sd, rmse_fold_mean, rmse_fold_sd, n_folds, n], "oof": {scheme: {model: float32[N_DF] (NaN where not predicted)}},
+  "block_size_curve": [...], "error_vs_distance": [...], "loeo": [...], "place_time": {...}, "moran": DataFrame,
+  "moran_target": DataFrame, "moran_scatter": {...}, "fold_geometry": {...}, "best_rounds": [int]}` (contents §4.2, §5.7).
+* `FINAL_MODELS[m]` (xgboost.Booster on all training rows of m; rounds = round(1.1 × median best_rounds of block20)).
+* `PREDICT_ANOM(m, X, recentre_mask=None)` → float32 predictions (anomaly units); if `recentre_mask` (bool over rows of
+  one frame) is given, subtracts the mean over those rows.
+* `PERSISTENT_RESID[m]` (H,W) float32 r̄ and `PERSISTENT_LAMBDA[m]` (§4.5).
+* `AOA[m]` = `{"weights", "mean", "std", "train_sample", "d_bar", "threshold", "di_train", "rmse_by_di_decile",
+  "conformal": {"edges": [...], "abs_resid_quantiles": {"q50","q90","q95"}: [...]}, "resid_samples": [10 arrays],
+  "resid_samples_proj": [10 float32 arrays], "conformal_proj": {"abs_resid_quantiles": {"q50","q90","q95"}: [10]},
+  "resid_rho_block20": float in [0, 0.95]}` and `COMPUTE_DI(m, X)` → DI. `resid_samples_proj` holds the signed
+  projection-setting residuals `y − (PRED_LOEO + r̄^(−t))` by DI decile (≤ `_S07_RESID_SAMPLES` each; empty deciles
+  borrow the nearest populated one); `resid_rho_block20` is their pooled within-frame block20 correlation (§4.6).
+  `COMPUTE_DI` returns **+inf** for rows with a NaN in any feature with AOA weight > 0 (outside the AOA, top DI
+  decile in every consumer). `MODEL_RESULTS[m]["aoa"]` adds `resid_rho_block20` and `proj_resid_q90` (10 floats);
+  `MODEL_RESULTS[m]["lane_busy_seconds"]` = `{"gpu", "cpu", "lgbm"}`.
 
-### 03_models_validation.py produces
-* `MODEL_NAMES = ["linear","ridge","random_forest","lightgbm","xgboost","gnn"]`, `SCHEMES = ["random","spatial","temporal"]`.
-* `CV_FOLD_METRICS` DataFrame `[scheme, model, fold, r2, rmse, mae, n_train, n_test, fit_seconds, device]`.
-* `CV_SUMMARY` DataFrame `[scheme, model, r2_mean, r2_std, rmse_mean, rmse_std, mae_mean, mae_std, n_folds]`.
-* `OOF_PRED` `{scheme: {model: np.ndarray(N) float32}}` in target units; NaN where not predicted
-  (temporal: only last-epoch rows).
-* `MORAN_RESULTS` DataFrame `[scheme, model, year, I, expected_I, z, p]` (residuals of OOF predictions; KNN k=`CFG.MORAN_K`, row-standardized; PySAL `esda.Moran` with permutations, numpy fallback).
-* `MORAN_TARGET` DataFrame `[year, I, expected_I, z, p]`.
-* `MORAN_SCATTER` `{model: {"year": int, "z": [...], "lag": [...], "slope": float}}` (spatial scheme, last epoch, ≤2000 sampled points).
-* `XGB_BEST_ROUNDS` list[int] (spatial-CV folds), `SPATIAL_WEIGHTS` `{year: scipy.sparse.csr_matrix}` (row-standardized KNN).
-* Temporal scheme: train on all epochs except the last, test on the last (fold id 0).
+### 3.5 Produced by 08_explain (per mode m)
+* `XAI_FRAMES[m]` = observed frames with SHAP (day: all 8; night: all 8 — 1990/1995 modelled rows explain the model's
+  hindcast). `SHAP_BASE[m]`, `SHAP_GROUP_VALUES[m][year]` (N_CELLS × 18 float32, canonical order; NaN rows where
+  features are missing), `PRED_ANOM[m][year]` (N_CELLS float32, raw model output), `OOF_ANOM[m][year]` (block20 OOF,
+  NaN when not a training row).
+* `IMPORTANCE[m]`, `INTERACTIONS[m]` (18×18 global + by zone), `DEPENDENCE[m]`, `THRESHOLDS[m]` (per group, v1
+  machinery incl. recentred-percentile intervals and support), `BOOTSTRAP_INFO[m]`.
+* `ZONE_MODEL[m]` (centroids 4×18, labelling record), `ASSIGN_ZONES(m, shap_group_matrix)` → uint8 ids,
+  `ZONES_OBS[m][year]` (N_CELLS uint8, 255 = nodata), `ZONE_PROFILES[m]`, `ZONE_TRANSITIONS[m]`, `RECOMMENDATIONS[m]`.
+  `ZONE_PROFILES[m][k]` carries `display_name` (str) and `label_caveat` (str | None) (§1.5);
+  `ZONE_MODEL[m]["labelling"]` adds `riparian_criterion_met` (bool), `riparian_criterion` (str) and, per cluster,
+  `share_water_ge_0_2` and `water_group_rank`.
+* `SCENARIO_COUPLING` (mode-independent), `WEB_MODELS[m]` (compact surrogate dict, v1 format).
 
-### 04_shap_zoning.py produces
-* `FINAL_MODEL` (xgboost.Booster, all rows, `FINAL_ROUNDS` = round(1.1 × median(XGB_BEST_ROUNDS))).
-* DF new columns: `lst_pred` (°C, final model), `lst_pred_oof` (°C, spatial-CV XGBoost OOF), `resid_oof` (= lst − lst_pred_oof), `zone` int8.
-* `SHAP_VALUES` (N,K) float32 (XGBoost native GPU TreeSHAP `pred_contribs`, additivity-checked), `SHAP_BASE` float (target units).
-* `SHAP_IMPORTANCE` `{"global": {"mean_abs":[K], "ci_lo":[K], "ci_hi":[K], "bias":[K]}, "by_epoch": {year: {"mean_abs":[K], "mean":[K]}}, "by_zone": {zone: {"mean_abs":[K], "mean":[K]}}}`
-  (interval = recentred (bias-corrected) bootstrap percentile interval, §4.4; `bias` = replicate median − full-data
-  estimate).
-* `INTERACTION_GLOBAL` (K,K) mean |interaction| (diagonal = main effect), `INTERACTION_BY_ZONE` `{zone: (K,K)}`.
-* `DEPENDENCE` `{feature: {...}}` exactly as the `dependence.json.gz` entry (§4.4).
-* `THRESHOLDS` `{feature: {...}}` exactly as the `threshold` object (§4.4).
-* `ZONES` np.int8(N) canonical ids; `ZONE_PROFILES` list (as `zones.json["zones"]`), `ZONE_TRANSITIONS`, `ZONE_DIAGNOSTICS`
-  (`k`, `inertia`, `silhouette`, `n_init` — every K incl. 4 fitted with the same `n_init` = 10), `ZONE_SILHOUETTE`
-  (the zone fit itself uses 20 initialisations), `ZONE_LABELLING` (`{"rule", "clusters": [{zone, name, raw_cluster, n,
-  mean_total_shap, mean_water_shap, mean_frac_water, reason}]}`).
-* `RECOMMENDATIONS` `{zone_id: [...]}` (also embedded in ZONE_PROFILES; rule §4.6).
-* `SHAP_CI_LATEST` DataFrame (last epoch: `cell_id` + `<f>_lo`, `<f>_hi` per feature) from the block bootstrap
-  (bias-corrected percentile intervals re-centred on the final model's per-cell SHAP value).
-* `SCENARIO_COUPLING` dict (§4.8), `BOOTSTRAP_INFO` dict (`n`, `n_requested`, `mode`, `block_size_km`, `n_blocks`,
-  `block_size_source`, optional `residual_corr_range_km`/`correlogram`, `ci_level` 0.95, `ci_method`
-  (`"recentred-percentile"`, §4.4), `ci_method_description`, `ci_label` ("95% CI" when n ≥ 50, else
-  "replicate range"), `replicate_range` (bool, n < 50), `rounds`, `eval_rows`, `full_data`, `rows_sampled` (CPU
-  path: replicate spreads come from a ≤ 20k-row sample + the last epoch), `devices`, `mean_seconds`, `failures`).
-* **Bootstrap blocks**: square blocks of `CFG.BOOT_BLOCK_KM`, or by default the distance at which the pair correlogram
-  of the last-epoch spatial-CV XGBoost residuals drops below 0.1, rounded up to 5 km and ≥ `INNER_BLOCK_KM` (shrunk
-  in 5 km steps if fewer than 50 blocks would remain). `block10_id` is only used for inner early stopping.
+### 3.6 Produced by 09_timeline
+* `LEVELS[m][year]` = `{"level": °C, "ci": [lo, hi], "method": str, "overpass_correction": °C|None}` for all observed
+  frames (night 1990/1995 included, from ERA5 regression).
+* `FRAME_TIERS[m][year]` (tier strings), `FRAME_FIELDS[m][year]` (N_CELLS float32 absolute °C; observed values where
+  valid, NaN elsewhere — **except** modelled frames, which are full model fields), `FRAME_UNC[m][year]` = `{"p05",
+  "p95"}` (N_CELLS float32) for `modelled`/`reconstructed` frames (conformal by DI decile), `FRAME_AOA_OUT[m][year]`
+  (N_CELLS bool).
+* `CLIMATE_SENSITIVITY[m]` = `{"beta", "ci", "draws" (bootstrap array ≥ 1000), "r2", "n_years", "regressors",
+  "method", "temperature_var" ("era5_tmax"|"era5_tmin")}`, `TRENDS[m]`, `SERIES_FRAMES[m][scope]` (frame stats),
+  `HINDCAST_METRICS[m]`, `DAY_LEVEL_CHECK` (Landsat level vs MODIS Terra level by frame).
 
-**Zone labelling heuristic** (documented in the notebook, 4.2; canonical ids unchanged):
-1. **3 Heat Extreme Core** = the cluster with the highest mean total SHAP (Σ over features);
-2. **1 Riparian Buffer** = among the remaining three, the one with the most negative mean
-   (SHAP[frac_water] + SHAP[ndwi]); if none of the three has a negative mean, the one with the highest mean frac_water;
-3. **0 Ecological Cool Base** = of the remaining two, the one with the lower mean total SHAP;
-4. **2 Transition** = the last one.
+### 3.7 Produced by 10_downscaling
+* `FINE_FIELDS[m][year]` (Hf,Wf) float32 absolute °C (day: Landsat observed + overpass correction; night:
+  downscaled), `FINE_FLAGS[m][year]` uint8 (bit0 outside AOA, bits1–2 tier code: 0 observed, 1 observed-sparse /
+  reconstructed, 2 modelled, 3 downscaled), `DOWNSCALING_METRICS`, `RASTER_INDEX` (dict for `raster_index.json`) and
+  the written PNGs (written here, under `CFG.WEB_DIR/raster/`).
 
-### 05_export.py produces files (§4) and `EXPORT_MANIFEST` (the manifest dict).
+### 3.8 Produced by 11_projections
+* `LAND_MODEL_METRICS`, `PROJ_QUANTILES[m][s]` = `{"p05","p25","p50","p75","p95"}` each (Y × N_CELLS) float32 °C,
+  `PROJ_FLAGS[m][s]` (Y × N_CELLS uint8: bit0 outside AOA, bits1–2 VSUP tier), `PROJ_ZONES[m][s]` (Y × N_CELLS uint8),
+  `PROJ_SERIES[m][s][scope]` = list of `{year, p05, p25, p50, p75, p95}`, `PROJ_DECOMPOSITION[m][s][year]`,
+  `PROJ_UNCERTAINTY[m][s][year]`, `PROJ_THRESHOLD_YEARS[m][s][scope]`, `CMIP6_DELTAS` (incl. pattern-scaled ssp126),
+  `PROJ_DRIVER_SUMMARY` (district built-up/pop per scenario × frame).
 
----
-
-## 4. Output files
-
-```
-outputs/
-├── parquet/features_long.parquet          (DF features, zstd)
-├── parquet/predictions_shap.parquet       (ids, year, lst, lst_pred, lst_pred_oof, resid_oof, zone, shap_<f>…)
-├── parquet/cv_fold_metrics.parquet, cv_summary.parquet, moran_results.parquet
-├── parquet/shap_ci_<lastyear>.parquet
-├── npz/shap_interactions_<year>.npz       (float16 N_e×(K+1)×(K+1) + cell_id)
-├── geo/ncr_districts.geojson, geo/zones_<year>.geojson (cell squares, props: cell_id, zone, lst, lst_pred)
-├── models/xgb_final.json                  (native XGBoost save_model)
-├── figures/*.png
-├── web/  ← copy to dashboard/public/data/
-└── web_bundle.zip                         (.gz members stored, the rest deflated)
-```
-
-All web JSON: UTF-8, no NaN/Infinity (→ null), floats rounded (lon/lat 5 dp, °C 2 dp, SHAP 3 dp, features 4 sig. digits).
-
-**Compression (bundle size).** The large files are written **gzip-compressed** (level 9, mtime 0):
-`epoch_<year>.json.gz` and `dependence.json.gz`; all other files stay plain JSON. `manifest.files` always names the
-files actually written. **Every reader must accept both `.gz` and plain names and decide by content, not by name**:
-if the first two bytes are `0x1f 0x8b` the body is gunzipped, otherwise it is read as UTF-8 text. This covers servers
-that already sent `Content-Encoding: gzip` (the browser then hands over inflated JSON under a `.gz` name).
-Python: `gzip` module (`notebook/validate_bundle.py`, section 5.5); dashboard loader: `fetch` → `ArrayBuffer` →
-magic-byte check → `DecompressionStream('gzip')` or `TextDecoder`; dashboard tests: node `zlib`. A 1 km bundle is
-≈ 19 MB on disk (≈ 71 MB uncompressed). Size checks use the **on-disk (compressed)** size: the validator warns above
-25 MB by default and fails only when a limit is given explicitly (`--max-mb`). The export removes stale bundle files
-from earlier exports (e.g. plain `epoch_*.json` next to the new `.json.gz`).
-
-### 4.1 `web/manifest.json`
-```json
-{
-  "schema_version": "1.0",
-  "generated_at": "2026-09-27T10:00:00Z",
-  "data_mode": "gee | synthetic",
-  "data_mode_reason": "LST_RUN_MODE=synthetic",
-  "study_area": {"name": "Delhi NCR", "area_km2": 55083.0, "crs": "EPSG:32643", "grid_res_m": 1000,
-                 "bbox": [minLon, minLat, maxLon, maxLat], "center": [lon, lat],
-                 "boundary_approximate": false, "boundary_source": "WM/geoLab/geoBoundaries/600/ADM2"},
-  "epochs": [2010, 2015, 2020, 2025],
-  "season": ["04-01", "06-30"],
-  "target_mode": "anomaly",
-  "epoch_means": {"2010": 39.1, "2015": 38.4, "2020": 37.6, "2025": 39.9},
-  "shap_base": 0.0123,
-  "features": [{"name": "ndvi", "label": "NDVI", "unit": "", "group": "spectral", "description": "…",
-                "source": "…", "actionable": true, "display": "index",
-                "stats": {"min": 0, "max": 0, "p01": 0, "p99": 0, "median": 0, "mean": 0, "std": 0}}],
-  "zones": [{"id": 0, "name": "Ecological Cool Base", "color": "#34d399"},
-            {"id": 1, "name": "Riparian Buffer", "color": "#22d3ee"},
-            {"id": 2, "name": "Transition", "color": "#a78bfa"},
-            {"id": 3, "name": "Heat Extreme Core", "color": "#fb7185"}],
-  "districts": [{"id": 0, "name": "Delhi NCT", "state": "Delhi"}],
-  "files": {"epochs": {"2010": "epoch_2010.json.gz"}, "model": "model_web.json", "shap_global": "shap_global.json",
-            "dependence": "dependence.json.gz", "zones": "zones.json", "metrics": "metrics.json",
-            "districts": "districts.geojson", "interactions": "interactions.json", "coupling": "scenario_coupling.json"},
-  "data_sources": {"lst_day_c": {"2010": "MODIS/061/MOD11A2 …"}},
-  "synthetic_truth": null,
-  "bootstrap": {"n": 100, "n_requested": 100, "mode": "block", "block_size_km": 25.0, "n_blocks": 96,
-                "block_size_source": "…", "ci_level": 0.95, "ci_method": "recentred-percentile",
-                "ci_method_description": "…", "ci_label": "95% CI", "replicate_range": false, "full_data": true},
-  "notes": ["…caveats…"]
-}
-```
-`data_mode_reason` (str|null, from `DATA_MODE_REASON`; the dashboard's synthetic banner explains it),
-`study_area.boundary_approximate` (bool) and `boundary_source` (str|null), `shap_base` (SHAP baseline in target units)
-and `bootstrap` are part of the contract; readers must tolerate their absence in older bundles and extra keys.
-`bootstrap.ci_label` is "95% CI" (≥ 50 replicates) or "replicate range" (fewer; `replicate_range: true`); older
-bundles may say "bootstrap range" (same meaning). `bootstrap.ci_method` is a method code: `"recentred-percentile"`
-is what the notebook writes (§4.4); readers also know `"basic"`, `"percentile"`, `"bca"`, `"subsampling"` and show an
-unknown code verbatim. The dashboard labels every interval accordingly (§4.5).
-A demo bundle (`data_mode: "synthetic"`) is committed under `dashboard/public/data/`; it must be labelled SYNTHETIC in
-the manifest notes, the UI and the README.
-
-### 4.2 `web/epoch_<year>.json.gz` (gzip; columnar; all arrays length `n`, same order)
-```json
-{
-  "year": 2025, "n": 55012, "cell_size_m": 1000,
-  "epoch_mean": 39.9,
-  "base_value_c": 39.95,
-  "cell_id": [..], "lon": [..], "lat": [..], "district": [..],
-  "lst_obs": [..], "lst_pred": [..], "lst_pred_oof": [..], "resid_oof": [..], "zone": [..],
-  "features": {"ndvi": [..], "...": [..]},
-  "shap": {"ndvi": [..], "...": [..]}
-}
-```
-Invariant: `lst_pred[i] ≈ base_value_c + Σ_f shap[f][i]` (|err| ≤ 0.05 °C after rounding).
-`base_value_c = SHAP_BASE + (epoch_mean if target_mode=="anomaly" else 0)`. `features`/`shap` keys = manifest feature order. `lst_pred_oof`/`resid_oof` may contain null.
-
-### 4.3 `web/model_web.json` — compact tree ensemble for in-browser scenario inference
-```json
-{
-  "format": "lst-xgb-compact-v1",
-  "objective": "reg:squarederror",
-  "target_mode": "anomaly",
-  "features": ["ndvi", "..."],
-  "base_score": 0.0123,
-  "n_trees": 400,
-  "trees": [{"f": [0, -1, -1], "t": [0.31, 0, 0], "l": [1, -1, -1], "r": [2, -1, -1], "d": [1, 0, 0], "v": [0, -0.2, 0.3]}],
-  "fidelity": {"r2_vs_final": 0.99, "rmse_vs_final": 0.1, "r2_vs_obs": 0.9, "max_depth": 6, "rounds": 400},
-  "check": {"rows": [[..K values or null..]], "expected": [..]}
-}
-```
-Semantics: node 0 is the root; node `i` is a leaf iff `l[i] == -1` (then `v[i]` is the leaf value); otherwise go
-to `l[i]` if `x[f[i]] < t[i]` (strict), to `r[i]` if `x[f[i]] >= t[i]`, and to `l[i]` if `d[i]==1` else `r[i]` when
-`x[f[i]]` is missing (null/NaN). Prediction (target units) = `base_score + Σ_trees leaf`. °C = prediction +
-`epoch_mean` in anomaly mode. It is a *surrogate* (max_depth ≤ 6, ≤ 400 rounds) of the final model trained on the
-same data; the Python export must verify its own evaluator against `booster.predict(output_margin=True)`
-(max abs diff < 1e-3) and embed 50 check rows so the JS evaluator is tested against Python.
-Thresholds must be emitted as the exact float32 value (`float(np.float32(t))`, repr precision).
-
-### 4.4 `web/dependence.json.gz` (gzip)
-```json
-{"features": {"ndvi": {
-   "bin_centers": [..40], "mean": [..], "ci_lo": [..], "ci_hi": [..], "count": [..],
-   "scatter": {"x": [..≤1500], "shap": [..], "color": [..], "color_feature": "frac_impervious", "zone": [..], "year": [..]},
-   "threshold": {"zero_crossing": 0.31, "zero_crossing_ci": [0.29, 0.33], "zero_crossing_support": 0.97,
-                 "zero_crossing_flag": null,
-                 "breakpoint": 0.42, "breakpoint_ci": [0.40, 0.45], "breakpoint_support": 0.91,
-                 "slope_before": -8.1, "slope_after": -1.2,
-                 "saturation": 0.55, "saturation_ci": [0.52, 0.58], "saturation_support": 0.88,
-                 "effect_range": 4.2, "direction": "cooling | warming | mixed"}
-}}}
-```
-Bins = quantile bins fixed on the full data; `mean` from the final model. `color_feature` = strongest SHAP-interaction
-partner. Any threshold may be null.
-
-**Bootstrap intervals (all of §4, and `SHAP_CI_LATEST`)** are *recentred (bias-corrected) percentile intervals*
-(`ci_method = "recentred-percentile"`): with θ̂ the full-data (final-model) estimate and θ* the replicate estimates,
-`[θ̂ + q2.5(θ*) − median(θ*), θ̂ + q97.5(θ*) − median(θ*)]`. They always contain θ̂. Block-bootstrap refits (≈ 63 % of
-the blocks, duplicates as weights) are biased relative to the full-data model, so plain percentile intervals often
-excluded θ̂, and so would the basic/pivot interval `[2θ̂ − q97.5, 2θ̂ − q2.5]` (it contains θ̂ exactly when the
-percentile interval does). The shift median(θ*) − θ̂ is reported as `bias` where the file has that key. `ci_lo/ci_hi`
-are this interval per bin around `mean`. With fewer than 50 replicates the intervals are labelled "replicate range"
-(`manifest.bootstrap.ci_label`, `replicate_range`).
-
-Threshold definitions:
-* zero_crossing = x where the binned mean curve changes sign (linear interpolation), reported only when there is a
-  single sign change or one crossing whose jump |Δ| is ≥ 2× every other one; otherwise null with
-  `zero_crossing_flag = "multiple"` (null otherwise; UIs show "multiple crossings" with no value and no interval). Zero means the prediction of the *average cell* (SHAP baseline), not a physical
-  threshold — UIs must not narrate it as "flips from heating to cooling" without that qualifier. Replicates use the
-  crossing nearest to the full-data one.
-* breakpoint = best continuous 2-segment (hinge) least-squares fit over bin centres between the 10th and 90th
-  percentile bins (count-weighted); null when it removes < 10 % of the straight-line SSE, when the best hinge is at
-  the edge of the candidate range, or when either side has < 5 bins or < 5 % of the row weight.
-* saturation = first x after the steepest section where |smoothed slope| drops below 10% of its max and stays below
-  for ≥3 bins (refined to the local knee).
-* direction from the sign of Spearman ρ(x, SHAP) (|ρ|<0.2 → "mixed").
-* `<k>_support` = share of successful replicates that produced the threshold (null when the point is null).
-  `<k>_ci` is **null whenever `<k>` is null** and when support < 0.5; thresholds with support < 0.8 are tentative
-  and should be flagged in the UI.
-
-### 4.5 `web/shap_global.json`
-```json
-{"features": [..K], "n_bootstrap": 100, "bootstrap_mode": "block", "ci_label": "95% CI",
- "ci_method": "recentred-percentile",
- "global": {"mean_abs": [..K], "ci_lo": [..K], "ci_hi": [..K], "bias": [..K]},
- "by_epoch": {"2010": {"mean_abs": [..K], "mean": [..K]}},
- "by_zone": {"0": {"mean_abs": [..K], "mean": [..K]}}}
-```
-**Interval display rules (all views).** An interval is shown only next to an existing point estimate: when the
-estimate is null (e.g. a threshold that was not found) its interval is hidden, even if an older bundle carries one,
-and `<k>_support` is shown as "found in X % of bootstrap replicates" (flagged as tentative below 0.8). Intervals are
-called a **"replicate range"** instead of "95% CI" when fewer than 50 replicates were run (`n_bootstrap` /
-`manifest.bootstrap.n` < 50, or `manifest.bootstrap.replicate_range = true`). An estimate lying outside its own
-interval (possible only in bundles made with plain percentile intervals) is flagged, not hidden.
-
-### 4.6 `web/zones.json`
-```json
-{"k": 4, "silhouette": 0.41,
- "diagnostics": {"k": [2,3,4,5,6,7,8], "inertia": [..], "silhouette": [..], "n_init": 10},
- "labelling": {"rule": "…", "clusters": [{"zone": 0, "name": "Ecological Cool Base", "raw_cluster": 2, "n": 1234,
-               "mean_total_shap": -0.8, "mean_water_shap": -0.1, "mean_frac_water": 0.01, "reason": "…"}]},
- "zones": [{"id": 0, "name": "Ecological Cool Base", "color": "#34d399", "description": "…",
-            "n_cells": {"2010": 0}, "area_km2": {"2010": 0.0}, "lst_obs_mean": {"2010": 0.0}, "lst_pred_mean": {"2010": 0.0},
-            "feature_means": {"ndvi": 0.0}, "shap_means": {"ndvi": 0.0},
-            "top_warming": [{"feature": "ndbi", "shap": 1.2}], "top_cooling": [{"feature": "ndvi", "shap": -1.1}],
-            "top_interactions": [{"a": "ndvi", "b": "frac_impervious", "value": 0.3}],
-            "top_districts": [{"district": 1, "name": "Gurugram", "share": 0.21}],
-            "recommendations": [{"feature": "frac_forest", "action": "increase", "current": 0.02, "target": 0.22,
-                                 "expected_delta_c": -0.43, "ci": [-0.51, -0.37], "priority": "medium",
-                                 "rationale": "In the final model, raising tree cover by 20 percentage points … is associated with a mean LST change of -0.43 °C … (95% CI -0.51 to -0.37 °C) …",
-                                 "kind": "bound", "step": 0.2, "n_cells": 5123, "coupled": true, "bias": 0.012}]}],
- "transitions": {"2010->2015": [[4×4 counts, rows=from zone, cols=to zone]]}}
-```
-`transitions` has one matrix per **consecutive** epoch pair (`"<y_i>-><y_i+1>"`), counting the cells present in both
-epochs; `labelling` documents the zone-name heuristic (§3).
-
-**Recommendation rule (plausible interventions, model counterfactuals):**
-* **Levers** = the 5 land-cover fractions, NDVI and the 3 landscape metrics (never NDWI/NDBI). Allowed directions:
-  `frac_impervious`, `frac_barren` decrease only; `frac_forest`, `frac_water` increase only; `frac_cropland` and the
-  landscape metrics either way; NDVI increase only, and not in zones whose median `frac_water` > 0.15.
-* **Current** = the zone's median of the feature over its last-epoch cells (all epochs if < 10 cells).
-* **Feasibility**: the target may not go beyond the zone's own **90th percentile** (increase) / **10th percentile**
-  (decrease) of that feature, and |target − current| ≤ **0.20** for fractions and ≤ **0.15** for NDVI (physical
-  ranges also apply: fractions [0, 1], NDVI [−1, 1], CONTAG [0, 100], PD/ED ≥ 0).
-* **Counterfactual**: every cell of the zone is shifted by `step = target − current`. Fraction changes are
-  compositional exactly as in the dashboard (§4.8, other vegetation included as donor/recipient, coupled indices
-  shifted by the coupling slopes); NDVI and landscape metrics are shifted directly. Expected Δ = mean over the zone's
-  applicable cells of (final-model prediction after − before), in °C — a model-based ceteris-paribus (ICE) estimate.
-* **Target choice**: candidates = the breakpoint and saturation (when strictly inside the feasible range) and 25/50/
-  75/100 % of the way to the feasibility bound; the recommended target is the **smallest step achieving ≥ 90 % of the
-  best Δ** among the candidates (`kind` = "saturation" | "breakpoint" | "partial" | "bound").
-* **Interval**: the identical counterfactual is re-evaluated with every bootstrap replicate model; `ci` is the
-  bias-corrected percentile interval (always contains `expected_delta_c`), `bias` = replicate median − estimate.
-* Keep Δ < −0.05 °C, one action per feature (best direction), sort by Δ, top 4 per zone; priority high (≤ −1 °C),
-  medium (≤ −0.3), low otherwise.
-* **Rationale** must say the change "is associated with" the cooling (SHAP and model counterfactuals are not causal)
-  and quote the interval with its label ("95% CI" / "replicate range"). Numbers in the sentence are formatted from
-  the exported (4 significant digit) `current`/`target`/`step` with round-half-up, like the dashboard, so the text and
-  the table never disagree on a tie (0.0275 → "2.8%").
-* Extra keys: `kind`, `step`, `n_cells`, `coupled` (fractions: indices follow the coupling), `bias`.
-
-### 4.7 `web/metrics.json`
-```json
-{"schemes": ["random","spatial","temporal"], "models": ["linear","ridge","random_forest","lightgbm","xgboost","gnn"],
- "summary": [{"scheme": "spatial", "model": "xgboost", "r2_mean": 0, "r2_std": 0, "rmse_mean": 0, "rmse_std": 0, "mae_mean": 0, "mae_std": 0, "n_folds": 5}],
- "folds": [{"scheme": "spatial", "model": "xgboost", "fold": 0, "r2": 0, "rmse": 0, "mae": 0, "n_train": 0, "n_test": 0, "fit_seconds": 0, "device": "cuda:0"}],
- "moran": [{"scheme": "spatial", "model": "xgboost", "year": 2025, "I": 0, "expected_I": 0, "z": 0, "p": 0}],
- "moran_target": [{"year": 2025, "I": 0, "expected_I": 0, "z": 0, "p": 0}],
- "moran_scatter": {"xgboost": {"year": 2025, "z": [..], "lag": [..], "slope": 0}},
- "hardware": {"gpus": ["Tesla T4","Tesla T4"], "xgb_device": "cuda", "lgbm_device": "gpu", "rapids": false,
-              "rapids_used": [], "n_gpus": 2, "xgb_version": "3.0.2", "python": "3.11.13", "platform": "Linux-…"},
- "timings": {"stage": 12.3},
- "bootstrap": {"n": 100, "n_requested": 100, "mode": "block", "block_size_km": 25.0, "n_blocks": 96, "rounds": 900,
-               "ci_level": 0.95, "ci_method": "recentred-percentile", "ci_label": "95% CI", "replicate_range": false,
-               "eval_rows": 264000, "full_data": true, "rows_sampled": false, "devices": ["cuda:0","cuda:1"],
-               "mean_seconds": 58.1}}
-```
-`hardware.rapids` is true only when a RAPIDS backend actually ran; `rapids_used` names them ("cudf",
-"cuml_random_forest", "cuml_kmeans"; the notebook writes a list, readers also accept `{component: bool}`). `hardware.n_gpus`,
-`xgb_version`, `python`, `platform` and the `bootstrap` object (BOOTSTRAP_INFO without `failures`) are part of the
-contract; readers must tolerate extra keys.
-
-### 4.8 other web files
-* `interactions.json`: `{"features": [..K], "global": [[K×K]], "by_zone": {"0": [[K×K]]}}`.
-* `scenario_coupling.json`: `{"description": "…", "fraction_features": ["frac_impervious","frac_forest","frac_water","frac_cropland","frac_barren"],
-  "coupling": {"frac_forest": {"ndvi": 0.45, "ndwi": -0.1, "ndbi": -0.2}, …}}` — partial slopes (d index / d fraction) from an
-  OLS of each spectral index on all 5 fractions (other vegetation = omitted reference class). Scenario rule: the
-  donors/recipients of a fraction change are the other four fractions **and the implicit other-vegetation share
-  `1 − Σ fractions`** (class 6: grass/shrub/wetland). Adding Δ is capped by the land they can give up and subtracts
-  it from them proportionally to their current values; removing Δ (capped at the current value) gives the freed land
-  to them in the same proportions (equally when all are 0); sum preserved, clamp [0,1]; other vegetation has no model
-  column. In coupled mode each spectral index shifts by Σ slope×(actual Δ of each of the five fractions), clamped to
-  [−1, 1] (the slopes are relative to other vegetation, so no slope for it is needed). The simulator offers only
-  actionable features (NDWI/NDBI change only through this coupling); landscape metrics and non-actionable features
-  stay fixed in a fraction scenario. The notebook's recommendation counterfactuals (§4.6) use exactly this rule.
-  Because the change actually applied can be smaller than requested (a cell with 0 % tree cover cannot lose 20 pp;
-  a cell with no land to give cannot gain), the scenario engine records the applied change per cell and its
-  headline **statistics cover only the cells that actually changed**; it also reports the region, applicable and
-  changed cell counts, the requested and mean applied change, and the region mean with unchanged cells counted as 0.
-* `districts.geojson`: FeatureCollection, properties `{id, name, state}`.
+### 3.9 Produced by 12_export: the files of §5 and `EXPORT_MANIFEST`.
+Before it finishes, 12 validates the bundle twice. (1) In-notebook read-back checks (`_s12_check_bundle`, including
+the cross-file XAI/cube/zones checks); any problem raises `ValueError`. (2) The standalone `validate_bundle.py`
+(found through `LST_VALIDATOR`, the repository's `notebook/` folder or an attached `/kaggle/input/*/`) runs as a
+subprocess with a 1800 s timeout. A verdict of `INVALID` or `BUNDLE UNREADABLE` fails the run. A non-zero exit
+without a verdict line means the child never judged the bundle, so it is retried once and then logged as a WARNING
+with its exit code, like a timeout. A missing validator is only logged.
 
 ---
 
-## 5. Dashboard architecture (React 18 + Vite 5, JavaScript/JSX, Tailwind 3.4)
+## 4. Methods (normative)
 
-Data base URL: `import.meta.env.VITE_DATA_BASE_URL ?? \`${import.meta.env.BASE_URL}data\``. If `manifest.json`
-is missing → an instructive empty state (how to run the notebook and copy `outputs/web/*` to `dashboard/public/data/`).
-If `manifest.data_mode === "synthetic"` → persistent, clearly visible "SYNTHETIC DEMO DATA" badge/banner.
+### 4.1 Features (47; order is binding)
+```
+BASE (33):
+ spectral   ndvi ndbi mndwi albedo ndvi_spring ndvi_drop(=ndvi_spring-ndvi)
+ landcover  frac_built frac_forest frac_water frac_cropland frac_barren
+ urban      built_v(log1p of m3/m2) log_pop(log1p persons/km2) dist_urban dist_builtup lm_pd lm_ed lm_contag
+ water      dist_water
+ terrain    elevation slope aspect_sin aspect_cos elev_tpi7 elev_tpi21 elev_std7
+ climate    era5_t2m era5_vpd era5_swvl1 era5_evap era5_ssr era5_wind era5_precip_jfm
+FOCAL (14):  <b>_m3 <b>_m15 for b in ndvi ndbi albedo frac_built frac_forest frac_water frac_barren
+```
+* 1 km spectral/built features = mean of valid fine pixels (≥ 50 % valid else NaN). `frac_built` = 1 km mean of
+  `built_f`; other fractions = `glc_k / (1 − glc_built) × (1 − frac_built)` (simplex with implicit
+  `frac_otherveg = 1 − Σ`; if `glc_built ≥ 0.999` use equal split of nothing → 0).
+* Focal: NaN-aware box means `uniform_filter(x·m)/uniform_filter(m)` with windows 3 and 15 cells (1 km grid; at the
+  2 km smoke grid the windows stay 3/15 *cells* — documented). `elev_tpi7 = elevation − box7(elevation)`,
+  `elev_tpi21` likewise, `elev_std7` = box standard deviation. Distances (km, Euclidean `distance_transform_edt` ×
+  cell size): `dist_water` to cells with `frac_water ≥ 0.3 or water_occ ≥ 0.5`; `dist_urban` to cells whose box7
+  mean `frac_built ≥ 0.3` (lowered from 0.5 after the first real run: the 7 km mean peaks at 0.45-0.49 over NCR; if
+  no cell reaches it, the top 0.5 % of the ROI); `dist_builtup` to `frac_built ≥ 0.3` (cells outside the ROI count as
+  non-targets).
+* Landscape metrics PD/ED/CONTAG exactly as v1 (vectorised, pylandstats-validated) from `LC_FINE`.
+* Families (dominant-driver colouring): `spectral`, `landcover`, `urban`, `water`, `terrain`, `climate`.
 
-### 5.1 Shared modules (owned by the scaffold builder; other builders import, never redefine)
-* `src/lib/cn.js` — `cn(...classes)` (clsx + tailwind-merge).
-* `src/lib/data.js` — `getDataBaseUrl()`, `loadManifest()`, `loadAsset(manifest, key)`, `loadEpoch(manifest, year)` (cached).
-  Every file is fetched as an `ArrayBuffer`; bodies starting with the gzip magic bytes `0x1f 0x8b` are inflated with
-  `DecompressionStream('gzip')`, anything else is decoded as UTF-8 (§4 compression).
-* `src/lib/model.js` — `compileModel(modelJson)` → `{features, baseScore, nTrees, predictRow(values: ArrayLike<number|null>) → number, predictMany(getValue: (featureIdx, i) => number|null, indices: Int32Array|number[]) → Float64Array}`.
-* `src/lib/scenario.js` — `runScenario({epoch, model, coupling, manifest, scenario})` where
-  `scenario = {feature, delta, region: {type: "all"|"district"|"zone", ids: number[]}, coupled: boolean}` →
-  `{indices, baseline, scenario, delta, applied` (changed cells only; baseline/scenario in °C), `applicableIndices, stats: {count, areaKm2, mean, min, max, p10, p50, p90, baselineMeanC, scenarioMeanC, changedCount, applicableCount, regionCount, requested, meanApplied, regionMean, regionAreaKm2}` (headline values over the changed cells, §4.8), `byDistrict: [{id, name, count, mean}], histogram: [{x0, x1, count}], deltaByCell: Float32Array(n)` (ΔLST for applicable region cells, 0 where nothing could change, NaN elsewhere), `changedFeatures, regionCount, coupledApplied, epochYear}`;
-  also `findDistrictId(districts, aliasOrName)` and `SCENARIO_PRESETS` (≥3 presets incl. "+20% tree canopy in Gurugram" = frac_forest +0.20 district Gurugram, "+10% impervious surface in Noida" = frac_impervious +0.10 district 17, and a wetland/water preset whose zone is resolved at runtime as the most water-rich zone of the bundle, never a hard-coded zone id). Only actionable features are offered.
-* `src/lib/colors.js` — `THEME` tokens, `ZONE_COLORS` (fallback), `sequentialScale(domain)` (LST, thermal ramp) and `divergingScale(maxAbs)` (cool cyan ↔ warm rose; neutral midpoint) returning `(v) => [r,g,b,a]`, `hexToRgb`, `categoricalPalette` (≥17 colours for dominant-driver map), `rgbToCss`.
-* `src/lib/format.js` — `fmt(n, dp)`, `fmtC(n)`, `fmtSigned(n, dp)`, `fmtPct(frac)`, `fmtFeatureValue(meta, v)`, `featureLabel(manifest, name)`.
-* `src/lib/validate.js` — `validateBundle({manifest, epochs, model, dependence, zones, metrics, shapGlobal})` → `{ok, errors[], warnings[]}` enforcing §4 (incl. waterfall invariant on a sample).
-* `src/state/DataContext.jsx` — `<DataProvider>` + `useData()` returning
-  `{status: "loading"|"ready"|"empty"|"error", error, manifest, features (manifest.features), featureIndex (name→idx), districts, zonesMeta,
-    year, setYear, epoch (current epoch object | null), epochLoading, getEpoch(year) (Promise),
-    shapGlobal, dependence, zones, metrics, districtsGeo, interactions, coupling, model (compiled), modelRaw,
-    view, setView ("twin"|"thresholds"|"zones"|"performance"),
-    mapLayer, setMapLayer ("lst_obs"|"lst_pred"|"resid_oof"|"shap"|"driver"|"zones"|"scenario"),
-    shapFeature, setShapFeature, selectedCell, setSelectedCell (index into epoch arrays | null),
-    scenario, setScenario, scenarioResult (memoized/debounced runScenario on the current epoch), validation}`.
-* `src/components/ui/*.jsx` — shadcn-style primitives (JSX): `GlassPanel`, `Button`, `Badge`, `Slider` (Radix), `Tabs` (Radix), `Switch` (Radix), `Select` (styled native), `StatTile`, `SectionHeader`, `Skeleton`, `InfoTip`.
+### 4.2 Validation suite (per mode; all metrics pooled unless stated)
+* Pooled R² = 1 − ΣSSE/ΣSST over all OOF rows (SST about the pooled mean); RMSE, MAE pooled; per-fold r2/rmse/mae/bias
+  as the spread. Weights `w_mode` used in fitting **and** weighted metrics.
+* Schemes: `block20` (headline spatial; 20 km blocks, `N_FOLDS_BLOCK` folds), `block5` (v1-comparable 5×5), `district`
+  (leave-one-district-out; districts with < 200 rows merged into their nearest neighbour fold), `loeo` (leave one
+  training frame out; report raw and **recentred** metrics, recentring over the fixed mask of the held-out frame),
+  `place_time` (train frames < last & folds ≠ k → test last frame & fold k, block20 folds; recentred), `random` (5-fold,
+  "optimistic upper bound").
+* Models per scheme: `block20` & `loeo`: all `CFG.BENCHMARKS`; `block5`: xgboost, lightgbm, gnn; `district`,
+  `place_time`: xgboost; `random`: xgboost, random_forest, ridge. Inner early stopping on 10 km blocks inside the
+  training rows only (v1). GPU folds via `gpu_pool_map` (XGBoost, GNN); random forest and ridge run in a CPU lane;
+  with a working LightGBM-GPU probe, LightGBM jobs run **serially in their own lane** (`s07-lgbm-lane`, at most one
+  booster alive; its OpenCL learner is not thread safe) on the last GPU (`gpu_id = n_gpus − 1`), otherwise in the CPU
+  lane. All lanes join at the mode barrier; each lane checks the time budget before every job; per-lane busy seconds
+  go to `MODEL_RESULTS[m]["lane_busy_seconds"]`.
+* `block_size_curve`: xgboost, 5 folds, blocks of 5/10/20/40/66 km (+ "random") → `[{block_km, r2_pooled,
+  rmse_pooled}]`. `error_vs_distance`: block20 xgboost OOF; distance (km) from each test cell to the nearest training
+  cell of the same frame; bins [0,2,5,10,20,40,∞) → `[{lo, hi, rmse, n}]`.
+* Moran's I of block20 OOF residuals per frame for xgboost, gnn, ridge (v1 implementation); `moran_target`;
+  `moran_scatter` (last frame, ≤ 2000 points).
+* `fold_geometry` for the fold map: `{"block20": {"block_km": 20, "n_rows": R, "n_cols": C, "fold_of_block":
+  [R*C ints, −1 empty], "rmse_of_block": [R*C floats|null]}, "block5": {...}}` (blocks in grid row-major order from the
+  grid's top-left).
+* v1 comparison block: `{"v1_metric": "mean of per-fold R² (5×5)", "v1_xgb": [0.623, 0.305], "v1_gnn": [0.823, 0.048],
+  "v2_block5_pooled": …, "v2_block5_fold_mean": …, "v2_block20_pooled": …}` (v1 numbers are constants from the real
+  v1 bundle; in synthetic mode label them "reference values from the real v1 run").
 
-### 5.2 Views (each a default-exported component with NO required props; reads `useData()`)
-* `src/components/MapContainer.jsx` — deck.gl 9 + react-map-gl/maplibre (CARTO dark-matter basemap, no token).
-  3-D extruded square cells (`ColumnLayer`, `diskResolution: 4`, `angle: 45`, radius = `cell_size_m/√2·coverage`),
-  layer switcher (Raw LST, Predicted LST, Residuals (OOF), SHAP [feature], Dominant driver, Governance zones, Scenario Δ),
-  H3 hexagon aggregation toggle (`H3HexagonLayer` + h3-js), district outlines (`GeoJsonLayer`), legend, hover tooltip with
-  per-cell SHAP waterfall (base → top drivers → others → prediction), click to pin a cell.
-* `src/components/ShapDependenceViewer.jsx` — feature picker, global importance with CIs (click selects), dependence scatter
-  + binned mean + 95% CI band + threshold reference lines, threshold cards, **scenario simulator** (feature, Δ slider, region
-  district/zone/all, coupled toggle, presets) using `scenarioResult`; "Show on map" → `setMapLayer("scenario")`, `setView("twin")`.
-* `src/components/GovernanceZoning.jsx` — four side-by-side zone cards (area/share, LST, trend across epochs, SHAP signature,
-  drivers, interactions, districts, recommendations with expected Δ and CI), transition matrix between epochs, K diagnostics.
-* `src/components/ModelPerformance.jsx` — KPI tiles, R²/RMSE/MAE by model×scheme (error bars), TanStack sortable table,
-  per-fold dots, Moran's I of residuals by model/year, Moran scatter (z vs spatial lag + slope line), hardware/timings.
-* `src/App.jsx` — shell: animated grid-glow background, glass header (title, epoch selector, data-mode badge, validation
-  status), nav rail/tabs for the 4 views, Framer Motion transitions, loading/empty/error states.
-* `src/index.css` — Tailwind layers + theme: background `#090d16`, glass panels `#1e293b` @ ~55–70% + backdrop blur,
-  accents cyan `#22d3ee`, violet `#a78bfa`, emerald `#34d399`, warm rose `#fb7185`; grid-glow overlay; focus rings.
+### 4.3 Models
+* Ridge (standardised, median-imputed), random_forest (sklearn; 300 trees, max_features 0.33, min_samples_leaf 5,
+  max_samples 0.5; cuML only with `USE_RAPIDS`), lightgbm (v1, GPU probe; GPU jobs serial on the last GPU, §4.2),
+  xgboost (§1.4 params, `tree_method=hist`,
+  `device=cuda:k`), gnn (v1 pure-PyTorch GraphSAGE on the full feature set, kNN k=8 per frame).
+* Monotone constraints (xgboost & lightgbm): day −1 on `ndvi, ndvi_m3, ndvi_m15, frac_forest(+_m3,_m15),
+  frac_water(+_m3,_m15), mndwi`; night +1 on `built_v, frac_built, frac_built_m3, frac_built_m15`. Other features 0.
+
+### 4.4 SHAP groups (18; order binding) and XAI
+```
+ndvi            ndvi ndvi_m3 ndvi_m15                      (primary ndvi)
+phenology       ndvi_spring ndvi_drop                      (primary ndvi_drop)
+ndbi            ndbi ndbi_m3 ndbi_m15                      (primary ndbi)
+moisture_index  mndwi
+albedo          albedo albedo_m3 albedo_m15
+built           frac_built frac_built_m3 frac_built_m15    (primary frac_built, actionable)
+built_volume    built_v
+population      log_pop
+forest          frac_forest frac_forest_m3 frac_forest_m15 (actionable)
+water           frac_water frac_water_m3 frac_water_m15 dist_water (primary frac_water, actionable)
+cropland        frac_cropland                              (actionable)
+barren          frac_barren frac_barren_m3 frac_barren_m15 (actionable)
+urban_proximity dist_urban dist_builtup                    (primary dist_urban)
+landscape       lm_pd lm_ed lm_contag                      (primary lm_ed, actionable)
+terrain         elevation slope aspect_sin aspect_cos elev_tpi7 elev_tpi21 elev_std7 (primary elevation)
+climate_heat    era5_t2m era5_ssr                          (primary era5_t2m)
+climate_moisture era5_vpd era5_swvl1 era5_evap era5_precip_jfm (primary era5_swvl1)
+climate_wind    era5_wind
+```
+* Group SHAP = sum of member SHAP (TreeSHAP additivity preserved: `pred = base + Σ_groups`). Interactions summed over
+  member pairs (18×18), sampled ≤ 5000 rows per frame. Dependence/thresholds: x = primary feature value, y = group
+  SHAP (v1 binning, thresholds, recentred-percentile bootstrap intervals with `support`, `zero_crossing_flag`).
+* Bootstrap: block bootstrap (v1 correlogram-derived block size), `N_BOOTSTRAP` replicates, GPUs in parallel.
+* Recommendations (per mode, per zone): v1 rule (feasibility bounds, model counterfactual with the final model, simplex
+  rebalancing incl. other-vegetation, coupled spectral shifts) **plus**: after modifying base features, recompute the
+  focal features on the grid (distances held fixed); levers = actionable groups' primary features.
+* Web surrogate per mode (v1 compact format, depth ≤ 6, ≤ 400 trees) on all 47 features + `"focal": FOCAL_SPEC`.
+
+### 4.5 Persistent residual (time transfer only)
+LOEO residuals `ρ(i,s) = anom(i,s) − PRED_LOEO(i,s)` (recentred). For a target frame t:
+`r̄_i^(−t) = Σ_{s≠t} w_is ρ(i,s) / (Σ_{s≠t} w_is + λ)`. Choose λ ∈ {0.5,1,2,3,5,10,∞} minimising LOEO RMSE of
+`PRED_LOEO + r̄^(−t)`; report the gain (`metrics.persistent_residual`). Final `PERSISTENT_RESID[m]` uses all frames.
+It is **never** included in spatial-CV numbers.
+
+### 4.6 Area of applicability (Meyer & Pebesma 2021)
+Standardise features (training mean/std), weight by mean |SHAP| per feature (final model), training sample ≤ 20 000
+rows, `d_bar` = mean pairwise distance in the sample, DI = nearest-training-row distance / d_bar; training DI uses the
+nearest row from a **different block20 fold**; threshold = Q75 + 1.5·IQR of training DI. Rows with a NaN in any
+feature with AOA weight > 0 get **DI = +inf** (outside the AOA and the top DI decile in every consumer; summaries,
+histograms and plots of DI use finite values only); the AOA training sample is drawn from complete training rows only.
+Conformal error model: block20 OOF |residual| quantiles (q50, q90, q95) by DI decile (edges from training DI).
+**Projection-setting error model:** after choosing λ (§4.5), `ρ_proj = y − (PRED_LOEO + r̄^(−t))` for training rows
+with a finite LOEO prediction (r̄ = 0 when λ = ∞), binned by the different-fold DI of the conformal model (incomplete
+rows +inf) with the same edges → `resid_samples_proj` (signed, per decile) and `conformal_proj` (|ρ_proj| q50/q90/q95
+per decile). Their spatial correlation `resid_rho_block20` ∈ [0, 0.95]: per frame, over block20 blocks with ≥ 5 rows,
+`ρ_t = (var(block means) − mean(within-block var / n_b)) / var(ρ_proj of the frame)`, pooled as the row-weighted mean
+over frames, then clipped. They describe a known place at an unseen time — the setting of the modelled hindcast
+frames (§4.7) and of the projections (§4.10).
+
+### 4.7 Levels (absolute °C) and frame fields (section 09)
+* **Day:** `L_day(t) = RAW_LEVELS.day[t] + overpass_correction(t)`, `overpass_correction = (10.75 − mean_overpass_ist_h)
+  × heating_rate_k_per_h` (°C; positive for early scenes). Day frame field = raw anomaly + L_day(t). Interval: ±(0.25 ×
+  |correction| + 0.3) °C (documented heuristic). `DAY_LEVEL_CHECK`: compare with MODIS Terra fixed-mask means 2000–2020.
+* **Night observed/reconstructed:** `L_night(t) = RAW_LEVELS.night[t]` (2000 = calibrated Terra).
+* **Composition correction (partially covered frames):** every non-modelled frame with `FIXED_MASK_COVERAGE < 0.999`
+  and a finite raw level gets `a = PREDICT_ANOM(mode, X_t)` (not recentred) `+ PERSISTENT_RESID[mode]` at the frame's
+  cells, `corr = mean_{FIXED_MASK}(a) − mean_{FIXED_MASK & valid_t}(a)`, `level = raw (+ overpass correction for day)
+  + corr`, `half_width = √(hw² + (0.5·corr)²)`; `LEVELS[m][y]` records `raw_level`, `composition_correction`,
+  `fixed_mask_coverage` (and says so in `method`); a warning when |corr| > 0.2 °C. The level-regression offset below
+  uses the corrected levels. Frame fields are unchanged (observed values + overpass correction).
+* **Night 1990/1995 (modelled):** regress annual NCR-mean `modis_aqua_night` (2003–2021) and `viirs_night_cal`
+  (2022–2025) on `era5_skin_night` (OLS + leave-one-year-out RMSE) → predict the window-mean level with a 90 %
+  prediction interval. The level offset of the frame regression includes a **residual drift** term: drift = OLS
+  slope (± se) of the annual level-regression residuals over the years of the **primary** sensor only (night: Aqua
+  2003–2021, so the VIIRS calibration step cannot pose as drift), applied only when |drift| > 2·se on at least 10
+  primary-sensor years spanning at least 10 years;
+  `offset(t) = mean(frame residuals) + drift_applied × (t_mid − mean t_mid of the offset frames)` for the modelled
+  levels and the `regression_check` of the other frames; the prediction interval keeps the (Δt·se)² term.
+  `_S09_LEVEL_REG[m]` records `drift_per_year`, `drift_se`, `drift_applied`, `drift_years`, each modelled frame
+  `LEVELS[m][y]["drift_correction_c"]` (0.0 when not applied). **Known limitation (accepted):** with 19 primary
+  years a real drift near the gate can stay unapplied (synthetic world: 0.0174 ± 0.0092 °C/yr = 1.9 se), leaving the
+  1990/1995 levels warm by about |drift|·Δt (+0.26/+0.40 °C there, both inside their prediction intervals); the
+  WARNING and the modelled frames' `method` text report drift ± se and the shift drift·Δt it would have made. No estimator that respects the primary-sensor rule brings the
+  reconstructed-2000 `regression_check` below 0.08 °C on the synthetic world, so that is not an acceptance criterion.
+  Field = `PREDICT_ANOM(night, X_t, recentre)` + `PERSISTENT_RESID.night` +
+  `L_night(t)`, with per-cell p05/p95 = field ± the **projection-setting** conformal q90 of the cell's DI decile
+  (`AOA.conformal_proj`, known place at another time; block20 q90 when absent) combined in quadrature with the level
+  interval. Day frames are never modelled (§1.2).
+* **Hindcast checks:** night 2000 (train 2005–2025 → predict 2000 vs Terra-reconstructed obs, recentred: r2/rmse vs
+  persistence of 2005); day "train late, predict early" (train 2005–2025 → 1990/1995/2000, recentred).
+* **β (dLST/dTair):** day: annual NCR `modis_terra_day` (2003–2020, non-drift) on `era5_tmax` with `era5_swvl1`
+  co-regressor; night: `modis_aqua_night` 2003–2021 + `viirs_night_cal` 2022–2025 on `era5_tmin` (+ swvl1). OLS
+  coefficient of temperature; moving-block bootstrap (block 3 years, 2000 draws) → CI and `draws`; Theil–Sen univariate
+  slope reported alongside. Synthetic mode reports recovery of the planted β.
+* **Trends:** Theil–Sen slope per decade of frame levels (observed/reconstructed frames only; day 1990–2025, night
+  2000–2025) with Monte-Carlo CI from level intervals; annual-series trends for ERA5 1990–2025 and satellites.
+* Frame statistics per scope (NCR, 25 districts, zones of the same mode): `mean`, `ci` (level CI), `p90`,
+  `hot_core_km2` (area with LST ≥ the reference-period p90 of that mode, fixed per mode), `uhi` (mean over cells with
+  `frac_built ≥ 0.5` minus mean over `frac_built ≤ 0.05 and frac_water < 0.2`; signed), `n_cells`, `tier`, and
+  `coverage` (finite cells / ROI cells of the scope at that frame, 4 dp). Scope `ncr`: `mean` and `ci` are the frame
+  **level** and its CI (`LEVELS[m][y]`; fixed mask, composition-consistent); districts and zones: mean over their
+  finite cells. `hot_core_km2` = share of finite scope cells ≥ threshold × scope ROI cell count × cell area
+  (coverage-corrected); `p90`, `uhi` and `n_cells` use the finite cells. Rows with coverage < 0.9 are logged.
+  The scaling assumes the hidden cells share the visible cells' hot fraction: unbiased for scattered gaps, but a
+  spatially contiguous gap over a cooler or hotter part of the scope biases the area (+11 % to −36 % for 10 % strips
+  on the synthetic world, where the unscaled count can be exact); consumers can judge a row by its `coverage`.
+
+### 4.8 Downscaling (section 10)
+* **Day fine field** = `lst_day_f` (observed) + overpass correction; fine pixels with < 2 scenes are NaN.
+* **Night fine field (DMS):** fine predictors `P_f` = [ndvi_f, ndbi_f, mndwi_f, albedo_f, built_f, water_occ_f,
+  elevation_f, tpi_f (elevation_f − box7), ndvi_f box5 mean, built_f box9 mean]; coarse `P_c` = 4×4 block means.
+  Train XGBoost (depth 6, 600 rounds, eta 0.05) on 1 km cells with a valid night anomaly, excluding the 20 % most
+  heterogeneous cells (z-scored within-cell std of ndvi_f + built_f). Predict `T̂_f`; residual `r_c = T_c −
+  block4(T̂_f)`; add bilinearly interpolated `r_c` at fine-pixel centres, then 3 iterations of block conservation
+  (`e_c = T_c − block4(T_f)`, add `e_c` nearest-upsampled) → |e_c| < 0.01 °C. Modelled frames (1990/1995) downscale the
+  modelled 1 km field.
+* **Validation:** (a) scale invariance: aggregate 1 km night anomalies and predictors to 4 km, train at 4 km on
+  block20 folds ≠ k, downscale 4 km → 1 km, score held-out folds vs true 1 km (r2, rmse, bias) and vs bilinear
+  interpolation of the 4 km field; (b) day demonstration: downscale MODIS Terra day (2010, 2015, 2020) 1 km → fine with
+  the same algorithm and compare anomalies with Landsat `lst_day_f` anomalies (r2, rmse; bilinear baseline; by dominant
+  GLC class). Results → `DOWNSCALING_METRICS` / `metrics.json`.
+* **Rasters:** reproject each fine field to EPSG:4326 on a regular lon/lat grid covering the ROI bounds at
+  0.0025° (and a 0.005° "500 m" preview) by inverse mapping (pyproj, nearest fine pixel); PNG 8-bit RGB: R = 0 nodata,
+  else `1 + round((v − lo) / (hi − lo) × 254)` clipped to 1..255 with **fixed per-mode lo/hi** (`timeline.domains`
+  abs); G = flags; B = 0. Written with Pillow.
+
+### 4.9 Land-change model (section 11)
+* State `u = frac_built` (1 km). Demand per district d, scenario s, frame y: `U_d,s(y) = U_d(2025) × g_d,s(y)/g_d,s(2025)`
+  where g = Chen-2020 urban ratio (vs 2020); for 2030 also report the GHSL-2030 demand for comparison.
+* Suitability: XGBoost classifier for `Δu(2005→2015) > 0.05` on [u, frac_built_m3, frac_built_m15, dist_urban,
+  dist_builtup, slope, elevation, log_pop, frac_forest, frac_water, frac_cropland, frac_barren] (2005 features).
+* Allocation per district and 5-year step: `Δu_i = min(cap_i, k_d · S_i · N_i · ε_i)`, `N_i` = box3 mean of u,
+  `cap_i = max(0, 1 − u_i − frac_forest_i − frac_water_i)`, `ε ~ LogNormal(0, 0.3)` per realisation; `k_d` by bisection
+  so Σ Δu_i = demand increment. Converted land comes from cropland, barren and other vegetation in proportion to their
+  current shares. `N_LAND_REAL` realisations (seeded).
+* Validation: hindcast 2015 → 2025 with the observed district demand; Pontius figure of merit on cells with Δu > 0.05
+  (hits/(hits+misses+false alarms+wrong hits)), quantity & allocation disagreement, RMSE(Δu) and `corr_du` (Pearson
+  Δu_sim vs Δu_obs over valid cells, mean over realisations), each also for the null model `Δu ∝ u_2015`
+  (proportional growth: `fom_null`, `quantity_disagreement_null`, `allocation_disagreement_null`, `rmse_du_null`,
+  `corr_du_null`) → `metrics.land_model`. Plausibility: `checks` = `[{check, value, null, ok}]` for `fom > null`,
+  `rmse_du <= null`, `quantity_disagreement <= null`, `corr_du >= null`; `verdict` = `beats_null` (all ok) | `mixed`
+  | `worse_than_null` (none ok); `hindcast_truth` = `"GHSL P2023A <end year> epoch"`, suffixed `" (an extrapolated
+  GHSL epoch, not an observation)"` when the end year is 2025 — the 2015 → 2025 hindcast truth is the extrapolated
+  GHSL 2025 epoch. The CA output drives the projections whatever the verdict (no gating).
+* Derived future predictors: spectral (ndvi, ndbi, mndwi, albedo, ndvi_spring, ndvi_drop), `built_v`, `lm_*`:
+  delta mapping `X_y = X_2025 + h_X(LC_y) − h_X(LC_2025)` with `h_X` = XGBoost (depth 4, 300 rounds) of X on the 5
+  fractions + their focal means + terrain, fitted on 2015–2025 frames. Population:
+  `pop_y(i) = pop_2025(i) × F_s(y) × (u_y(i)+0.02)/(u_2025(i)+0.02)`, renormalised so the NCR total = total_2025 ×
+  F_s(y). Focal features and distances recomputed from projected grids. ERA5 features = mean of the 2015/2020/2025
+  frames (climate change enters only through the delta).
+
+### 4.10 Climate delta and Monte-Carlo projections (section 11)
+* `ΔT_s,g(y) = value(y) − value(2025)` per GCM (tasmax for day, tasmin for night). ssp126:
+  `ΔT_126,g(y) = ΔT_245,g(y) × gsat_increment[ssp126][y] / gsat_increment[ssp245][y]` (flag `method="pattern-scaled"`).
+* Baseline level (weather-normalised): `L_base,m = L_m(2025) − β_m × anomaly`, `anomaly = mean(T over the NOW
+  window years 2024–26) − T_trend(mean of those years)`, where `T_trend` is the OLS line of the ERA5-Land NCR annual
+  series of the mode's temperature variable (ANNUAL_SERIES; `era5_tmax` day, `era5_tmin` night) over 2001–2025 (all
+  available years). With fewer than 10 years the anomaly falls back to the window mean minus the 2016–2025 mean (with
+  a warning). `CMIP6_DELTAS["l_base"][m]` records `l_base, level_now, beta, weather_anomaly_c, temperature_var,
+  window_years, reference_years, trend_slope_per_decade, trend_years, method`.
+* For each draw k (N_MC): pick GCM g (uniform), β from its bootstrap draws, land realisation r (uniform), and per-cell
+  model error e_i from the **projection-setting** residual samples of the cell's DI decile (`AOA.resid_samples_proj`
+  when complete, else the block20 OOF `resid_samples`):
+  `LST_k(i,y) = L_base,m + β_k · ΔT_s,g(y) · pattern_m(i) + [Â_m,s,r(y,i) − mean_FIXED(Â_m(2025))] + r̄_m(i) + e_i`,
+  where `Â` = raw final-model anomaly prediction on the projected features (recentred **relative to the 2025
+  prediction mean**, so the land-driven domain shift is kept). The model error is drawn through a **block20
+  Gaussian copula**: `z_kb ~ N(0,1)` per draw k and block20 block b (`default_rng([SEED, 1181])`, drawn once per run,
+  shared by all scenarios, modes and cell chunks; blocks of the canonical cells = `DF["block20_id"][:N_CELLS]`),
+  `z_ki = Φ⁻¹(clip(u_ki, 1e−6, 1 − 1e−6))` from the per-chunk `[SEED, 1180, chunk]` uniforms, `u = Φ(√ρ·z_kb +
+  √(1−ρ)·z_ki)`, e = sorted decile sample at u, with ρ = `AOA.resid_rho_block20` (ρ = 0 reproduces independent draws
+  exactly). `PROJ_META[m][s]["model_error"] = {"samples": "loeo+rbar" | "block20", "rho": ρ}`.
+* Outputs: per-cell P05/P25/P50/P75/P95; scope series quantiles from **per-draw scope means**; decomposition at each
+  frame `{climate: β̄·mean ΔT, land: mean(Â_y − Â_2025), total: p50 − baseline_c, baseline_c, baseline_offset,
+  model_error_mean}` with the scope's weather-normalised 2025 baseline `baseline_c = L_base + scope mean of
+  (Â_2025 − mean_FIXED(Â_2025) + r̄)`, so that `total ≈ climate + land + model_error_mean` for every scope (contract:
+  < 0.3 °C; asserted in synthetic mode, a warning in gee mode); uncertainty budget = variance of the scope mean
+  explained by each factor (main effects: variance of conditional means over g, β, r, and the model-error variance),
+  normalised to sum 1; threshold years = first projected frame where the scope p50 exceeds `baseline_c + {1,2,3}` °C
+  (keys "+1", "+2", "+3"). AOA DI for projected features (flags bit0); VSUP tier from (p95 − p05)/2 (<0.5, <1, <2,
+  ≥2 °C). Projected zones: zone ids from SHAP of the median land realisation's features.
+* Every projection output carries `"scenario projection, not a forecast"` in `manifest.notes` and the timeline.
+
+---
+
+## 5. Web bundle v2 (`CFG.WEB_DIR` → `dashboard/public/data/` or `/demo/`)
+
+All JSON: UTF-8, compact, NaN/Inf → null, numbers rounded (°C 2 dp, SHAP 3 dp). Large JSON files are gzip
+(`.json.gz`, level 9). Binary files use the **LSTB** container (`.lstb.gz`). Readers detect gzip by magic bytes
+(0x1f 0x8b) and accept already-inflated responses.
+
+### 5.1 LSTB container
+```
+gzip( "LSTB" | u8 version=1 | u8[3] reserved=0 | u32le header_len | header (UTF-8 JSON, header_len bytes)
+      | zero padding to an 8-byte boundary (relative to file start) | data section )
+header = {"kind": str, "n": int, "meta": {...},
+          "columns": [{"name": str, "dtype": "int16"|"uint8"|"int32"|"float32", "shape": [int, ...],
+                       "scale": float, "offset": float, "nodata": int|null,
+                       "byte_offset": int (from data-section start, multiple of 8), "byte_length": int}]}
+value = raw * scale + offset; raw == nodata → NaN. Little-endian. Multi-dim shapes are row-major ([frames, n]).
+```
+
+### 5.2 Files
+```
+manifest.json                         schema_version "2.0" (§5.3)
+cells.lstb.gz                         kind "cells": cell_id int32, row int16, col int16, lon float32, lat float32, district int16 [n]
+timeline_series.json.gz               §5.4
+cube_obs_<mode>.lstb.gz               kind "cube": lst int16 [F_obs, n] (°C, scale 0.01, nodata −32768);
+                                      aoa_out uint8 [F_obs, n]; p05_off, p95_off uint8 [F_obs, n] (scale 0.05 °C; 0 for observed frames)
+                                      meta: {mode, frames, tiers, levels}
+cube_<ssp>_<mode>.lstb.gz             kind "cube": p50 int16 [F_proj, n]; p05_off, p25_off, p75_off, p95_off uint8 [F_proj, n]
+                                      (non-negative offsets from p50, scale 0.05 °C, clipped); flags uint8 [F_proj, n]
+                                      meta: {mode, scenario, frames, method}
+cube_zones_<mode>.lstb.gz             kind "zones": obs uint8 [F_obs, n]; ssp126/ssp245/ssp585 uint8 [F_proj, n] (255 = nodata)
+xai_<year>_features.lstb.gz           kind "features": the 33 BASE_FEATURES as int16 [n] (per-column scale/offset); meta {year}
+xai_<year>_<mode>.lstb.gz             kind "xai": 18 group SHAP int16 [n] (scale 0.001 °C); pred, oof, obs int16 [n]
+                                      (absolute °C, scale 0.01); resid int16 (obs − oof); meta {year, mode, tier,
+                                      base_value_c (= SHAP_BASE + level), level, groups, optional
+                                      composition_correction (°C; obs = cube lst + composition_correction)}
+raster_index.json                     {crs: "EPSG:4326", bounds: [W,S,E,N], width, height, preview: {width, height},
+                                       domains: {day: [lo,hi], night: [lo,hi]},
+                                       frames: {"<mode>_<year>": {file, preview, lo, hi, tier, downscaled}}}
+raster/<mode>_<year>.png, raster/<mode>_<year>_500m.png
+zones.json, shap_global.json, dependence.json.gz, interactions.json, metrics.json, provenance.json   §5.5–5.8
+model_web_day.json, model_web_night.json   v1 compact format (SPEC_v1 §4.3) on the 47 FEATURES + "focal": FOCAL_SPEC
+scenario_coupling.json                v1 format + {"focal": FOCAL_SPEC, "grid": {"width","height"}}
+districts.geojson                     v1
+```
+Invariant (validated): for every XAI frame and mode, `|pred − (base_value_c + Σ group SHAP)| ≤ 0.05 °C` on non-NaN
+rows; cube sizes = frames × n; frame lists = manifest; `n` identical across files. Cross-file alignment (validated):
+for observed / observed-sparse / reconstructed XAI frames `|obs − composition_correction − cube lst| ≤ 0.011 °C`
+with identical NaN patterns; for modelled frames `corr(pred, cube lst) ≥ 0.5`; `corr(pred, obs) ≥ 0.5` where obs is
+finite on ≥ 100 rows (≥ 0.25 for a reconstructed frame, which the model never trained on; 0.25–0.5 there is a
+warning); the nearest `zones.json` centroid of each complete SHAP row equals `cube_zones` obs on ≥ 99 %
+of the rows.
+
+### 5.3 `manifest.json` (v2)
+v1 keys kept: `schema_version` ("2.0"), `generated_at`, `data_mode`, `data_mode_reason`, `study_area` (+ `grid`:
+{crs, res, x0, y0, width, height}, `fine_res_m`), `target_mode` ("anomaly"), `features` (47 × FEATURE_META incl. stats,
+`base`, `family`, `group`), `zones` (per mode: `zones: {day: [...4], night: [...4]}` with id/name/color), `districts`,
+`data_sources`, `notes`, `bootstrap` (per mode), `synthetic_truth`. The per-mode `zones` entries are built from
+`ZONE_PROFILES[m]` in canonical order and may carry `display_name` (non-empty string) and `label_caveat` (string or
+null) next to the canonical id/name/color (§1.5). Observed frame entries may carry the optional level diagnostics
+`raw_level`, `composition_correction`, `fixed_mask_coverage` and `drift_correction_c` (§4.7). New:
+```json
+"modes": [{"id": "day", "label": "Day · ~10:30 IST", "target": "Landsat C2 L2 ST (harmonised, 10:45 IST reference)", "ramp": "solar"},
+          {"id": "night", "label": "Night · ~01:30 IST", "target": "MODIS Aqua night (Aqua-equivalent; VIIRS/Terra calibrated)", "ramp": "nocturne"}],
+"groups": [{"id": "ndvi", "label": "Vegetation (NDVI)", "primary": "ndvi", "family": "spectral", "actionable": true, "members": [...]}],
+"timeline": {
+  "now": 2025, "harmonised": true, "reference_period": [2000, 2020],
+  "frames": [{"year": 1990, "window": [1989, 1992], "kind": "observed",
+              "day":   {"tier": "observed-sparse", "sensor": "Landsat 5 TM", "overpass_ist": "10:11", "scenes": 69, "coverage": 0.99, "native_m": 30, "available": true, "level": 41.2, "level_ci": [40.6, 41.8]},
+              "night": {"tier": "modelled", "sensor": "model hindcast (ERA5-Land level)", "overpass_ist": "01:30", "scenes": 0, "coverage": 1.0, "native_m": 1000, "available": true, "level": 27.9, "level_ci": [27.1, 28.7]},
+              "xai": {"day": true, "night": true}, "raster": {"day": true, "night": true}},
+             {"year": 2030, "window": [2021, 2040], "kind": "projected", "day": {"tier": "projected", "available": true, ...}, "night": {...},
+              "xai": {"day": false, "night": false}, "raster": {"day": false, "night": false}}],
+  "scenarios": [{"id": "ssp126", "label": "SSP1-2.6", "method": "pattern-scaled", "n_gcm": 34}, {"id": "ssp245", ...}, {"id": "ssp585", ...}],
+  "domains": {"day": {"abs": [lo, hi], "anom": [-a, a], "suhi": [-b, b]}, "night": {...}, "dtr": {"abs": [lo, hi]}, "spread": [0, s]},
+  "annotations": [{"year": 2003, "label": "Landsat 7 SLC-off", "kind": "sensor"}, {"year": 2022, "label": "Terra/Aqua drift; VIIRS bridge", "kind": "sensor"}],
+  "tiers": ["observed", "observed-sparse", "reconstructed", "modelled", "projected"],
+  "cubes": {"obs_day": "cube_obs_day.lstb.gz", "ssp245_night": "cube_ssp245_night.lstb.gz", "zones_day": "cube_zones_day.lstb.gz", ...},
+  "raster_index": "raster_index.json"
+},
+"files": {"cells": "cells.lstb.gz", "series": "timeline_series.json.gz", "xai": {"day": {"1990": {"features": "xai_1990_features.lstb.gz", "shap": "xai_1990_day.lstb.gz"}}, "night": {...}},
+          "model": {"day": "model_web_day.json", "night": "model_web_night.json"}, "shap_global": "shap_global.json",
+          "dependence": "dependence.json.gz", "zones": "zones.json", "metrics": "metrics.json", "interactions": "interactions.json",
+          "coupling": "scenario_coupling.json", "districts": "districts.geojson", "provenance": "provenance.json"}
+```
+`domains.*.abs` = p0.5–p99.5 over all frames (observed + projected p50) of that mode, rounded outward to 1 °C.
+
+### 5.4 `timeline_series.json.gz`
+```json
+{"reference_period": [2000, 2020], "hot_core_threshold_c": {"day": 46.1, "night": 31.4},
+ "scopes": [{"id": "ncr", "label": "Delhi NCR", "kind": "ncr"}, {"id": "d:1", "label": "Gurugram", "kind": "district"},
+            {"id": "z:day:3", "label": "Heat Extreme Core", "kind": "zone", "mode": "day"}],
+ "series": {"<scope>": {"<mode>": {
+    "frames": [{"year": 1990, "mean": 41.2, "ci": [40.6, 41.8], "p90": 44.0, "hot_core_km2": 0, "uhi": -1.7, "n_cells": 55150, "tier": "observed-sparse", "coverage": 0.9972}],
+    "annual": {"era5_skin": [{"year": 1990, "value": 37.1, "anomaly": -0.3}], "satellite": [{"year": 2003, "value": 28.4, "sensor": "MODIS Aqua", "flag": null}]},
+    "ssp": {"ssp245": [{"year": 2030, "p05": 0, "p25": 0, "p50": 0, "p75": 0, "p95": 0}]},
+    "trend": {"obs": {"slope_per_decade": 0.0, "ci": [0, 0], "period": [1990, 2025], "method": "Theil-Sen + MC"}, "annual": {"era5_skin": {...}}},
+    "decomposition": {"ssp245": {"2050": {"climate": 0, "land": 0, "total": 0, "baseline_c": 0}}},
+    "uncertainty_budget": {"ssp245": {"2050": {"gcm": 0, "sensitivity": 0, "land": 0, "model": 0}}},
+    "threshold_years": {"ssp245": {"+1": 2041, "+2": null, "+3": null}}}}},
+ "zone_share": {"day": {"obs": {"1990": [0.2, 0.1, 0.4, 0.3]}, "ssp245": {"2030": [...]}}, "night": {...}}}
+```
+Satellite annual series per mode: day → `modis_terra_day` (sensor "MODIS Terra", drift flags); night →
+`modis_aqua_night` + `viirs_night_cal`. Zone scopes exist only for their own mode. Frame rows carry an optional
+`coverage` (finite cells / ROI cells of the scope, 0–1, 4 dp; §4.7). Decomposition rows are `{climate, land, total,
+baseline_c}` at 2 dp with `total = p50 − baseline_c` (the scope's weather-normalised 2025 baseline, §4.10); readers
+must accept rows without `baseline_c` (older bundles: then `total` was relative to `L_base`). The top level also
+carries `baseline_level_c` = `{mode: L_base}` (NCR weather-normalised baseline, §4.10).
+
+### 5.5 `zones.json`, `shap_global.json`, `dependence.json.gz`, `interactions.json`
+All are `{"modes": {"day": {...}, "night": {...}}}` with the v1 per-mode content, adapted:
+* zones: v1 keys per zone, with `area_km2` / `lst_mean` keyed `{"obs": {year: v}, "<ssp>": {year: v}}`, `shap_means`
+  per group, recommendations per v1/D2 + focal recompute; `transitions: {"obs": {"1990->1995": 4×4}, "<ssp>":
+  {"2025->2030": 4×4, ...}}`, `labelling`, `k`, `silhouette`, `diagnostics`. Every zone entry may carry
+  `display_name` (non-empty string; default = `name`) and `label_caveat` (string or null) (§1.5); `labelling` carries
+  the §3.5 record (`riparian_criterion_met`, `riparian_criterion`, per-cluster `share_water_ge_0_2` and
+  `water_group_rank`). Canonical `id`/`name`/`color` are unchanged.
+* shap_global: `groups`, `global {mean_abs, ci_lo, ci_hi, bias}`, `by_frame {year: {mean_abs, mean}}`, `by_zone`,
+  `n_bootstrap`, `ci_method`, `ci_label`.
+* dependence: `groups: {<group>: {primary, bin_centers, mean, ci_lo, ci_hi, count, scatter{...}, threshold{...}}}`
+  (v1 fields; scatter colour = strongest interaction-partner group's primary feature).
+* interactions: `groups`, `global` (18×18), `by_zone`.
+
+### 5.6 `metrics.json`
+```json
+{"modes": {"day": {"schemes": [...], "summary": [...], "folds": [...], "block_size_curve": [...], "error_vs_distance": [...],
+                   "loeo": [{"held_out": 2015, "r2_raw": 0, "r2_recentred": 0, "rmse_recentred": 0, "bias_raw": 0}],
+                   "place_time": {...}, "moran": [...], "moran_target": [...], "moran_scatter": {...}, "fold_geometry": {...},
+                   "aoa": {"di_threshold": 0, "pct_inside": {"1990": 0}, "rmse_by_di_decile": [...]},
+                   "persistent_residual": {"lambda": 0, "loeo_rmse_without": 0, "loeo_rmse_with": 0},
+                   "hindcast": {...}, "cross_sensor": {"landsat_vs_modis_terra": [{"year": 2010, "r2": 0, "rmse": 0}]},
+                   "v1_comparison": {...}, "headline": {"spatial": {"scheme": "block20", "model": "xgboost", "r2": 0, "rmse": 0},
+                                                        "temporal": {"scheme": "loeo", "model": "xgboost", "r2": 0, "rmse": 0}}},
+           "night": {...}},
+ "downscaling": {"night": {"scale_invariance": {"r2": 0, "rmse": 0, "bias": 0, "bilinear_rmse": 0}, "by_lc": [...]},
+                 "day_demo": {"r2": 0, "rmse": 0, "bilinear_rmse": 0, "years": [2010, 2015, 2020]}},
+ "land_model": {"fom": 0, "fom_null": 0, "quantity_disagreement": 0, "allocation_disagreement": 0, "rmse_du": 0, "rmse_du_null": 0,
+                "corr_du": 0, "corr_du_null": 0, "checks": [{"check": "fom > null", "value": 0, "null": 0, "ok": true}],
+                "verdict": "mixed", "hindcast_truth": "GHSL P2023A 2025 epoch (an extrapolated GHSL epoch, not an observation)"},
+ "climate_sensitivity": {"day": {"beta": 0, "ci": [0, 0], "r2": 0, "n_years": 0, "theil_sen": 0}, "night": {...}},
+ "night_calibration": {"terra_to_aqua": {"r2": 0, "rmse": 0, "n": 0, "by_class": [...], "diag": {...}}, "viirs_to_aqua": {...}},
+ "cmip6": {"baseline_frame": 2025, "baseline_window": [2016, 2035], "observation_window": [2024, 2026], "l_base": {...}, ...},
+ "projection_meta": {"day": {"ssp245": {"pct_outside_aoa": {"2030": 0.0}, "model_error": {"samples": "loeo+rbar", "rho": 0.3}, ...}}},
+ "hardware": {...}, "timings": {...}}
+```
+* `night_calibration[kind]` keeps the §3.2 keys; gee runs add `diag` (section 04 `NIGHT_CALIBRATION_DIAG[kind]`:
+  overlap years, pooled classes, leave-one-year-out RMSE, `cells_per_class` {class: int}; a class gets its own fit
+  only with ≥ 30 (cell, year) pairs and ≥ 20 distinct cells, else the pooled map). Synthetic bundles keep the plain
+  shape.
+* `land_model` adds `corr_du`, `corr_du_null`, the null's quantity/allocation disagreement, `checks`, `verdict`
+  (`beats_null` | `mixed` | `worse_than_null`) and `hindcast_truth` (§4.9).
+* `modes[m].aoa` adds `resid_rho_block20` and `proj_resid_q90` (10 floats, §4.6).
+* `projection_meta[mode][ssp]` = `{seconds, n_mc, n_gcm, n_land_real, beta_mean, beta_sd, l_base, a2025_fixed_mean,
+  scopes, model_error: {samples, rho}, frames, method, pct_outside_aoa: {year: fraction}, note, omitted_feedbacks}`.
+* `cmip6.baseline_window` = the 20-year GCM window of the baseline frame (`[2016, 2035]`) and `cmip6.observation_window`
+  = its observation window (`[2024, 2026]`) whose weather anomaly `L_base` removes (§4.10).
+
+### 5.7 `provenance.json`
+`{"sources": [{"id","label","asset","start","end","resolution_m","role","used_for":[...],"notes"}],
+  "frames": [{"year","mode","tier","sensor","window","scenes","coverage","overpass_ist"}], "annotations": [...]}`.
+
+### 5.8 v1 compatibility
+The dashboard must load **both** schema 1.x bundles (`SPEC_v1.md` §4; the user's real bundle in `public/data/` today)
+and 2.0 bundles. v1 → v2 adapter: single mode "day", frames = v1 epochs (tier "observed", sensor "MODIS Terra"), no
+night/projections/rasters (UI shows "unavailable — rerun notebook v2"), XAI from `epoch_<year>.json.gz`.
+
+---
+
+## 6. Dashboard v2 (summary — details in `docs/UI_SPEC_v2.md`)
+* Design: "NCR THERMAL/OPS v2" — Mission-Control shell, persistent deck.gl stage, time ribbon 1990–2050, Day/Night/DTR,
+  SSP fans, evidence-tier glyphs from the manifest, fixed colour domains, 6 routes (Control, Timeline, Drivers,
+  Zones, Model Lab, Sources), Briefing overlay with guarded copy, compare split, lens, perf governor, WCAG 2.2 AA,
+  reduced-motion matrix.
+* Data layer reads §5 exactly (LSTB reader with DecompressionStream; worker decode). **This SPEC overrides UI_SPEC
+  §10 file names** (`*.lstb.gz` containers instead of `.i16.gz/.u8.gz`). The data layer requires DecompressionStream;
+  without it the app shows an explicit unsupported-browser state (Chrome/Edge 80+, Firefox 113+, Safari 16.4+).
+* Zone names: the dashboard shows `display_name ?? name` wherever a zone name appears and shows `label_caveat` when
+  present. Projected change: `base = dec.baseline_c ?? (finite dec.total ? p50 − dec.total : (scope ncr ?
+  baseline_level_c[mode] : null))`; Δ / lo / hi = p50 / p05 / p95 − base, labelled "Δ vs weather-normalised 2025
+  baseline (p50)"; fans, strands and sparkfans anchor at the scope baseline (the first projected frame's
+  `baseline_c`) with a hollow baseline marker.
+* Bundle source: `?bundle=data|demo` (+ Settings menu); default `data` when `public/data/manifest.json` exists, else
+  `demo`. `VITE_DATA_BASE_URL` still overrides.
+* Dependencies allowed to add: `zustand`, `@fontsource-variable/{inter,space-grotesk,jetbrains-mono}`, dev `jsdom`,
+  `vitest-axe`. Pin `@deck.gl/*` and `deck.gl` to `~9.4`. No three.js/GSAP/Lottie/bloom.
+* The synthetic banner stays persistent for `data_mode == "synthetic"`; v1 tests keep passing or are migrated.
+
+## 7. Testing (definition of done)
+* `python notebook/build_notebook.py --check`; `python notebook/run_local.py --out <dir>` (synthetic, fast, 2 km) ends
+  `ALL SECTIONS OK` exit 0; a 1 km synthetic run (fast profile) also passes; `python notebook/validate_bundle.py <web>`
+  VALID for v2 output and still VALID for the v1 bundle in `dashboard/public/data`.
+* Synthetic "planted vs recovered" report printed by 08/09/11 (thresholds, β, UHI signs day < 0 < night, path
+  offsets, calibration slopes, land-model FoM > null).
+* Dashboard: `npm run lint`, `npm test` (incl. LSTB decode of Python-written fixtures, v1-compat adapter, guards),
+  `npm run build`; headless-browser smoke on `public/demo` (v2) **and** `public/data` (v1) with zero console errors.

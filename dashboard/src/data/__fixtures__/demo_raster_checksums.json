@@ -1,0 +1,261 @@
+{
+ "source": "PIL (Pillow) decode of dashboard/public/demo/raster/*.png; sha1 of the R (value) and G (flags) planes, row-major; regenerate with dashboard/scripts/raster_checksums.py",
+ "files": {
+  "day_1990.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "355e48bcaccc0cc26582a512e777049e3793aca9",
+   "g_sha1": "af1f9afec24e081a3cca053685abad1f013c73b1",
+   "file_sha1": "ab5b0eb0fe274b9e0fd2cd8b1728d80c12c2e8bc"
+  },
+  "day_1990_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "9cb144c337dd699121e87b41d3edc0a3322d2dee",
+   "g_sha1": "7aa51918c2488658e81d54168ff83667e740536b",
+   "file_sha1": "2c7e7fcbf8828bbc153aa02887f69e9eaeaeb62a"
+  },
+  "day_1995.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "eb616008dc664670498439f960bb9c4b4e440545",
+   "g_sha1": "6668ffb5065d5b9d582ea93467a095786ab0024f",
+   "file_sha1": "67e109110c0e95cf52034e9d8c47a0155db274c7"
+  },
+  "day_1995_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "56aa0746edf0d061a4c637604728589f95bbb53c",
+   "g_sha1": "43ffb753f81398dc2dccab387aced5a4567e0890",
+   "file_sha1": "ea5149789863ef53b05e13e6bb086fa1105fb392"
+  },
+  "day_2000.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "1047ab230f13d9f8ea1e1e40ee6fa9f5262c59cf",
+   "g_sha1": "ce3e6ba4ab3a8b9ac76d087be7e7e708b62dbabd",
+   "file_sha1": "34a16c86634f44626037f904746e90727e5e7f0e"
+  },
+  "day_2000_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "bac6ec7b74c31133433fb7e9587c2b2269780bb0",
+   "g_sha1": "5b16c4258c47759b045005e8c7aa1a60fe189357",
+   "file_sha1": "962a6fc847b11ce325ea27d9440b77760fd00bee"
+  },
+  "day_2005.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "a2b734dd2979028be6b729b27e58b3dd52e5a0c2",
+   "g_sha1": "5286ccac198d63388beb6094c668e344ef43f818",
+   "file_sha1": "453d3b17028ab3797384e628bc5241d6e73ca30d"
+  },
+  "day_2005_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "08202397e7a2faffc46758f92d03b05fc88f4f3e",
+   "g_sha1": "cdfd9df948708c076f90a2f5c7b082417c2e6d4c",
+   "file_sha1": "10beeaa1c92f1b58eee0c70198de2aa5878c9783"
+  },
+  "day_2010.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "16cc9bb7977e54425ed825bd5a9e0eb858805478",
+   "g_sha1": "b1aef38831563d6d2b340a6000aad7d38f662ddd",
+   "file_sha1": "09115955504ae452f03c9ae6d8edc966f003becf"
+  },
+  "day_2010_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "70579c5a018ac8bda5bb3f9d0f28e673db374a17",
+   "g_sha1": "143cfc99506c9b7ab58fc03cc468364b526fe4bc",
+   "file_sha1": "892b1d0a9710f383bbf52482924175dc39ea320b"
+  },
+  "day_2015.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "bf8fad2db5aa38c15c4b9079c63f4f295dcdecf1",
+   "g_sha1": "abb14f9499ee9b534c612d2350f2823084545221",
+   "file_sha1": "e2e3a14835828465193d11fb95dc284bc41c8a8f"
+  },
+  "day_2015_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "6384fe443ac38d748060a461b9ce5cda6242c070",
+   "g_sha1": "3f116b5dc72d9954362192553d213e6ff673fe10",
+   "file_sha1": "5ec26b2f0a65c309ed80127fe1cfe4bc046912f4"
+  },
+  "day_2020.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "9c44e37b25fa04746f815e87f9870f81851ceadb",
+   "g_sha1": "ea02ac43a76af7e5ef673fd3cb969399baba9bb7",
+   "file_sha1": "58525f096bda960426a30f665947f6046d50d749"
+  },
+  "day_2020_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "daaff700aaa2227b96fbb5e8accadec766e956cb",
+   "g_sha1": "4ac3483a312fa28a0f17d128f8e8b3d697c0aab8",
+   "file_sha1": "e28f3527209ea2e4bb86d6317607a3f735020f6b"
+  },
+  "day_2025.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "50f4692ea768b75c709339065032f7170bd049ee",
+   "g_sha1": "95de752c2ccb56feb2b2d2781ae6086ccf199318",
+   "file_sha1": "6239106c6ac93d735339b1728aee0f3da1888c13"
+  },
+  "day_2025_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "04ea10a093b74952666fee73f52616bba069c10d",
+   "g_sha1": "df0fe08ea233f67b892868711cb74176b17e2436",
+   "file_sha1": "b156a3edb0835f6e695821c29c2696ae43f8d696"
+  },
+  "night_1990.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "99d44abb3d4b5184f376c7a92c3af851ed7185db",
+   "g_sha1": "f428c24948f3eccc3bd99ab753b5f2043f3d673e",
+   "file_sha1": "c3a31e2b18cb9a7d3fc8b4a5c8d79532977332f0"
+  },
+  "night_1990_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "68e372a391504c1cac98b8577774538ec07c1e62",
+   "g_sha1": "8029f921cda6bc0f066884a1afc4a1354a92860e",
+   "file_sha1": "76a8c3f4ba569361adaa8c403c3e61b55448467b"
+  },
+  "night_1995.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "ed0a3d41bbc6350511477b0affe291511117bd15",
+   "g_sha1": "21ff42ffdea61f3b0d189b351d04ae6078439c72",
+   "file_sha1": "0cf386d99ad492cee50707f547a0650ac4420706"
+  },
+  "night_1995_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "9e1dfba4b779dee068e817279da5fa1f6a1b36ad",
+   "g_sha1": "ed7132d5a56ac9b59072b69f0d13e920de4f6dd5",
+   "file_sha1": "b74c0b6c310eb455fe6cbc6e70a414c00ca6914f"
+  },
+  "night_2000.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "d21ed238fe1424491baff032e38fb3b689f38577",
+   "g_sha1": "36bff338bd0949a9b23332622cda76bb1d1ffe8e",
+   "file_sha1": "0cfcfb0cb3f04345395c4658d8536a782a705f64"
+  },
+  "night_2000_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "a4d837eebef5ef95e6afe47f245ba9c280d64bec",
+   "g_sha1": "0286473c53db1b3d3173afb88c22740c6e313975",
+   "file_sha1": "92f32dd6b53b01b168c80446b8405da43bdd1abc"
+  },
+  "night_2005.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "93d909bb6982566d51534c7e6c824c63b0f15cb3",
+   "g_sha1": "0ef9cb70a279576e025745403aa364b268bab1b3",
+   "file_sha1": "168c357f8a18abb8905656fa57a9fb89a7634bcf"
+  },
+  "night_2005_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "64af75837db8335e2c263b0095606d1e4fef23de",
+   "g_sha1": "86e5f730569cd09225368c0e13acd22bc793298f",
+   "file_sha1": "f9f6aa2ace9802dc5a837ed064a8feb06a415980"
+  },
+  "night_2010.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "fa70fc26528c3a13ee6d6605a37455dbb888ec32",
+   "g_sha1": "f12855cc6e657e5b6871edf8a7eec883e597a21d",
+   "file_sha1": "70dcf7fe241b1f6ff9e009ea38ae0912437f9308"
+  },
+  "night_2010_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "adcf19cbfdba71e6f4ad31cc0cef8bbb68092378",
+   "g_sha1": "4d83806e83c8b9634f790b8cb036ad6657879e22",
+   "file_sha1": "d8ed63aed507602dbf20ed15708c01811d2b0d68"
+  },
+  "night_2015.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "c1597a0804eb7c2364c05839f5114bcc236762c9",
+   "g_sha1": "f4968508c8a57871cf91725478e184ccb65b0747",
+   "file_sha1": "32a2c9e32c3e1c5f605a9ef4bcb08355a07b696c"
+  },
+  "night_2015_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "8937718859f3d36340262202fb4f92033987120c",
+   "g_sha1": "470861a3b82df8284dda9a53e74ab404f4e21e97",
+   "file_sha1": "a1ebcba69cee805f17fbfea0131dcdc072ac4902"
+  },
+  "night_2020.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "43117d4f6015679bcb4dae0cb6f868ac6e94bf1a",
+   "g_sha1": "d6d514d1489bed432563b796426980959f185e61",
+   "file_sha1": "041a21ce84c037ac9ca65662b824506eea11342d"
+  },
+  "night_2020_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "6d33f8ba6d9b9256c9b7e0197a12e99ece2e2d07",
+   "g_sha1": "583ae6af028dde3d1c5271aa6e4c4b63266b834e",
+   "file_sha1": "8017d071f706d3cc1c1138de582320b794957ef2"
+  },
+  "night_2025.png": {
+   "mode": "RGB",
+   "width": 614,
+   "height": 656,
+   "r_sha1": "2c59fd75678b674e5d531081bbb16dcb574cde49",
+   "g_sha1": "64d1d9a1999cd20533b25c1aab54dcc7cbe3ebbc",
+   "file_sha1": "9dc8b6d2cdb4a15f2cba0af07f161b3eaed03bef"
+  },
+  "night_2025_500m.png": {
+   "mode": "RGB",
+   "width": 307,
+   "height": 328,
+   "r_sha1": "f8cd3ef38159b5684310f8214240a4c442bd11fe",
+   "g_sha1": "ab16b6677181872f9c86a245bc80758c0e427745",
+   "file_sha1": "ca2e3d7e123943adaf797bc5a2426ddf5b56d052"
+  }
+ }
+}

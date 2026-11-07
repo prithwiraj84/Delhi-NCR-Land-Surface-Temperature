@@ -9,11 +9,24 @@
  * transferred back without copying.
  *
  * Fallback: without Worker support, without a raw model, or after the worker fails to start
- * or crashes, the same `runScenario` runs synchronously on the main thread (the pending
- * requests of a crashed worker are re-run that way), so results are identical either way.
+ * or crashes, the same `runScenario` runs on the main thread (the pending requests of a
+ * crashed worker are re-run that way), so results are identical either way. The engine module
+ * (lib/scenario.js, ~50 kB) is imported lazily for that fallback only: in the browser it lives
+ * in the worker bundle, so it never weighs on the initial page load.
  */
-import { runScenario } from "./scenario.js";
-import { MAX_EPOCHS } from "./scenarioWorkerCore.js";
+import { MAX_EPOCHS } from "./scenarioProtocol.js";
+
+/** Lazily loaded lib/scenario.js (main-thread fallback only); one shared promise. */
+let scenarioModule = null;
+function loadScenarioModule() {
+  if (!scenarioModule) {
+    scenarioModule = import("./scenario.js").catch((error) => {
+      scenarioModule = null; // allow a retry after a transient chunk-load failure
+      throw error;
+    });
+  }
+  return scenarioModule;
+}
 
 let epochCounter = 0;
 const epochKeys = new WeakMap();
@@ -29,9 +42,13 @@ function epochKey(epoch) {
   return key;
 }
 
-/** Only what runScenario reads from an epoch (drops SHAP, coordinates, index Map, stats). */
+/**
+ * Only what runScenario reads from an epoch (drops SHAP, coordinates, index Map, stats).
+ * v2 epochs also carry the 33 base features and the canonical cell ids (the worker rebuilds
+ * the grid index and the focal means from them).
+ */
 export function slimEpoch(epoch) {
-  return {
+  const slim = {
     year: epoch.year,
     n: epoch.n,
     cell_size_m: epoch.cell_size_m,
@@ -40,12 +57,24 @@ export function slimEpoch(epoch) {
     zone: epoch.zone,
     features: epoch.features,
   };
+  if (epoch.baseFeatures) {
+    slim.baseFeatures = epoch.baseFeatures;
+    slim.cell_id = epoch.cell_id;
+    if (epoch.grid) slim.grid = epoch.grid;
+  }
+  return slim;
 }
 
-/** Only what runScenario reads from the manifest. */
+/** Only what runScenario reads from the manifest (incl. the grid shape for v2 focal recompute). */
 export function slimManifest(manifest) {
   if (!manifest) return null;
-  return { features: manifest.features, districts: manifest.districts, target_mode: manifest.target_mode };
+  const grid = manifest.study_area?.grid ?? manifest.grid ?? null;
+  return {
+    features: manifest.features,
+    districts: manifest.districts,
+    target_mode: manifest.target_mode,
+    grid: grid ? { width: grid.width ?? null, height: grid.height ?? null } : null,
+  };
 }
 
 /** Module worker for the browser build (null where Worker is unavailable, e.g. Node tests). */
@@ -80,7 +109,9 @@ export class ScenarioEngine {
     return Boolean(this.worker);
   }
 
-  runSync({ epoch, model, coupling = null, manifest = null, scenario }) {
+  /** Run on the main thread (async only because the engine module is loaded on demand). */
+  async runLocal({ epoch, model, coupling = null, manifest = null, scenario }) {
+    const { runScenario } = await loadScenarioModule();
     return runScenario({ epoch, model, coupling, manifest, scenario });
   }
 
@@ -96,13 +127,7 @@ export class ScenarioEngine {
     this.worker = null;
     const pending = [...this.pending.values()];
     this.pending.clear();
-    for (const p of pending) {
-      try {
-        p.resolve(this.runSync(p.args));
-      } catch (error) {
-        p.reject(error);
-      }
-    }
+    for (const p of pending) this.runLocal(p.args).then(p.resolve, p.reject);
   }
 
   onMessage(data) {
@@ -138,7 +163,7 @@ export class ScenarioEngine {
     const { epoch, model, modelRaw = null, coupling = null, manifest = null, scenario } = args;
     if (!epoch || !model) return Promise.resolve(null);
     if (!this.worker || !modelRaw) {
-      return new Promise((resolve) => resolve(this.runSync(args)));
+      return this.runLocal(args);
     }
     if (this.sentModel !== modelRaw) {
       this.worker.postMessage({ type: "model", modelRaw });

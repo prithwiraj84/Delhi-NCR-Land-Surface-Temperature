@@ -29,7 +29,7 @@ export function ErrorState({
         className,
       )}
     >
-      <div className="grid size-12 place-items-center rounded-2xl border border-rose/35 bg-rose/10 text-rose shadow-glow-rose">
+      <div className="grid size-12 place-items-center rounded-panel border border-crit/35 bg-crit/10 text-crit">
         <TriangleAlert aria-hidden="true" className="size-6" />
       </div>
       <div className="max-w-xl">
@@ -50,7 +50,7 @@ export function ErrorState({
         )}
       </div>
       {showDetails && details && (
-        <pre className="scrollbar-thin max-h-56 w-full max-w-2xl overflow-auto rounded-lg border border-panel-border bg-bg-deep/80 p-3 text-left font-mono text-[11px] leading-relaxed text-ink-muted">
+        <pre className="scrollbar-thin max-h-56 w-full max-w-2xl overflow-auto rounded-lg border border-hairline bg-void/80 p-3 text-left font-mono text-[11px] leading-relaxed text-ink-muted">
           {details}
         </pre>
       )}

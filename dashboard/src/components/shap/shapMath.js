@@ -27,6 +27,32 @@ export const FEATURE_GROUPS = [
   { id: "landcover", label: "Land cover", color: "#34d399" },
 ];
 
+/**
+ * v2 feature families (SPEC §4.1 `family`; the facade's group metas carry it as `group`), in SPEC
+ * order. Colours: dataviz reference dark slots 1–6, validated (validate_palette.js) on
+ * surface-2 #111A2B and surface-3 #18233A: lightness band, chroma, worst adjacent CVD ΔE 8.4,
+ * normal-vision ΔE ≥ 19.3, all ≥ 3:1. Always shown with their text label.
+ */
+export const FAMILY_GROUPS = [
+  { id: "spectral", label: "Spectral", color: "#3987e5" },
+  { id: "landcover", label: "Land cover", color: "#d95926" },
+  { id: "urban", label: "Urban form", color: "#199e70" },
+  { id: "water", label: "Water", color: "#c98500" },
+  { id: "terrain", label: "Terrain", color: "#d55181" },
+  { id: "climate", label: "Climate", color: "#008300" },
+];
+
+/**
+ * The group vocabulary a feature-meta list uses: v2 families when any meta carries a v2
+ * family id that v1 does not know, else the v1 groups.
+ */
+export function featureGroupsFor(metas) {
+  const v1 = new Set(FEATURE_GROUPS.map((g) => g.id));
+  const list = Array.isArray(metas) ? metas : [...(metas?.values?.() ?? [])];
+  const v2 = list.some((m) => m?.group && !v1.has(m.group) && FAMILY_GROUPS.some((g) => g.id === m.group));
+  return v2 ? FAMILY_GROUPS : FEATURE_GROUPS;
+}
+
 /** Colours with a fixed meaning across the explorer. */
 export const SEMANTIC = {
   cooling: "#22d3ee",

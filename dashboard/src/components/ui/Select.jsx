@@ -11,7 +11,7 @@ const SIZES = {
  * Styled native <select> (native keyboard + screen-reader behaviour, works on mobile).
  * Options come from `options` ([{value, label, disabled?}] or [{label, options: [...]}]
  * for <optgroup>s) or from children. `onValueChange(value)` is a convenience alongside the
- * native `onChange(event)`.
+ * native `onChange(event)`. The control border is --control-border (>= 3:1 on every surface).
  * @param {{value?: string|number, onChange?: Function, onValueChange?: Function, options?: Array,
  *          label?: React.ReactNode, hideLabel?: boolean, size?: "sm"|"md", className?: string}} props
  */
@@ -36,10 +36,7 @@ export const Select = forwardRef(function Select(
   return (
     <div className={cn("flex min-w-0 flex-col gap-1", className)}>
       {label && (
-        <label
-          htmlFor={selectId}
-          className={cn("text-[11px] font-medium uppercase tracking-wider text-ink-muted", hideLabel && "sr-only")}
-        >
+        <label htmlFor={selectId} className={cn("micro-label", hideLabel && "sr-only")}>
           {label}
         </label>
       )}
@@ -49,8 +46,8 @@ export const Select = forwardRef(function Select(
           id={selectId}
           onChange={handleChange}
           className={cn(
-            "focus-ring w-full min-w-0 cursor-pointer appearance-none truncate rounded-lg border border-panel-border",
-            "bg-bg-raised/80 text-ink transition-colors hover:border-ink-faint/60 disabled:cursor-not-allowed disabled:opacity-45",
+            "focus-ring w-full min-w-0 cursor-pointer appearance-none truncate rounded-md border border-control",
+            "bg-surface-3 text-ink transition-colors duration-instant hover:border-ink-faint disabled:cursor-not-allowed disabled:opacity-45",
             SIZES[size] ?? SIZES.md,
             selectClassName,
           )}
@@ -68,10 +65,7 @@ export const Select = forwardRef(function Select(
               )
             : children}
         </select>
-        <ChevronDown
-          aria-hidden="true"
-          className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
-        />
+        <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
       </div>
     </div>
   );

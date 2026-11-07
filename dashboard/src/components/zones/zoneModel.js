@@ -55,6 +55,38 @@ export function previousEpoch(years, year) {
   return i > 0 ? years[i - 1] : null;
 }
 
+/**
+ * Display name of a zone (D11): the exported `display_name` (zones.json / manifest), else the
+ * canonical name. The canonical id, name and colour never change; only the label shown does
+ * (e.g. "Moderate mosaic (no riparian signal)" when no cluster has a riparian signature).
+ */
+export function zoneDisplayName(z, fallback = null) {
+  const d = z?.displayName ?? z?.display_name;
+  if (typeof d === "string" && d.trim()) return d;
+  return z?.name ?? fallback ?? (Number.isFinite(Number(z?.id)) ? ZONE_NAMES[Number(z.id)] ?? `Zone ${z.id}` : "Zone");
+}
+
+/** The zone's label caveat (D11 `label_caveat`), or null. */
+export function zoneCaveat(z) {
+  const c = z?.caveat ?? z?.label_caveat;
+  return typeof c === "string" && c.trim() ? c : null;
+}
+
+/**
+ * Normalised zone label entries of a mode: {id, name (canonical), color, displayName, caveat}
+ * from manifest.zones[mode] (v2 per-mode lists), the old flat manifest list, or zones.json
+ * modes[m].zones.
+ */
+export function zoneLabels(list) {
+  return (Array.isArray(list) ? list : [])
+    .filter((z) => z && Number.isFinite(Number(z.id)))
+    .map((z) => {
+      const id = Number(z.id);
+      const name = z.name || ZONE_NAMES[id] || `Zone ${id}`;
+      return { id, name, color: z.color || ZONE_COLORS[id] || "#94a3b8", displayName: zoneDisplayName({ ...z, name }), caveat: zoneCaveat(z) };
+    });
+}
+
 /** Zone profiles sorted by canonical id, with colour/name fallbacks from the manifest. */
 export function orderedZones(zones, zonesMeta) {
   const list = Array.isArray(zones?.zones) ? zones.zones.filter((z) => z && isNum(Number(z.id))) : [];
@@ -63,10 +95,13 @@ export function orderedZones(zones, zonesMeta) {
     .map((z) => {
       const id = Number(z.id);
       const meta = Array.isArray(zonesMeta) ? zonesMeta.find((m) => Number(m.id) === id) : null;
+      const name = z.name || meta?.name || ZONE_NAMES[id] || `Zone ${id}`;
       return {
         ...z,
         id,
-        name: z.name || meta?.name || ZONE_NAMES[id] || `Zone ${id}`,
+        name,
+        displayName: zoneDisplayName(z.display_name ? z : meta?.display_name ? meta : { name }),
+        caveat: zoneCaveat(z) ?? zoneCaveat(meta),
         color: z.color || meta?.color || ZONE_COLORS[id] || "#94a3b8",
       };
     });
@@ -114,7 +149,9 @@ export function zoneSummaries(zoneList, years, year, epochMeans) {
     const epochMean = meanOf(year);
     return {
       id: z.id,
-      name: z.name,
+      name: zoneDisplayName(z),
+      canonicalName: z.name,
+      caveat: zoneCaveat(z),
       color: z.color,
       area,
       share,
@@ -167,7 +204,7 @@ export function mergeRecommendations(zoneList) {
       rows.push({
         id: `${z.id}-${r.feature}-${i}`,
         zoneId: z.id,
-        zoneName: z.name,
+        zoneName: zoneDisplayName(z),
         zoneColor: z.color,
         feature: r.feature,
         action: r.action === "decrease" ? "decrease" : "increase",
@@ -248,4 +285,125 @@ export function diagnosticsRows(diagnostics) {
     .map((k, i) => ({ k: Number(k), inertia: num(diagnostics?.inertia?.[i]), silhouette: num(diagnostics?.silhouette?.[i]) }))
     .filter((r) => isNum(r.k))
     .sort((a, b) => a.k - b.k);
+}
+
+// ---------------------------------------------------------------------------------------
+// v2 zones.json (SPEC §5.5): series-keyed areas / means / transitions
+// ---------------------------------------------------------------------------------------
+
+/** True when a zones asset uses the v2 series-keyed shape (`area_km2.obs`, `transitions.obs`). */
+export function isSeriesKeyedZones(zones) {
+  const z = Array.isArray(zones?.zones) ? zones.zones[0] : null;
+  return Boolean(z?.area_km2 && typeof z.area_km2 === "object" && z.area_km2.obs && typeof z.area_km2.obs === "object");
+}
+
+/** v2 recommendation -> the v1 row fields the policy table reads (action, priority, target …). */
+function normalizeRecommendation(r) {
+  if (!r || typeof r !== "object") return r;
+  const delta = num(r.expected_delta_c);
+  const priority = r.priority ?? (delta === null ? "low" : delta <= -1 ? "high" : delta <= -0.3 ? "medium" : "low");
+  const action = r.action ?? (num(r.delta) !== null && r.delta < 0 ? "decrease" : "increase");
+  const rationale =
+    typeof r.rationale === "string"
+      ? r.rationale
+      : [r.label, num(r.feasible_share) !== null ? `feasible in ${Math.round(r.feasible_share * 100)}% of the zone's cells` : null, "model-based counterfactual with focal features recomputed, not a causal effect"].filter(Boolean).join(" · ");
+  return { ...r, action, priority, rationale, target: r.target ?? null, current: r.current ?? null };
+}
+
+/**
+ * Present a v2 zones asset (one mode) in the v1 shape the zone components read, for one
+ * series ("obs" by default): `area_km2[year]`, `lst_obs_mean[year]`, flat `transitions`.
+ * The full series-keyed data stays available on `series` (per zone) and `transitionsBySeries`.
+ * v1 assets are returned unchanged.
+ * @param {object|null} zones
+ * @param {{series?: string}} [options]
+ */
+export function normalizeZones(zones, { series = "obs" } = {}) {
+  if (!zones || !isSeriesKeyedZones(zones)) return zones;
+  const list = zones.zones.map((z) => ({
+    ...z,
+    displayName: zoneDisplayName(z),
+    caveat: zoneCaveat(z),
+    area_km2: { ...(z.area_km2?.[series] ?? {}) },
+    lst_obs_mean: { ...(z.lst_mean?.[series] ?? z.lst_obs_mean?.[series] ?? {}) },
+    lst_pred_mean: z.lst_pred_mean?.[series] ?? {},
+    series: { area_km2: z.area_km2, lst_mean: z.lst_mean ?? null },
+    recommendations: Array.isArray(z.recommendations) ? z.recommendations.map(normalizeRecommendation) : [],
+  }));
+  const diag = zones.diagnostics ?? {};
+  return {
+    ...zones,
+    zones: list,
+    transitions: zones.transitions?.[series] ?? {},
+    transitionsBySeries: zones.transitions ?? {},
+    // v1 KDiagnostics reads `k`; v2 exports `k_range`.
+    diagnostics: { ...diag, k: diag.k ?? diag.k_range ?? [] },
+  };
+}
+
+/**
+ * Area-share trajectory of one zone across observed frames and each SSP (v2), as
+ * [{year, share}] per series key; shares are relative to the total mapped area of that frame.
+ * @returns {Record<string, {year: number, share: number}[]>}
+ */
+export function zoneShareTrajectories(zonesV2, zoneId) {
+  const out = {};
+  const zs = Array.isArray(zonesV2?.zones) ? zonesV2.zones : [];
+  const own = zs.find((z) => Number(z.id) === Number(zoneId));
+  const seriesKeys = Object.keys(own?.series?.area_km2 ?? own?.area_km2 ?? {});
+  for (const key of seriesKeys) {
+    const years = Object.keys(own.series?.area_km2?.[key] ?? {}).map(Number).filter(Number.isInteger).sort((a, b) => a - b);
+    out[key] = years.map((y) => {
+      const a = num(own.series.area_km2[key][String(y)]);
+      let total = 0;
+      for (const z of zs) total += num(z.series?.area_km2?.[key]?.[String(y)]) ?? 0;
+      return { year: y, share: a !== null && total > 0 ? a / total : NaN };
+    });
+  }
+  return out;
+}
+
+/**
+ * Ordered alluvial columns from transition matrices: observed pairs, then (optionally) one
+ * scenario's projected pairs chained from the last observed frame.
+ * @returns {{columns: {year: number, projected: boolean, totals: number[]}[], flows: {from: number, to: number, matrix: number[][], projected: boolean}[]}}
+ */
+export function alluvialColumns(transitionsBySeries, { ssp = null } = {}) {
+  const pairs = [];
+  for (const p of transitionPairs(transitionsBySeries?.obs ?? (isFlatTransitions(transitionsBySeries) ? transitionsBySeries : {}))) {
+    pairs.push({ ...p, matrix: (transitionsBySeries?.obs ?? transitionsBySeries)[p.key], projected: false });
+  }
+  if (ssp && transitionsBySeries?.[ssp]) for (const p of transitionPairs(transitionsBySeries[ssp])) pairs.push({ ...p, matrix: transitionsBySeries[ssp][p.key], projected: true });
+  pairs.sort((a, b) => a.from - b.from || a.to - b.to);
+  const chain = [];
+  for (const p of pairs) {
+    const prev = chain[chain.length - 1];
+    if (!prev || p.from === prev.to) chain.push(p);
+  }
+  const valid = chain.filter((p) => transitionStats(p.matrix));
+  if (!valid.length) return { columns: [], flows: [] };
+  const columns = [];
+  valid.forEach((p, k) => {
+    const st = transitionStats(p.matrix);
+    if (k === 0) columns.push({ year: p.from, projected: false, totals: st.rowTotals });
+    columns.push({ year: p.to, projected: p.projected, totals: st.colTotals });
+  });
+  return { columns, flows: valid.map((p) => ({ from: p.from, to: p.to, matrix: transitionStats(p.matrix).counts, projected: p.projected })) };
+}
+
+function isFlatTransitions(t) {
+  return Boolean(t) && typeof t === "object" && Object.keys(t).some((k) => /^\s*\d{4}\s*-+>\s*\d{4}\s*$/.test(k));
+}
+
+/** Non-zero flows of alluvialColumns() as table rows (the alluvial chart's table twin). */
+export function alluvialRows(data, zoneName) {
+  const out = [];
+  for (const f of data?.flows ?? []) {
+    f.matrix.forEach((row, i) =>
+      row.forEach((v, j) => {
+        if (v > 0) out.push({ id: `${f.from}-${f.to}-${i}-${j}`, pair: `${f.from} → ${f.to}`, from: zoneName(i), to: zoneName(j), cells: v, kind: f.projected ? "projected" : "observed" });
+      }),
+    );
+  }
+  return out;
 }

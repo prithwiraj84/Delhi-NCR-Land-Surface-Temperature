@@ -1,68 +1,119 @@
 /**
- * Tailwind theme for the thermal digital twin.
- * Colour tokens mirror `src/lib/colors.js` (THEME) and the CSS variables in `src/index.css`;
- * keep the three in sync when changing a hue.
+ * Tailwind theme for NCR THERMAL/OPS v2.
+ *
+ * Every value comes from src/design/tokens.js (the single source of truth, UI_SPEC_v2 §4.1);
+ * nothing here is a literal colour. v2 code uses the v2 names (bg-surface-2, border-hairline,
+ * text-ink-faint, text-signal, text-solar, text-ssp245, text-ok …). The v1 names (bg-panel,
+ * border-panel-border, text-cyan, shadow-glow-* …) stay as aliases so the reused v1
+ * components render inside the v2 palette unchanged; `shadow-glow-*` are now glow-free
+ * hairline rings (glow budget = 3, §4.5).
  * @type {import('tailwindcss').Config}
  */
+import tokens from "./src/design/tokens.js";
+import { easing, motion } from "./src/design/motion.js";
+
+const { color: c, legacy, font, shadow, radius, zoneColors } = tokens;
+
+const ms = (token) => `${motion[token].ms}ms`;
+const bezier = (name) => `cubic-bezier(${easing[name].join(", ")})`;
+
 export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     extend: {
       colors: {
-        bg: {
-          DEFAULT: "#090d16",
-          deep: "#05080f",
-          raised: "#0f1624",
-        },
-        panel: {
-          DEFAULT: "#1e293b",
-          border: "rgba(148, 163, 184, 0.16)",
-          hover: "#243247",
-        },
-        ink: {
-          DEFAULT: "#e2e8f0",
-          strong: "#f8fafc",
-          muted: "#94a3b8",
-          // >= 4.5:1 (WCAG AA small text) on bg and every panel surface up to #1e293b.
-          faint: "#8a97ab",
-        },
-        cyan: { DEFAULT: "#22d3ee", soft: "#67e8f9", deep: "#0e7490" },
-        violet: { DEFAULT: "#a78bfa", soft: "#c4b5fd", deep: "#6d28d9" },
-        emerald: { DEFAULT: "#34d399", soft: "#6ee7b7", deep: "#047857" },
-        rose: { DEFAULT: "#fb7185", soft: "#fda4af", deep: "#be123c" },
-        amber: { DEFAULT: "#fbbf24", soft: "#fcd34d", deep: "#b45309" },
+        void: c.void,
+        bg: { ...legacy.bg, DEFAULT: c.bg },
+        surface: { 1: c.surface1, 2: c.surface2, 3: c.surface3 },
+        hairline: { DEFAULT: c.hairline, strong: c.hairlineStrong },
+        control: c.controlBorder,
+        ink: { DEFAULT: c.ink, strong: c.inkStrong, muted: c.inkMuted, faint: c.inkFaint },
+        signal: c.signal,
+        reticle: c.reticle,
+        solar: c.solar,
+        lunar: c.lunar,
+        ssp126: c.ssp126,
+        ssp245: c.ssp245,
+        ssp370: c.ssp370,
+        ssp585: c.ssp585,
+        ok: c.ok,
+        warn: c.warn,
+        crit: c.crit,
+        fog: c.fog,
+        hatch: c.hatch,
+        zone: { 0: zoneColors[0], 1: zoneColors[1], 2: zoneColors[2], 3: zoneColors[3] },
+        // v1 aliases (see header)
+        panel: legacy.panel,
+        cyan: legacy.cyan,
+        violet: legacy.violet,
+        emerald: legacy.emerald,
+        rose: legacy.rose,
+        amber: legacy.amber,
       },
       fontFamily: {
-        display: ['"Space Grotesk"', "Inter", "system-ui", "sans-serif"],
-        sans: ["Inter", "system-ui", "-apple-system", '"Segoe UI"', "sans-serif"],
-        mono: ['"JetBrains Mono"', "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        display: [...font.display],
+        sans: [...font.sans],
+        mono: [...font.mono],
+      },
+      fontSize: {
+        micro: ["11px", { lineHeight: "1.3", letterSpacing: "0.14em" }],
+        label: ["13px", { lineHeight: "1.3" }],
+        body: ["14px", { lineHeight: "21px" }],
+      },
+      borderRadius: {
+        panel: `${radius.panel}px`,
       },
       boxShadow: {
-        "glow-cyan": "0 0 0 1px rgba(34,211,238,0.35), 0 0 18px -2px rgba(34,211,238,0.45)",
-        "glow-violet": "0 0 0 1px rgba(167,139,250,0.35), 0 0 18px -2px rgba(167,139,250,0.45)",
-        "glow-emerald": "0 0 0 1px rgba(52,211,153,0.35), 0 0 18px -2px rgba(52,211,153,0.45)",
-        "glow-rose": "0 0 0 1px rgba(251,113,133,0.35), 0 0 18px -2px rgba(251,113,133,0.45)",
-        "glow-amber": "0 0 0 1px rgba(251,191,36,0.4), 0 0 18px -2px rgba(251,191,36,0.45)",
-        glass: "0 8px 32px -8px rgba(2, 6, 23, 0.65), inset 0 1px 0 rgba(255,255,255,0.04)",
+        panel: shadow.panel,
+        glass: shadow.panel,
+        "glow-signal": shadow.glowSignal,
+        "glow-alert": shadow.glowAlert,
+        "glow-cyan": shadow.ringSignal,
+        "glow-violet": shadow.ringLunar,
+        "glow-emerald": shadow.ringOk,
+        "glow-rose": shadow.ringCrit,
+        "glow-amber": shadow.ringWarn,
+      },
+      transitionDuration: {
+        instant: ms("instant"),
+        quick: ms("quick"),
+        base: ms("base"),
+        exit: ms("exit"),
+        layer: ms("layer"),
+      },
+      transitionTimingFunction: {
+        quick: bezier("quick"),
+        "expo-out": bezier("expoOut"),
+        exit: bezier("exit"),
+        "cubic-in-out": bezier("cubicInOut"),
       },
       keyframes: {
-        "glow-pulse": {
-          "0%, 100%": { opacity: "0.55", filter: "drop-shadow(0 0 2px currentColor)" },
-          "50%": { opacity: "1", filter: "drop-shadow(0 0 8px currentColor)" },
+        "live-pulse": {
+          "0%, 100%": { opacity: "0.55" },
+          "50%": { opacity: "1" },
         },
-        "grid-drift": {
-          "0%": { backgroundPosition: "0 0, 0 0" },
-          "100%": { backgroundPosition: "48px 48px, 48px 48px" },
+        "scan-sweep": {
+          "0%": { transform: "translateY(-1px)" },
+          "100%": { transform: "translateY(var(--scan-distance, 100%))" },
         },
-        shimmer: {
-          "0%": { backgroundPosition: "-200% 0" },
-          "100%": { backgroundPosition: "200% 0" },
+        "ring-spin": {
+          to: { transform: "rotate(360deg)" },
         },
       },
       animation: {
-        "glow-pulse": "glow-pulse 2.8s ease-in-out infinite",
-        "grid-drift": "grid-drift 24s linear infinite",
-        shimmer: "shimmer 1.8s linear infinite",
+        "live-pulse": "live-pulse 2.8s ease-in-out infinite",
+        // v1 name kept: the status-dot pulse is the only ambient motion allowed (§5.2 L).
+        "glow-pulse": "live-pulse 2.8s ease-in-out infinite",
+        "scan-sweep": "scan-sweep 1.6s linear infinite",
+      },
+      zIndex: {
+        stage: "0",
+        hud: "10",
+        chrome: "30",
+        overlay: "50",
+        palette: "60",
+        toast: "70",
+        boot: "80",
       },
     },
   },

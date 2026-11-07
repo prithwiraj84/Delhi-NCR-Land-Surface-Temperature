@@ -18,9 +18,7 @@ import { THEME, zoneColor } from "../../lib/colors.js";
 import { fmt, isNum } from "../../lib/format.js";
 import SegmentedToggle from "./SegmentedToggle.jsx";
 import { intervalContains } from "../../lib/uncertainty.js";
-import { FEATURE_GROUPS } from "./shapMath.js";
-
-const GROUP_COLOR = Object.fromEntries(FEATURE_GROUPS.map((g) => [g.id, g.color]));
+import { featureGroupsFor } from "./shapMath.js";
 
 /** Rows { name, meanAbs, lo, hi, mean } for the active slice, or [] when unavailable. */
 function sliceRows(shapGlobal, scope, sliceKey) {
@@ -43,7 +41,7 @@ function sliceRows(shapGlobal, scope, sliceKey) {
     .filter((r) => isNum(r.meanAbs));
 }
 
-function ImportanceRow({ row, rank, max, color, selected, meta, onSelect, ciLabel }) {
+function ImportanceRow({ row, rank, max, color, groupColor, selected, meta, onSelect, ciLabel }) {
   const pct = (v) => `${Math.max(0, Math.min(100, (v / max) * 100))}%`;
   const hasCi = isNum(row.lo) && isNum(row.hi);
   const label = meta?.label ?? row.name;
@@ -71,7 +69,7 @@ function ImportanceRow({ row, rank, max, color, selected, meta, onSelect, ciLabe
           <span
             aria-hidden="true"
             className="h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ backgroundColor: GROUP_COLOR[meta?.group] ?? THEME.inkFaint }}
+            style={{ backgroundColor: groupColor[meta?.group] ?? THEME.inkFaint }}
           />
           <span className={cn("truncate text-xs", selected ? "font-semibold text-ink-strong" : "text-ink")}>
             {label}
@@ -134,6 +132,8 @@ function ImportanceChart({ shapGlobal, metaByName, zonesMeta, year, groups, sele
       .sort((a, b) => b.meanAbs - a.meanAbs);
   }, [shapGlobal, scope, sliceKey, groups, metaByName]);
 
+  // v1 groups or v2 families, depending on the bundle generation of the feature metas.
+  const groupColor = useMemo(() => Object.fromEntries(featureGroupsFor(metaByName).map((g) => [g.id, g.color])), [metaByName]);
   const max = useMemo(() => Math.max(1e-6, ...rows.map((r) => Math.max(r.meanAbs, isNum(r.hi) ? r.hi : 0))), [rows]);
   const outsideCount = useMemo(
     () => rows.filter((r) => intervalContains(r.meanAbs, [r.lo, r.hi]) === false).length,
@@ -200,6 +200,7 @@ function ImportanceChart({ shapGlobal, metaByName, zonesMeta, year, groups, sele
               rank={i + 1}
               max={max}
               color={barColor}
+              groupColor={groupColor}
               selected={row.name === selectedFeature}
               meta={metaByName.get(row.name)}
               onSelect={onSelect}

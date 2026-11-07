@@ -1,29 +1,42 @@
 import { forwardRef, useMemo } from "react";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { cn } from "../../lib/cn.js";
+import { THEME } from "../../lib/colors.js";
 import { Skeleton } from "./Skeleton.jsx";
 
-const ACCENTS = {
-  cyan: "text-cyan",
-  violet: "text-violet",
-  emerald: "text-emerald",
-  rose: "text-rose",
-  amber: "text-amber",
+const ACCENT_TEXT = {
+  signal: "text-signal",
+  solar: "text-solar",
+  lunar: "text-lunar",
+  ok: "text-ok",
+  warn: "text-warn",
+  crit: "text-crit",
+  cyan: "text-signal",
+  violet: "text-lunar",
+  emerald: "text-ok",
+  rose: "text-crit",
+  amber: "text-warn",
   default: "text-ink-muted",
 };
 
-const SPARK_STROKE = {
-  cyan: "#22d3ee",
-  violet: "#a78bfa",
-  emerald: "#34d399",
-  rose: "#fb7185",
-  amber: "#fbbf24",
-  default: "#94a3b8",
+const SPARK_DOT = {
+  signal: THEME.signal,
+  solar: THEME.solar,
+  lunar: THEME.lunar,
+  ok: THEME.ok,
+  warn: THEME.warn,
+  crit: THEME.crit,
+  cyan: THEME.signal,
+  violet: THEME.lunar,
+  emerald: THEME.ok,
+  rose: THEME.crit,
+  amber: THEME.warn,
+  default: THEME.inkMuted,
 };
 
 /**
- * 12-point-style sparkline: de-emphasised line, current (last) point in the accent colour.
- * Pure SVG, no axes (a trend cue, not a chart).
+ * Trend cue (not a chart): de-emphasised 1.5 px line in ink-faint, the current (last) point in
+ * the accent colour. Pure SVG, no axes.
  */
 function Sparkline({ values, accent }) {
   const path = useMemo(() => {
@@ -40,14 +53,14 @@ function Sparkline({ values, accent }) {
   if (!path) return null;
   return (
     <svg width={path.W} height={path.H} viewBox={`0 0 ${path.W} ${path.H}`} aria-hidden="true" className="overflow-visible">
-      <path d={path.d} fill="none" stroke="#64748b" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={path.last[0]} cy={path.last[1]} r={2.75} fill={SPARK_STROKE[accent] ?? SPARK_STROKE.default} />
+      <path d={path.d} fill="none" stroke={THEME.inkFaint} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={path.last[0]} cy={path.last[1]} r={3} fill={SPARK_DOT[accent] ?? SPARK_DOT.default} stroke={THEME.bg} strokeWidth={1.5} />
     </svg>
   );
 }
 
 /**
- * KPI tile: label · value (+unit) · optional signed delta · optional sparkline.
+ * KPI tile: micro label · mono value (+unit at 0.7 em) · optional signed delta · sparkline.
  * Delta colour = direction × whether that direction is good (`goodDirection`, default "down"
  * because lower LST is better); an arrow icon + text always accompany the colour.
  * @param {{label: React.ReactNode, value: React.ReactNode, unit?: string, delta?: number,
@@ -65,7 +78,7 @@ export const StatTile = forwardRef(function StatTile(
     deltaLabel,
     goodDirection = "down",
     icon: Icon,
-    accent = "cyan",
+    accent = "signal",
     hint,
     sparkline,
     loading = false,
@@ -77,24 +90,15 @@ export const StatTile = forwardRef(function StatTile(
 ) {
   const hasDelta = typeof delta === "number" && Number.isFinite(delta);
   const direction = !hasDelta || delta === 0 ? "flat" : delta > 0 ? "up" : "down";
-  const tone =
-    direction === "flat" || goodDirection === "none"
-      ? "text-ink-muted"
-      : direction === goodDirection
-        ? "text-emerald"
-        : "text-rose";
+  const tone = direction === "flat" || goodDirection === "none" ? "text-ink-muted" : direction === goodDirection ? "text-ok" : "text-crit";
   const DeltaIcon = direction === "up" ? ArrowUpRight : direction === "down" ? ArrowDownRight : Minus;
   const valueSize = size === "lg" ? "text-3xl sm:text-4xl" : size === "sm" ? "text-lg" : "text-2xl";
 
   return (
-    <div
-      ref={ref}
-      className={cn("glass relative flex min-w-0 flex-col gap-1.5 rounded-xl border p-3.5 sm:p-4", className)}
-      {...props}
-    >
+    <div ref={ref} className={cn("glass relative flex min-w-0 flex-col gap-1.5 rounded-panel p-3.5 sm:p-4", className)} {...props}>
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-xs font-medium text-ink-muted">{label}</span>
-        {Icon && <Icon aria-hidden="true" className={cn("size-4 shrink-0", ACCENTS[accent] ?? ACCENTS.default)} />}
+        <span className="micro-label truncate">{label}</span>
+        {Icon && <Icon aria-hidden="true" className={cn("size-4 shrink-0", ACCENT_TEXT[accent] ?? ACCENT_TEXT.default)} />}
       </div>
       {loading ? (
         <Skeleton className="h-8 w-24" />

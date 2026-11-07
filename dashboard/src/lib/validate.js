@@ -11,6 +11,7 @@
 
 import { compileModel, checkModelAgainstPython, MODEL_FORMAT } from "./model.js";
 import { intervalContains, normalizeInterval } from "./uncertainty.js";
+import { validateV2 } from "../data/validateV2.js";
 
 export const CANONICAL_FEATURES = Object.freeze([
   "ndvi",
@@ -528,4 +529,24 @@ export function validateEpochs({ manifest, epochs } = {}) {
   const r = createReport();
   const epochsChecked = checkEpochEntries(epochEntries(epochs), manifest, featureNames, r);
   return { ok: r.errors.length === 0, errors: r.errors, warnings: r.warnings, epochsChecked };
+}
+
+// ---------------------------------------------------------------------------------------
+// v2 routing (SPEC §5.8: the dashboard loads schema 1.x and 2.0 bundles)
+// ---------------------------------------------------------------------------------------
+
+/** Major schema version of a manifest (1 for missing/legacy manifests). */
+export function manifestSchemaMajor(manifest) {
+  const major = Number.parseInt(String(manifest?.schema_version ?? "1").split(".")[0], 10);
+  return Number.isFinite(major) ? major : 1;
+}
+
+/**
+ * Validate a bundle of either schema: 1.x -> `validateBundle` (SPEC_v1 §4, unchanged), 2.x ->
+ * `validateV2` (SPEC §5; pass the decoded parts: timeline, cells, cubes, zones, xai, series,
+ * rasterIndex, assets). Results share the `{ok, errors, warnings}` core plus `schema`.
+ */
+export function validateAnyBundle(bundle = {}) {
+  if (manifestSchemaMajor(bundle.manifest) >= 2) return { ...validateV2(bundle), schema: "v2" };
+  return { ...validateBundle(bundle), schema: "v1" };
 }

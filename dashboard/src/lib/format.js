@@ -9,6 +9,9 @@
  * - Intl.NumberFormat instances are cached per option set (constructing them is slow).
  */
 
+/** Non-breaking space between a number and its unit. */
+const NBSP = String.fromCharCode(0xa0);
+
 export const MISSING = "\u2014";
 const MINUS = "\u2212";
 
@@ -131,4 +134,36 @@ export function featureLabel(manifest, name) {
 /** Feature metadata object from the manifest (or null). */
 export function featureMeta(manifest, name) {
   return manifest?.features?.find?.((f) => f.name === name) ?? null;
+}
+
+/** Interval in brackets with an en dash: fmtInterval([37.81, 40.2]) -> "[37.8–40.2]". */
+export function fmtInterval(range, dp = 1) {
+  if (!Array.isArray(range) || range.length !== 2 || !isNum(range[0]) || !isNum(range[1])) return MISSING;
+  return `[${fmt(range[0], dp)}–${fmt(range[1], dp)}]`;
+}
+
+/** Symmetric uncertainty: fmtPlusMinus(1.6) -> "±1.6 °C" (unit optional). */
+export function fmtPlusMinus(halfWidth, dp = 1, unit = "°C") {
+  if (!isNum(halfWidth)) return MISSING;
+  return `±${fmt(Math.abs(halfWidth), dp)}${unit ? NBSP + unit : ""}`;
+}
+
+/** Byte size for loader logs: fmtBytes(22_500) -> "22 KB", fmtBytes(610_000) -> "0.61 MB". */
+export function fmtBytes(bytes) {
+  if (!isNum(bytes) || bytes < 0) return MISSING;
+  if (bytes < 1000) return `${Math.round(bytes)} B`;
+  if (bytes < 1e6) return `${Math.round(bytes / 1000)} KB`;
+  return `${fmt(bytes / 1e6, 2)} MB`;
+}
+
+/** Duration in ms for loader logs: fmtMs(412) -> "412 ms", fmtMs(2310) -> "2.3 s". */
+export function fmtMs(ms) {
+  if (!isNum(ms) || ms < 0) return MISSING;
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${fmt(ms / 1000, 1)} s`;
+}
+
+/** SSP id -> label: fmtSsp("ssp245") -> "SSP2-4.5"; unknown ids are returned upper-cased. */
+export function fmtSsp(id) {
+  const m = /^ssp(\d)(\d)(\d)$/i.exec(String(id ?? "").trim());
+  return m ? `SSP${m[1]}-${m[2]}.${m[3]}` : String(id ?? "").toUpperCase();
 }

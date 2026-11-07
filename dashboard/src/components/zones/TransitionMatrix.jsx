@@ -14,7 +14,7 @@ import { ArrowRightLeft, Flame } from "lucide-react";
 import { cn } from "../../lib/cn.js";
 import { fmtInt, fmtPct, fmtSigned, isNum, MISSING } from "../../lib/format.js";
 import { Select } from "../ui/Select.jsx";
-import { defaultPair, HEAT_CORE_ID, transitionPairs, transitionStats } from "./zoneModel.js";
+import { defaultPair, HEAT_CORE_ID, transitionPairs, transitionStats, zoneDisplayName } from "./zoneModel.js";
 
 /** Cyan wash whose opacity follows the row share (0..1). */
 function cellBackground(pct) {
@@ -37,7 +37,12 @@ export function TransitionMatrix({ transitions, zoneList, year, cellArea }) {
     return <p className="py-6 text-center text-xs text-ink-muted">No zone transitions were exported (needs at least two epochs).</p>;
   }
 
-  const zoneAt = (i) => zoneList.find((z) => z.id === i) ?? { id: i, name: `Zone ${i}`, color: "#94a3b8" };
+  const found = (i) => zoneList.find((z) => z.id === i) ?? { id: i, name: `Zone ${i}`, color: "#94a3b8" };
+  // Every visible zone label uses the display name (D11); ids and colours stay canonical.
+  const zoneAt = (i) => {
+    const z = found(i);
+    return { ...z, name: zoneDisplayName(z) };
+  };
   const core = HEAT_CORE_ID;
   const coreNet = stats && stats.k > core ? stats.net[core] : null;
 

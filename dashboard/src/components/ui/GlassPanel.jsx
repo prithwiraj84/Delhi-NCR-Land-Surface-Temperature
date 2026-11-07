@@ -3,25 +3,28 @@ import { cva } from "class-variance-authority";
 import { cn } from "../../lib/cn.js";
 
 /**
- * Frosted-glass surface used for every card/panel. Translucent slate over the animated
- * background with a hairline border, inner highlight and optional neon edge glow.
+ * Glass surface for cards and panels (UI_SPEC §4.5): surface-1 @ 72 % + blur 12 px over the
+ * map, 1 px hairline, inset top highlight, radius 12. `variant="strong"` is the solid
+ * surface-2 fallback used for cards off the map, menus and during playback. Glow variants of
+ * v1 are kept as names but render a hairline accent ring only (glow budget = 3).
+ * For HUD corner brackets use <HudFrame> (or add `hud` to className).
  */
 // eslint-disable-next-line react-refresh/only-export-components -- shadcn convention: variants are reusable
-export const glassPanelVariants = cva("relative rounded-2xl border text-ink shadow-glass", {
+export const glassPanelVariants = cva("relative rounded-panel text-ink", {
   variants: {
     variant: {
       default: "glass",
       strong: "glass-strong",
-      subtle: "border-panel-border bg-panel/35 backdrop-blur-md",
-      outline: "border-panel-border bg-transparent",
+      subtle: "border border-hairline bg-surface-2/50",
+      outline: "border border-hairline bg-transparent",
     },
     glow: {
       none: "",
-      cyan: "shadow-glow-cyan border-cyan/30",
-      violet: "shadow-glow-violet border-violet/30",
-      emerald: "shadow-glow-emerald border-emerald/30",
-      rose: "shadow-glow-rose border-rose/30",
-      amber: "shadow-glow-amber border-amber/30",
+      cyan: "border-signal/35",
+      violet: "border-lunar/35",
+      emerald: "border-ok/35",
+      rose: "border-crit/35",
+      amber: "border-warn/40",
     },
     padding: {
       none: "p-0",
@@ -30,7 +33,7 @@ export const glassPanelVariants = cva("relative rounded-2xl border text-ink shad
       lg: "p-5 sm:p-7",
     },
     interactive: {
-      true: "transition-colors duration-200 hover:border-cyan/35 hover:bg-panel-hover/60",
+      true: "transition-colors duration-quick hover:border-hairline-strong",
       false: "",
     },
   },
