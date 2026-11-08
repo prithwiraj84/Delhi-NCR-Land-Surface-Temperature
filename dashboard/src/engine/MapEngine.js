@@ -609,6 +609,8 @@ export class MapEngine {
       // every run and the map would keep the first result).
       scenarioKey: v.layer === "whatif" ? (this.scenario ? String(this.scenario.runKey ?? this._seqFor(this.scenario)) : "none") : null,
       domainMode: v.domainMode ?? "fixed",
+      // false = projected frames without the VSUP fog (legend switch); part of the content key.
+      fog: v.uncertaintyFog !== false,
     };
   }
 

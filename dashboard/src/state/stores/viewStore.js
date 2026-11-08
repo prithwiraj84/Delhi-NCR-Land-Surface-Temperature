@@ -3,7 +3,7 @@
  *
  * Shape (binding): { route, layer, shapFeature, variable, renderMode, heightMode, quantile, lens,
  *                    analyst: {opacity, h3, labels, boundaries, hillshade}, motionPref, perfTier,
- *                    briefing: {active, step}, domainMode }
+ *                    briefing: {active, step}, domainMode, uncertaintyFog }
  *
  * - `layer` is the base layer id; the URL form `shap:<feature>` is accepted by `setLayer` and
  *   split into `layer = "shap"` + `shapFeature`.
@@ -11,6 +11,10 @@
  *   (applied by `configure` unless the user already chose one).
  * - `motionPref` ("system" | "full" | "reduced" | "off") persists in localStorage (try/catch:
  *   private windows and blocked storage must not break the app).
+ * - `uncertaintyFog` (default true): projected frames are drawn with the value-suppressing
+ *   uncertainty palette (VSUP). When every projected cell is in the widest tier (real bundles:
+ *   p5–p95 half-width ≈ 2.5–3 °C per cell), the fog hides the spatial pattern, so the legend
+ *   offers a switch to draw the p50 at full colour.
  * Every setter validates its input and returns false for values outside the vocabulary.
  */
 
@@ -63,6 +67,7 @@ function initialViewState() {
     perfTier: 0,
     briefing: Object.freeze({ active: false, step: 0 }),
     domainMode: "fixed",
+    uncertaintyFog: true,
   };
 }
 
@@ -163,6 +168,12 @@ export function viewStoreInitializer(set, get) {
     },
 
     setDomainMode: choose("domainMode", DOMAIN_MODES),
+    setUncertaintyFog(on) {
+      const value = Boolean(on);
+      if (get().uncertaintyFog !== value) set({ uncertaintyFog: value });
+      return true;
+    },
+    toggleUncertaintyFog: () => set({ uncertaintyFog: !get().uncertaintyFog }),
     reset: () => set(initialViewState()),
   };
 }

@@ -777,7 +777,11 @@ def _s12_series_entry(mode, scope):
                  "annual": {k: _s12_trend(v) for k, v in (bs.get("annual") or {}).items()}}
     ssp, decomp, budget, thr = {}, {}, {}, {}
     for s in _S12_SCEN:
-        ssp[s] = _s12_round_rows(PROJ_SERIES[mode][s].get(scope, []))
+        # A scope without cells (e.g. a district merged away in the boundary layer) has no section-11 rows: export
+        # every projection year with null quantiles, as its observed frames carry null means (SPEC §5.4).
+        ssp[s] = _s12_round_rows(PROJ_SERIES[mode][s].get(scope)
+                                 or [{"year": int(y), **{k: None for k in ("p05", "p25", "p50", "p75", "p95")}}
+                                     for y in _S12_PROJ])
         decomp[s], budget[s] = {}, {}
         for y in _S12_PROJ:
             d = ((PROJ_DECOMPOSITION[mode][s].get(y) or {}).get("by_scope") or {}).get(scope)

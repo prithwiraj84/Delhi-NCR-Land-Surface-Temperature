@@ -159,6 +159,18 @@ describe("viewStore", () => {
     expect(v.getState().briefing.active).toBe(false);
   });
 
+  it("uncertaintyFog defaults on, toggles, and resets", () => {
+    const v = createStore(viewStoreInitializer);
+    expect(v.getState().uncertaintyFog).toBe(true);
+    expect(v.getState().setUncertaintyFog(0)).toBe(true);
+    expect(v.getState().uncertaintyFog).toBe(false);
+    v.getState().toggleUncertaintyFog();
+    expect(v.getState().uncertaintyFog).toBe(true);
+    v.getState().setUncertaintyFog(false);
+    v.getState().reset();
+    expect(v.getState().uncertaintyFog).toBe(true);
+  });
+
   it("applies decision D2 (abs only for harmonised bundles) unless the user chose a variable", () => {
     const v = createStore(viewStoreInitializer);
     v.getState().configure({ harmonised: false });

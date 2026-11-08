@@ -15,7 +15,7 @@ import { configureAxe } from "vitest-axe";
 import * as matchers from "vitest-axe/matchers";
 import { createBundleStore } from "../../data/bundleStore.js";
 import { createFixtureFetch, createSynthV2 } from "../../data/fixtures/synthV2.js";
-import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataExists, publicDemoExists } from "../../lib/__tests__/testUtils.js";
+import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataIsV1, publicDemoExists } from "../../lib/__tests__/testUtils.js";
 import { DataProvider } from "../../state/DataContext.jsx";
 import { useSelectionStore } from "../../state/stores/selectionStore.js";
 import { useTimeStore } from "../../state/stores/timeStore.js";
@@ -260,7 +260,7 @@ suite("Control on the synthetic v2 fixture", async () => {
   return store;
 });
 
-if (publicDataExists("manifest.json")) {
+if (publicDataIsV1()) {
   suite(
     "Control on the REAL v1 bundle (public/data)",
     async () => {

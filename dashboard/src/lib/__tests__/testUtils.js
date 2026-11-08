@@ -54,6 +54,20 @@ export function publicDataExists(name) {
 }
 
 /**
+ * True when public/data holds a v1 (schema 1.x) bundle. The "real v1 bundle" suites assert v1
+ * behaviour (unharmonised levels, v1 metrics); since the v2 Kaggle runs replaced public/data they
+ * skip, and the real v2 bundle is checked by notebook/validate_bundle.py plus the browser smoke.
+ */
+export function publicDataIsV1() {
+  if (!publicDataExists("manifest.json")) return false;
+  try {
+    return !String(readJson(PUBLIC_DATA_DIR, "manifest.json").schema_version ?? "1").startsWith("2");
+  } catch (_error) {
+    return false;
+  }
+}
+
+/**
  * File name of a manifest-declared bundle file that exists on disk in `dir`, accepting both
  * the declared name and its plain/.gz sibling (so a test works before and after D3).
  */

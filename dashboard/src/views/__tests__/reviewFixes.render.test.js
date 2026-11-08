@@ -18,7 +18,7 @@ import { DataProvider, useData } from "../../state/DataContext.jsx";
 import { useSelectionStore } from "../../state/stores/selectionStore.js";
 import { useTimeStore } from "../../state/stores/timeStore.js";
 import { useViewStore } from "../../state/stores/viewStore.js";
-import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataExists, publicDemoExists } from "../../lib/__tests__/testUtils.js";
+import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataIsV1, publicDemoExists } from "../../lib/__tests__/testUtils.js";
 import { CellSummary } from "../control/inspector/CellSummary.jsx";
 import { FrameCard } from "../control/FrameCard.jsx";
 import { ThermalLegend } from "../control/ThermalLegend.jsx";
@@ -189,6 +189,24 @@ describe("legend renders the engine channel (T-F4-02)", () => {
     expect(pred.signed).toBe(false);
     expect(pred.domain).toEqual(timeline.domains.day.abs);
   });
+
+  it("projected LST: the uncertainty-shading switch hides the VSUP wedge when off and reports changes", async () => {
+    const spec = { kind: "continuous", title: "LST", ramp: "solar", domain: [30, 58], unit: "°C", signed: false, fixed: true };
+    const calls = [];
+    const on = await mount(h(ThermalLegend, { spec, mode: "day", vsup: true, fog: true, onFogChange: (v) => calls.push(v) }));
+    const sw = on.host.querySelector("[data-testid=fog-switch] [role=switch]");
+    expect(sw.getAttribute("aria-checked")).toBe("true");
+    expect(on.host.textContent).toMatch(/uncertainty \(p5–p95 half-width\)/);
+    await act(async () => sw.click());
+    expect(calls).toEqual([false]);
+    const off = await mount(h(ThermalLegend, { spec, mode: "day", vsup: true, fog: false, onFogChange: () => {} }));
+    expect(off.host.querySelector("[data-testid=fog-switch] [role=switch]").getAttribute("aria-checked")).toBe("false");
+    expect(off.host.textContent).not.toMatch(/uncertainty \(p5–p95 half-width\)/);
+    expect(off.host.textContent).toMatch(/Shading off/);
+    // Observed frames (no onFogChange): no switch.
+    const obs = await mount(h(ThermalLegend, { spec, mode: "day" }));
+    expect(obs.host.querySelector("[data-testid=fog-switch]")).toBeNull();
+  });
 });
 
 describe("FrameCard projected range follows the SSP (T-F4-07)", () => {
@@ -307,7 +325,7 @@ describe("zone display names and caveats (T-F4-18)", () => {
   });
 });
 
-describe.skipIf(!publicDataExists("manifest.json"))("real v1 bundle (public/data, read-only)", () => {
+describe.skipIf(!publicDataIsV1())("real v1 bundle (public/data, read-only)", () => {
   it("ledger: header from the first frame, no p50 column, Δ columns n/a (levels not harmonised)", async () => {
     const store = createBundleStore({ fetchImpl: createFsFetch(PUBLIC_DATA_DIR) });
     await store.getState().load({ source: { id: "data", baseUrl: "/data", explicit: true, reason: "test" } });

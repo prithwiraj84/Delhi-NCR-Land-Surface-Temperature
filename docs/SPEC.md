@@ -764,7 +764,9 @@ null) next to the canonical id/name/color (§1.5). Observed frame entries may ca
 ```
 Satellite annual series per mode: day → `modis_terra_day` (sensor "MODIS Terra", drift flags); night →
 `modis_aqua_night` + `viirs_night_cal`. Zone scopes exist only for their own mode. Frame rows carry an optional
-`coverage` (finite cells / ROI cells of the scope, 0–1, 4 dp; §4.7). Decomposition rows are `{climate, land, total,
+`coverage` (finite cells / ROI cells of the scope, 0–1, 4 dp; §4.7). A scope without cells (a district merged away
+in the boundary layer) keeps every frame row (`mean` null, `n_cells` 0) and every `ssp` year with null quantiles;
+its decomposition and budget are empty. Decomposition rows are `{climate, land, total,
 baseline_c}` at 2 dp with `total = p50 − baseline_c` (the scope's weather-normalised 2025 baseline, §4.10); readers
 must accept rows without `baseline_c` (older bundles: then `total` was relative to `L_base`). The top level also
 carries `baseline_level_c` = `{mode: L_base}` (NCR weather-normalised baseline, §4.10).

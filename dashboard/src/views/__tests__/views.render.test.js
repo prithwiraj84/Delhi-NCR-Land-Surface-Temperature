@@ -21,7 +21,7 @@ import { DataProvider } from "../../state/DataContext.jsx";
 import { useSelectionStore } from "../../state/stores/selectionStore.js";
 import { useTimeStore } from "../../state/stores/timeStore.js";
 import { useViewStore } from "../../state/stores/viewStore.js";
-import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataExists, publicDemoExists } from "../../lib/__tests__/testUtils.js";
+import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataIsV1, publicDemoExists } from "../../lib/__tests__/testUtils.js";
 import { TimelineView } from "../timeline/TimelineView.jsx";
 import { DriversView } from "../drivers/DriversView.jsx";
 import { ZonesView } from "../zones/ZonesView.jsx";
@@ -116,7 +116,7 @@ suite("synthetic v2 fixture", async () => {
   return store;
 });
 
-if (publicDataExists("manifest.json")) {
+if (publicDataIsV1()) {
   suite(
     "real v1 bundle (public/data)",
     async () => {

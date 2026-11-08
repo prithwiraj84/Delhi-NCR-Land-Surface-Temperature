@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { validateBundle, validateEpochs, CANONICAL_FEATURES } from "../validate.js";
 import { prepareEpoch } from "../data.js";
-import { existingBundleFile, fixture, publicDataExists, readJson, PUBLIC_DATA_DIR } from "./testUtils.js";
+import { existingBundleFile, fixture, publicDataIsV1, readJson, PUBLIC_DATA_DIR } from "./testUtils.js";
 
 /** Fresh deep copy of the whole fixture bundle (tests mutate it freely). */
 function fixtureBundle() {
@@ -160,7 +160,7 @@ describe("validateBundle detects contract violations", () => {
   });
 });
 
-describe.skipIf(!publicDataExists("manifest.json"))("real bundle: public/data", () => {
+describe.skipIf(!publicDataIsV1())("real bundle: public/data", () => {
   it("satisfies the SPEC §4 contract", () => {
     const manifest = readJson(PUBLIC_DATA_DIR, "manifest.json");
     // Declared names may be .json.gz (SPEC §4, gzip level 9) or plain .json; both are read.

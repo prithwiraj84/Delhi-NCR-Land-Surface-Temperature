@@ -14,7 +14,7 @@
  * cross-fades (400 ms, ticks slide 4 px) when the ramp or domain changes (§5.2 E).
  * `ThermalLegendLive` binds it to the stores and hooks; on mobile it collapses ("legend ▾").
  */
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useStore } from "zustand";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
@@ -22,6 +22,7 @@ import { rampGradientCss } from "../../design/ramps.js";
 import { driverPalette } from "../../design/tokens.js";
 import { useMotionLevel } from "../../design/useMotionLevel.js";
 import { HudFrame } from "../../components/ui/HudFrame.jsx";
+import { Switch } from "../../components/ui/Switch.jsx";
 import { ZoneLabelCaveat } from "../../components/zones/ZoneLabelCaveat.jsx";
 import { useDomain, useXai } from "../../data/hooks.js";
 import { cn } from "../../lib/cn.js";
@@ -51,11 +52,15 @@ function ticksFor(domain, signed) {
 }
 
 /**
+ * `onFogChange` (projected frames only) adds the "uncertainty shading" switch: on = the VSUP
+ * wedge and fogged cells, off = full-colour p50 with a note that the shading is off.
  * @param {{spec: ReturnType<typeof legendSpec>, mode: string, heightMode?: string, vsup?: boolean,
- *          aoa?: boolean, compact?: boolean, className?: string}} props
+ *          aoa?: boolean, fog?: boolean, onFogChange?: (on: boolean) => void, compact?: boolean,
+ *          className?: string}} props
  */
-export function ThermalLegend({ spec, mode, heightMode = "anom", vsup = false, aoa = false, compact = false, className }) {
+export function ThermalLegend({ spec, mode, heightMode = "anom", vsup = false, aoa = false, fog = true, onFogChange, compact = false, className }) {
   const level = useMotionLevel();
+  const fogId = useId();
   const [open, setOpen] = useState(!compact);
   const animate = level === "full";
   const key = spec.kind === "continuous" ? `${spec.ramp}|${spec.domain?.join(",")}` : `${spec.kind}|${spec.title}`;
@@ -141,7 +146,18 @@ export function ThermalLegend({ spec, mode, heightMode = "anom", vsup = false, a
               </p>
             )}
             {heightText && <p className="mt-1 font-mono text-[11px] text-ink-muted">{heightText}</p>}
-            {vsup && spec.kind === "continuous" && spec.ramp && <VsupWedge ramp={spec.ramp} className="mt-1.5" />}
+            {onFogChange && spec.kind === "continuous" && (
+              <div className="mt-1.5 flex items-center justify-between gap-2" data-testid="fog-switch">
+                <label htmlFor={fogId} className="cursor-pointer select-none text-[11px] text-ink-muted">
+                  uncertainty shading
+                </label>
+                <Switch id={fogId} checked={fog} onCheckedChange={(on) => onFogChange(Boolean(on))} />
+              </div>
+            )}
+            {vsup && fog && spec.kind === "continuous" && spec.ramp && <VsupWedge ramp={spec.ramp} className="mt-1.5" />}
+            {onFogChange && !fog && spec.kind === "continuous" && (
+              <p className="mt-1 text-[11px] leading-snug text-ink-faint">Shading off: colours show the p50 only, at full precision. Its p5–p95 spread is on the Uncertainty layer.</p>
+            )}
             {aoa && spec.kind !== "aoa" && spec.kind !== "unavailable" && (
               <p className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-muted">
                 <HatchSwatch /> outside AOA (hatched)
@@ -161,6 +177,8 @@ export function ThermalLegendLive({ compact = false, className }) {
   const domainMode = useViewStore((s) => s.domainMode);
   const heightMode = useViewStore((s) => s.heightMode);
   const shapFeature = useViewStore((s) => s.shapFeature);
+  const fog = useViewStore((s) => s.uncertaintyFog !== false);
+  const setFog = useViewStore((s) => s.setUncertaintyFog);
   const mode = useTimeStore((s) => s.mode ?? "day");
   const year = useTimeStore((s) => s.year);
   const { timeline, info } = useLiveFrame({ withStats: false });
@@ -192,7 +210,20 @@ export function ThermalLegendLive({ compact = false, className }) {
   );
   const spec = useMemo(() => legendFromEngine(baseSpec, engineLegend, { layer, mode, variable }), [baseSpec, engineLegend, layer, mode, variable]);
   const projected = info?.tier === "projected" || info?.kind === "projected";
-  return <ThermalLegend spec={spec} mode={mode} heightMode={heightMode} vsup={projected || layer === "unc"} aoa={timeline?.schema !== "v1" && (layer === "aoa" || projected)} compact={compact} className={className} />;
+  const fogLayer = projected && layer === "lst";
+  return (
+    <ThermalLegend
+      spec={spec}
+      mode={mode}
+      heightMode={heightMode}
+      vsup={projected || layer === "unc"}
+      fog={!fogLayer || fog}
+      onFogChange={fogLayer ? setFog : undefined}
+      aoa={timeline?.schema !== "v1" && (layer === "aoa" || projected)}
+      compact={compact}
+      className={className}
+    />
+  );
 }
 
 export default ThermalLegendLive;

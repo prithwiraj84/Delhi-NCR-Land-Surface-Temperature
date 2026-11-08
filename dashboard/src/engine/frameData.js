@@ -55,7 +55,10 @@ const unavailable = (reason) => ({ status: "unavailable", reason });
 
 /** Content key of a description (everything except the year). */
 export function contentKey(desc) {
-  return [desc.layer, desc.variable, desc.q, desc.mode, desc.ssp, desc.shapFeature ?? "", desc.deltaRef ?? "", desc.scenarioKey ?? "", desc.domainMode ?? "fixed"].join("|");
+  const key = [desc.layer, desc.variable, desc.q, desc.mode, desc.ssp, desc.shapFeature ?? "", desc.deltaRef ?? "", desc.scenarioKey ?? "", desc.domainMode ?? "fixed"].join("|");
+  // Uncertainty fog off (legend switch): a separate content, so the map cross-fades to it and no
+  // cached fogged frame is reused. The default (fog on) keeps the historical key.
+  return desc.fog === false ? `${key}|nofog` : key;
 }
 
 /**
@@ -274,7 +277,7 @@ export function createFrameSource({ bundle, onUpdate = null }) {
     const { cube, f, series } = c;
     const values = c.values;
     const projected = series !== "obs";
-    const vsup = projected && q !== "spread" ? vsupCodes(cube, f) : null;
+    const vsup = projected && q !== "spread" && desc.fog !== false ? vsupCodes(cube, f) : null;
     let aoa = cubeAoaOutside(cube, f);
     if (aoa && cube.columns.flags && !cube.columns.aoa_out) for (let i = 0; i < aoa.length; i += 1) aoa[i] &= FLAG_OUTSIDE_AOA;
     // The frame level that the anomaly variable AND the 250 m raster anomaly subtract (T-F4-21).

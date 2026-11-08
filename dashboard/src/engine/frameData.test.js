@@ -43,6 +43,19 @@ describe("frame resolver on the synthetic v2 bundle", () => {
     expect(Array.from(proj.frame.vsup).every((c) => c >= 1 && c <= 4)).toBe(true);
   });
 
+  it("drops the VSUP codes of projected frames when the uncertainty fog is off (separate content key)", async () => {
+    const src = createFrameSource({ bundle });
+    const off = { ...base, fog: false };
+    expect(contentKey(off)).not.toBe(contentKey(base));
+    expect(contentKey({ ...base, fog: true })).toBe(contentKey(base));
+    const fogged = await resolve(src, base, 2040);
+    const clear = await resolve(src, off, 2040);
+    expect(fogged.frame.vsup).toBeInstanceOf(Uint8Array);
+    expect(clear.status).toBe("ready");
+    expect(clear.frame.vsup).toBeNull();
+    expect(Array.from(clear.frame.values)).toEqual(Array.from(fogged.frame.values));
+  });
+
   it("keys observed frames by cube series so every SSP shares them, projected frames by SSP", async () => {
     const src = createFrameSource({ bundle });
     const a = await resolve(src, base, 2010);
