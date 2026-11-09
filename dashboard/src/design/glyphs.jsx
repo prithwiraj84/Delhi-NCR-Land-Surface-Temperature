@@ -22,12 +22,40 @@ const base = (size, rest) => ({
   ...rest,
 });
 
-/** Brand mark ◈: a diamond with a centred core (registration target). */
-export function BrandGlyph({ size = 16, ...rest }) {
+/**
+ * Brand mark (v3): a rounded tile in the violet -> blue -> cyan brand gradient carrying three
+ * nested heat isolines around a hot core - a contour map in miniature. Self-coloured (ignores
+ * currentColor); `mono` draws it in currentColor for forced-colour / single-ink contexts.
+ */
+export function BrandGlyph({ size = 16, mono = false, className, ...rest }) {
+  const gid = `brand-${useId().replace(/:/g, "")}`;
   return (
-    <svg {...base(size, rest)}>
-      <path d="M8 1.5 14.5 8 8 14.5 1.5 8Z" />
-      <path d="M8 5.5 10.5 8 8 10.5 5.5 8Z" fill="currentColor" stroke="none" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      className={className}
+      aria-hidden={rest["aria-label"] ? undefined : true}
+      role={rest["aria-label"] ? "img" : undefined}
+      focusable="false"
+      {...rest}
+    >
+      {!mono && (
+        <defs>
+          <linearGradient id={gid} x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#A78BFA" />
+            <stop offset="0.5" stopColor="#6D8DFF" />
+            <stop offset="1" stopColor="#45E0FF" />
+          </linearGradient>
+        </defs>
+      )}
+      <rect x="1" y="1" width="22" height="22" rx="6.5" fill={mono ? "none" : `url(#${gid})`} stroke={mono ? "currentColor" : "none"} strokeWidth="1.5" />
+      <g stroke={mono ? "currentColor" : "#0A0B10"} strokeWidth="1.6" strokeLinecap="round" fill="none">
+        <path d="M5.2 13.6c.4-4.3 3.5-7.4 7.4-7.4 3.6 0 6.2 2.6 6.2 5.8" opacity="0.55" />
+        <path d="M8.2 14c.3-2.6 2.1-4.5 4.4-4.5 2.1 0 3.6 1.5 3.6 3.4" opacity="0.8" />
+      </g>
+      <circle cx="12.3" cy="14.3" r="2" fill={mono ? "currentColor" : "#0A0B10"} />
     </svg>
   );
 }

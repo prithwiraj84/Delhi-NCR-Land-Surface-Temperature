@@ -114,21 +114,18 @@ function AcquisitionView({ looping }) {
   );
 }
 
+const DOT = { ok: "bg-ok", error: "bg-crit", missing: "bg-warn", loading: "bg-brand-c animate-live-pulse", queued: "bg-ink-faint/50" };
+
 function LogLines({ lines }) {
   return (
-    <ul className="space-y-1 font-mono text-[12px] leading-5">
+    <ul className="grid gap-x-6 gap-y-1.5 text-[12.5px] leading-5 sm:grid-cols-2">
       {lines.map((line) => (
-        <li key={line.file} className="flex min-w-0 items-center gap-2">
-          <span aria-hidden="true" className="text-ink-faint">
-            &gt;
-          </span>
-          <span className="min-w-0 shrink truncate text-ink">{line.label}</span>
-          <span aria-hidden="true" className="min-w-4 flex-1 overflow-hidden whitespace-nowrap text-ink-faint/60">
-            ..........................................................
-          </span>
+        <li key={line.file} className="flex min-w-0 items-center gap-2.5">
+          <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", DOT[line.status] ?? DOT.queued)} />
+          <span className="min-w-0 flex-1 truncate text-ink-muted">{line.label}</span>
           {line.status === "loading" && line.fraction !== null && (
-            <span aria-hidden="true" className="relative hidden h-1.5 w-20 overflow-hidden rounded-full bg-surface-3 sm:block">
-              <span className="absolute inset-y-0 left-0 bg-signal" style={{ width: `${Math.round(line.fraction * 100)}%` }} />
+            <span aria-hidden="true" className="relative hidden h-1 w-12 overflow-hidden rounded-full bg-surface-3 sm:block">
+              <span className="absolute inset-y-0 left-0 bg-brand-c" style={{ width: `${Math.round(line.fraction * 100)}%` }} />
             </span>
           )}
           <span
@@ -207,23 +204,27 @@ export function BootSequence({ status, progress, meta, onDone }) {
   const stateLabel = playing ? (ready ? "sweeping" : "waiting") : "static";
 
   return (
-    <div className="fixed inset-0 z-boot grid place-items-center bg-void px-4" data-boot-state={stateLabel}>
+    <div
+      className="fixed inset-0 z-boot grid place-items-center bg-void px-4"
+      style={{ backgroundImage: "radial-gradient(60% 50% at 50% 0%, rgba(109, 141, 255, 0.12), transparent 70%)" }}
+      data-boot-state={stateLabel}
+    >
       <div
         role="dialog"
         aria-modal="false"
         aria-labelledby="boot-title"
         aria-describedby="boot-status"
-        className={cn("hud glass-strong w-full rounded-panel p-4 sm:p-5", playing ? "max-w-3xl" : "max-w-lg")}
+        className={cn("card w-full p-5 sm:p-6", playing ? "max-w-3xl" : "max-w-lg")}
       >
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h1 id="boot-title" className="flex items-center gap-2 font-display text-sm font-semibold tracking-[0.12em] text-ink-strong">
-            <BrandGlyph className="text-signal" />
-            NCR THERMAL/OPS
+          <h1 id="boot-title" className="flex items-center gap-2.5 font-display text-[15px] font-semibold text-ink-strong">
+            <BrandGlyph size={24} />
+            Delhi NCR Heat Atlas
           </h1>
-          <span className="micro-label">{playing ? "Acquisition · pass 01/01" : "Loading bundle"}</span>
+          <span className="micro-label">{playing ? "Reading the satellite archive" : "Loading data"}</span>
         </div>
         {playing && (
-          <div className="mb-3 overflow-hidden rounded-md border border-hairline bg-void">
+          <div className="mb-4 overflow-hidden rounded-xl border border-hairline bg-void">
             <AcquisitionView looping={!ready} />
           </div>
         )}
@@ -234,9 +235,9 @@ export function BootSequence({ status, progress, meta, onDone }) {
           aria-valuemax={100}
           aria-valuenow={pct ?? undefined}
           aria-valuetext={pct === null ? "Loading" : `${pct} percent`}
-          className="mb-3 h-0.5 w-full overflow-hidden rounded-full bg-surface-3"
+          className="mb-4 h-1 w-full overflow-hidden rounded-full bg-surface-3"
         >
-          <div className="h-full bg-signal transition-[width] duration-quick" style={{ width: `${pct ?? 8}%` }} />
+          <div className="h-full rounded-full bg-[image:var(--brand-gradient)] transition-[width] duration-base ease-out" style={{ width: `${pct ?? 8}%` }} />
         </div>
         <LogLines lines={lines} />
         <p id="boot-status" className="sr-only" aria-live="polite">
@@ -248,9 +249,9 @@ export function BootSequence({ status, progress, meta, onDone }) {
             <button
               type="button"
               onClick={() => setSkipped(true)}
-              className="focus-ring inline-flex h-7 items-center gap-2 rounded-md border border-control px-2.5 font-mono text-[11px] uppercase tracking-[0.1em] text-ink"
+              className="btn btn-secondary h-8 px-3.5 text-[12.5px]"
             >
-              Skip <kbd className="text-ink-muted">any key</kbd>
+              Skip intro <kbd className="font-mono text-[11px] text-ink-faint">any key</kbd>
             </button>
           )}
         </div>

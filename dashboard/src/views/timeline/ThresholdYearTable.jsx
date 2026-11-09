@@ -27,7 +27,7 @@ export function ThresholdYearTable({ series, mode, ssps, selectedScope, reason =
             </caption>
             <thead className="sticky top-0 bg-surface-2">
               <tr>
-                <th scope="col" rowSpan={2} className="border-b border-hairline px-2 py-1 text-left font-mono text-[11px] font-medium uppercase text-ink-faint">
+                <th scope="col" rowSpan={2} className="border-b border-hairline px-2 py-1 text-left font-sans text-[11px] font-medium text-ink-faint">
                   Scope
                 </th>
                 {ssps.map((id) => (

@@ -349,8 +349,10 @@ export function startUrlSync(stores, { win = typeof window !== "undefined" ? win
     if (next === win.location.hash && win.history?.state?.ncrUrlSync) return;
     try {
       // The state marker tells popstate that this entry holds a COMPLETE param set.
-      if (mode === "push") win.history.pushState(OWN_STATE, "", next);
-      else win.history.replaceState(OWN_STATE, "", next);
+      // A fresh object each time: Next.js App Router copies its own keys (__NA, the router tree)
+      // INTO the state object it is given, which throws on a frozen one.
+      if (mode === "push") win.history.pushState({ ...OWN_STATE }, "", next);
+      else win.history.replaceState({ ...OWN_STATE }, "", next);
     } catch (error) {
       // Some embedded contexts (sandboxed iframes, file://) forbid history writes.
       console.warn("[urlSync] could not write the URL:", error);

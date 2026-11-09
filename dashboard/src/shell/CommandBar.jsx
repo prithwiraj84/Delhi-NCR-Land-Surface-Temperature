@@ -1,6 +1,6 @@
 /**
  * Command bar (52 px, UI_SPEC §3.2):
- *   ◈ NCR THERMAL/OPS │ ⌕ search… Ctrl K │ [Day | Night | DTR] │ SSP2-4.5 ▾ │ ● REAL·GEE │ caveats │ ✓ │ perf │ ⛭
+ *   ◈ NCR Heat Atlas │ ⌕ search… Ctrl K │ [Day | Night | DTR] │ SSP2-4.5 ▾ │ ● REAL·GEE │ caveats │ ✓ │ perf │ ⛭
  *
  * Mode and SSP are bound to timeStore (setMode / setSsp-or-setState). Unavailable modes stay
  * visible with their reason (v1 bundles: "rerun notebook v2"); the SSP picker notes that
@@ -12,6 +12,7 @@ import { BrandGlyph, SunMoonGlyph } from "../design/glyphs.jsx";
 import { color } from "../design/tokens.js";
 import { cn } from "../lib/cn.js";
 import { fmtSsp } from "../lib/format.js";
+import { appEnv } from "../lib/env.js";
 import { useData } from "../state/DataContext.jsx";
 import { Badge } from "../components/ui/Badge.jsx";
 import { IconTip } from "../components/ui/InfoTip.jsx";
@@ -21,7 +22,7 @@ import { formatGeneratedDate } from "../components/common/dataNotes.js";
 import { runAction } from "./actions.js";
 import { announce } from "./announcer.js";
 import { useBundleMeta } from "./bundleMeta.js";
-import { callAction, useTimeStore, useViewStore } from "./deps.js";
+import { callAction, useTimeStore } from "./deps.js";
 import { PerfChip } from "./PerfChip.jsx";
 import { SettingsMenu } from "./SettingsMenu.jsx";
 import { showToast } from "./toasts.js";
@@ -49,7 +50,7 @@ function DataModeChip({ dataMode, generatedAt, schema }) {
       size="sm"
       title={`Static Google Earth Engine export${date ? ` generated ${date}` : ""}; schema ${schema ?? "?"}. It does not update live.`}
     >
-      Real · {String(dataMode).toUpperCase()}
+      Real data · {String(dataMode) === "gee" ? "Earth Engine" : String(dataMode).toUpperCase()}
     </Badge>
   );
 }
@@ -104,7 +105,7 @@ function SspPicker({ meta, compact }) {
           announce(`Scenario ${fmtSsp(next)}`);
         }}
         className={cn(
-          "focus-ring h-8 cursor-pointer appearance-none rounded-md border border-control bg-surface-3 pl-2.5 pr-7 font-mono text-[12px] text-ink",
+          "focus-ring h-8 cursor-pointer appearance-none rounded-full border border-hairline-strong bg-surface-3 pl-3 pr-7 text-[12.5px] font-medium text-ink transition-colors duration-quick hover:border-control",
           "disabled:cursor-not-allowed disabled:opacity-50",
           historical && !none && "text-ink-muted",
         )}
@@ -128,22 +129,14 @@ export function CommandBar() {
   const ready = status === "ready";
 
   return (
-    <header className="grain relative z-chrome flex h-[52px] shrink-0 items-center gap-2 border-b border-hairline bg-surface-2 px-3 sm:gap-3 sm:px-4">
-      {/* A plain hash link would navigate to "#/control" without its params; the click routes in
-          place instead (mode, SSP, layer and pin are kept). The href stays for open-in-new-tab. */}
-      <a
-        href="#/control"
-        onClick={(e) => {
-          if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-          e.preventDefault();
-          useViewStore.getState().setRoute("control");
-        }}
-        className="focus-ring flex shrink-0 items-center gap-2 rounded-md pr-1"
-        aria-label="NCR Thermal Ops — Control"
-      >
-        <BrandGlyph size={18} className="text-signal" />
-        <span className="hidden font-display text-[13px] font-semibold tracking-[0.14em] text-ink-strong md:inline">NCR THERMAL/OPS</span>
-        <span className="hidden font-display text-[13px] font-semibold tracking-[0.14em] text-ink-strong min-[400px]:inline md:hidden">NCR/OPS</span>
+    <header className="relative z-chrome flex h-[52px] shrink-0 items-center gap-2 border-b border-hairline bg-bg/90 px-3 backdrop-blur-xl sm:gap-3 sm:px-4">
+      {/* The brand returns to the site home page (the explorer state stays in the URL hash). */}
+      <a href={appEnv.BASE_URL} className="focus-ring flex shrink-0 items-center gap-2.5 rounded-lg pr-1" aria-label="Delhi NCR Heat Atlas home page">
+        <BrandGlyph size={24} />
+        <span className="hidden flex-col leading-none md:flex">
+          <span className="font-display text-[14px] font-semibold tracking-[-0.01em] text-ink-strong">NCR Heat Atlas</span>
+          <span className="mt-0.5 text-[11px] font-medium text-ink-faint">Explorer</span>
+        </span>
       </a>
       <span aria-hidden="true" className="hidden h-6 w-px bg-hairline sm:block" />
 
@@ -152,11 +145,11 @@ export function CommandBar() {
         onClick={openPalette}
         aria-keyshortcuts="Control+K Meta+K"
         aria-label="Open command palette: district, cell, year, command"
-        className="focus-ring hidden h-8 min-w-0 max-w-sm flex-1 items-center gap-2 rounded-md border border-control bg-surface-3 px-2.5 text-left text-[13px] text-ink-faint hover:border-ink-faint xl:flex xl:min-w-[11rem]"
+        className="focus-ring hidden h-9 min-w-0 max-w-sm flex-1 items-center gap-2 rounded-full border border-hairline-strong bg-white/[0.03] px-3.5 text-left text-[13px] text-ink-faint transition-colors duration-quick hover:border-control hover:text-ink-muted xl:flex xl:min-w-[13rem]"
       >
         <Search aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.5} />
-        <span className="min-w-0 flex-1 truncate">District, cell, year, command…</span>
-        <kbd className="shrink-0 whitespace-nowrap rounded border border-control px-1 font-mono text-[11px] text-ink-muted">Ctrl K</kbd>
+        <span className="min-w-0 flex-1 truncate">Search districts, years, actions…</span>
+        <kbd className="shrink-0 whitespace-nowrap rounded-md border border-hairline-strong bg-surface-3 px-1.5 font-mono text-[11px] text-ink-muted">Ctrl K</kbd>
       </button>
       <IconTip label="Command palette (Ctrl K)">
         <button

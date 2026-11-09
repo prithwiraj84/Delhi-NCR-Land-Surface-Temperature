@@ -53,7 +53,7 @@ function MiniLine({ rows, chosenK, color, title, format, hoverK, onHover }) {
 
   return (
     <div ref={ref} className="relative min-w-0">
-      <h4 className="mb-1 text-[11px] uppercase tracking-wider text-ink-faint">{title}</h4>
+      <h4 className="mb-1 text-[11px] text-ink-faint">{title}</h4>
       <svg width={width} height={HEIGHT} className="block overflow-visible" role="img"
         aria-label={`${title} by number of clusters K: ${valid.map((r) => `K ${r.k} ${format(r.value)}`).join(", ")}${
           isNum(chosenK) ? `. Chosen K = ${chosenK}.` : ""

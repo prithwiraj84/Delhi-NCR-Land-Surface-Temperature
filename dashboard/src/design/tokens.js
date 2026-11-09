@@ -1,5 +1,10 @@
 /**
- * NCR THERMAL/OPS v2 design tokens: the SINGLE source of truth (UI_SPEC_v2 §4.1).
+ * Delhi NCR Heat Atlas design tokens: the SINGLE source of truth (UI_SPEC_v2 §4.1).
+ *
+ * v3 ("dark AI lab", 2026-11): the chrome moved from navy HUD to neutral graphite with a
+ * violet -> blue -> cyan brand gradient (brandA/B/C), Geist type and softer, larger radii.
+ * Data colours (ramps, SSP, solar/lunar, zones, driver palette, signal) are unchanged: they
+ * carry the accessibility and colour-blind guarantees below.
  *
  * Consumers
  *   - tailwind.config.js        -> utility classes (bg-surface-2, text-ink-faint, text-solar …)
@@ -36,19 +41,19 @@
 
 /** Surfaces, ink, accents, status, overlays. Hex unless an alpha is part of the token. */
 export const color = Object.freeze({
-  void: "#05070D",
-  bg: "#070B14",
-  surface1: "#0C1220", // used at 72 % + blur 12 px + saturate 140 % (glass over the map)
+  void: "#05060A",
+  bg: "#08090D",
+  surface1: "#0E1016", // used at 72 % + blur 12 px + saturate 140 % (glass over the map)
   surface1Alpha: 0.72,
-  surface2: "#111A2B",
-  surface3: "#18233A",
-  hairline: "rgba(160, 185, 225, 0.14)",
-  hairlineStrong: "rgba(160, 185, 225, 0.28)",
-  controlBorder: "#63718A",
-  inkStrong: "#F4F7FB",
-  ink: "#DFE7F2",
-  inkMuted: "#A3B0C4",
-  inkFaint: "#8794AA",
+  surface2: "#12141B",
+  surface3: "#191C25",
+  hairline: "rgba(226, 232, 255, 0.08)",
+  hairlineStrong: "rgba(226, 232, 255, 0.16)",
+  controlBorder: "#6B7286",
+  inkStrong: "#F7F8FB",
+  ink: "#E5E8EF",
+  inkMuted: "#A7AEBC",
+  inkFaint: "#8E95A4",
   signal: "#45E0FF",
   reticle: "#F4F7FB",
   solar: "#FFE27A",
@@ -62,6 +67,10 @@ export const color = Object.freeze({
   crit: "#FF6B6B",
   fog: "rgba(140, 160, 200, 0.10)",
   hatch: "rgba(223, 231, 242, 0.22)",
+  /** Brand gradient (chrome only, never data): violet -> blue -> cyan. */
+  brandA: "#A78BFA",
+  brandB: "#6D8DFF",
+  brandC: "#45E0FF",
 });
 
 /**
@@ -72,7 +81,7 @@ export const color = Object.freeze({
 export const surfaces = Object.freeze({
   void: color.void,
   bg: color.bg,
-  surface1: "#0A0F1B", // #0C1220 @ 72 % over #05070D
+  surface1: "#0B0D13", // #0E1016 @ 72 % over #05060A
   surface2: color.surface2,
   surface3: color.surface3,
 });
@@ -191,11 +200,11 @@ export const driverFamilies = Object.freeze({
   meteorology: 4,
 });
 
-/** Font stacks (self-hosted variable fonts from @fontsource-variable, see src/main.jsx). */
+/** Font stacks (self-hosted Geist variable fonts from @fontsource-variable, see app/layout.jsx). */
 export const font = Object.freeze({
-  display: Object.freeze(['"Space Grotesk Variable"', '"Space Grotesk"', '"Inter Variable"', "system-ui", "sans-serif"]),
-  sans: Object.freeze(['"Inter Variable"', "Inter", "system-ui", "-apple-system", '"Segoe UI"', "sans-serif"]),
-  mono: Object.freeze(['"JetBrains Mono Variable"', '"JetBrains Mono"', "ui-monospace", "SFMono-Regular", "Menlo", "monospace"]),
+  display: Object.freeze(['"Geist Variable"', "Geist", "system-ui", "-apple-system", '"Segoe UI"', "sans-serif"]),
+  sans: Object.freeze(['"Geist Variable"', "Geist", "system-ui", "-apple-system", '"Segoe UI"', "sans-serif"]),
+  mono: Object.freeze(['"Geist Mono Variable"', '"Geist Mono"', "ui-monospace", "SFMono-Regular", "Menlo", "monospace"]),
 });
 
 /** Type scale (px / line-height) for the roles of UI_SPEC §4.3. */
@@ -207,12 +216,12 @@ export const type = Object.freeze({
   body: Object.freeze({ size: 14, line: 21 / 14, weight: 400 }),
   label: Object.freeze({ size: 13, line: 1.3, weight: 500 }),
   value: Object.freeze({ size: 17, line: 1.2, weight: 600 }),
-  micro: Object.freeze({ size: 11, line: 1.3, tracking: "0.14em", weight: 500 }), // never < 11 px
+  micro: Object.freeze({ size: 12, line: 1.3, tracking: "0.01em", weight: 500 }), // never < 11 px; sentence case in v3
   axis: Object.freeze({ size: 11, line: 1.2, weight: 400 }),
 });
 
 /** Radii, layout metrics (px). */
-export const radius = Object.freeze({ sm: 6, md: 8, panel: 12, pill: 999 });
+export const radius = Object.freeze({ sm: 8, md: 10, panel: 16, pill: 999 });
 export const layout = Object.freeze({
   commandBar: 52,
   telemetry: 44,
@@ -231,7 +240,7 @@ export const layout = Object.freeze({
 
 /** Shadows. Glow budget = 3 (playhead, selection reticle, one alert): only `glowSignal` and `glowAlert` glow. */
 export const shadow = Object.freeze({
-  panel: "0 10px 30px -12px rgba(2, 4, 10, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.04)",
+  panel: "0 0 0 1px rgba(0, 0, 0, 0.35), 0 12px 32px -16px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
   glowSignal: "0 0 12px rgba(69, 224, 255, 0.55)",
   glowAlert: "0 0 12px rgba(255, 107, 107, 0.45)",
   /** Hairline rings that replace v1's shadow-glow-* (kept as class names, no glow). */
@@ -249,7 +258,7 @@ export const shadow = Object.freeze({
  */
 export const legacy = Object.freeze({
   bg: Object.freeze({ DEFAULT: color.bg, deep: color.void, raised: color.surface2 }),
-  panel: Object.freeze({ DEFAULT: color.surface3, border: color.hairline, hover: "#1F2C47" }),
+  panel: Object.freeze({ DEFAULT: color.surface3, border: color.hairline, hover: "#202431" }),
   cyan: Object.freeze({ DEFAULT: color.signal, soft: "#8BEBFF", deep: "#0E7490" }),
   violet: Object.freeze({ DEFAULT: "#A78BFA", soft: "#C4B5FD", deep: "#6D28D9" }),
   emerald: Object.freeze({ DEFAULT: color.ok, soft: "#7FE9BC", deep: "#047857" }),
@@ -279,8 +288,9 @@ export function cssVariables() {
     out.push([cssVarName(key), value]);
   }
   out.push(["--surface-1-alpha", String(color.surface1Alpha)]);
-  out.push(["--surface-1-glass", "rgba(12, 18, 32, 0.72)"]);
-  out.push(["--surface-2-solid", "rgba(17, 26, 43, 0.96)"]);
+  out.push(["--surface-1-glass", "rgba(14, 16, 22, 0.72)"]);
+  out.push(["--surface-2-solid", "rgba(18, 20, 27, 0.96)"]);
+  out.push(["--brand-gradient", `linear-gradient(120deg, ${color.brandA} 0%, ${color.brandB} 48%, ${color.brandC} 100%)`]);
   out.push(["--mode-accent", color.solar]);
   for (const [name, stops] of Object.entries(ramps)) {
     out.push([`--ramp-${name}`, `linear-gradient(90deg, ${stops.map((c, i) => `${c} ${((i / (stops.length - 1)) * 100).toFixed(1)}%`).join(", ")})`]);

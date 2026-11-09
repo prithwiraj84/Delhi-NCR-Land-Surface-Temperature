@@ -90,7 +90,7 @@ export function TransitionMatrix({ transitions, zoneList, year, cellArea }) {
             </caption>
             <thead>
               <tr>
-                <th scope="col" className="px-2 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-ink-faint">
+                <th scope="col" className="px-2 py-1 text-left text-[10px] font-medium text-ink-faint">
                   {pair.from} ↓ · {pair.to} →
                 </th>
                 {stats.counts[0].map((_, j) => {
@@ -111,7 +111,7 @@ export function TransitionMatrix({ transitions, zoneList, year, cellArea }) {
                     </th>
                   );
                 })}
-                <th scope="col" className="px-2 py-1 text-right text-[10px] font-medium uppercase tracking-wider text-ink-faint">
+                <th scope="col" className="px-2 py-1 text-right text-[10px] font-medium text-ink-faint">
                   Total
                 </th>
               </tr>
@@ -176,7 +176,7 @@ export function TransitionMatrix({ transitions, zoneList, year, cellArea }) {
                 { key: "net", label: "Net", values: stats.net, signed: true },
               ].map((r) => (
                 <tr key={r.key}>
-                  <th scope="row" className="px-2 py-1 text-left font-medium uppercase tracking-wider text-ink-faint">
+                  <th scope="row" className="px-2 py-1 text-left font-medium text-ink-faint">
                     {r.label}
                   </th>
                   {r.values.map((v, j) => (

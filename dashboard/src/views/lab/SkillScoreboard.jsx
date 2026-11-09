@@ -41,7 +41,7 @@ export function SkillScoreboard({ slice, mode }) {
           </caption>
           <thead>
             <tr>
-              <th scope="col" className="border-b border-hairline px-2 py-1.5 text-left font-mono text-[11px] font-medium uppercase text-ink-faint">
+              <th scope="col" className="border-b border-hairline px-2 py-1.5 text-left font-sans text-[11px] font-medium text-ink-faint">
                 Model
               </th>
               {sb.schemes.map((s) => (

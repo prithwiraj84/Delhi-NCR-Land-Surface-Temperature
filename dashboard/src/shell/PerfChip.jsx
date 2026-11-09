@@ -98,7 +98,7 @@ export function PerfChip() {
       {tier > 0 && (
         <div title={`Performance tier ${tier}: ${TIER_TEXT[tier]}`} className="hidden items-center gap-1 rounded-md border border-warn/40 bg-warn/10 py-0.5 pl-2 pr-0.5 md:inline-flex">
           <Gauge aria-hidden="true" className="size-3.5 text-warn" strokeWidth={1.5} />
-          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink">
+          <span className="font-sans text-[11px] text-ink">
             Perf T{tier}
             <span className="sr-only"> — reduced quality: </span>
             <span className="sr-only text-ink-muted 2xl:not-sr-only 2xl:inline"> · {TIER_TEXT[tier]}</span>

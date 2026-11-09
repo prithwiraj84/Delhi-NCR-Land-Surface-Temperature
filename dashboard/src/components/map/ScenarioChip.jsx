@@ -65,7 +65,7 @@ export default function ScenarioChip({ scenario, result, manifest, districtsById
       className={`${base} ${cooling ? "border-cyan/30" : "border-rose/30"}`}
       aria-label="Scenario summary"
     >
-      <p className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-ink-faint">
+      <p className="flex items-center gap-2 text-[10px] text-ink-faint">
         <FlaskConical className="h-3.5 w-3.5 text-violet" aria-hidden="true" /> Scenario
         {showCoupledBadge(scenario, result) ? (
           <span className="rounded bg-white/5 px-1 text-ink-muted">coupled indices</span>
@@ -79,15 +79,15 @@ export default function ScenarioChip({ scenario, result, manifest, districtsById
       </p>
       <dl className="mt-2 grid grid-cols-3 gap-2">
         <div>
-          <dt className="text-[10px] uppercase tracking-wider text-ink-faint">Mean Δ</dt>
+          <dt className="text-[10px] text-ink-faint">Mean Δ</dt>
           <dd className="font-display text-base font-semibold text-ink-strong">{fmtDeltaC(stats?.mean, 2)}</dd>
         </div>
         <div>
-          <dt className="text-[10px] uppercase tracking-wider text-ink-faint">Changed area</dt>
+          <dt className="text-[10px] text-ink-faint">Changed area</dt>
           <dd className="font-display text-base font-semibold text-ink-strong">{fmtKm2(stats?.areaKm2)}</dd>
         </div>
         <div>
-          <dt className="text-[10px] uppercase tracking-wider text-ink-faint">Changed cells</dt>
+          <dt className="text-[10px] text-ink-faint">Changed cells</dt>
           <dd className="font-display text-base font-semibold text-ink-strong">{fmtInt(stats?.count)}</dd>
         </div>
       </dl>

@@ -1,5 +1,5 @@
 /**
- * Tailwind theme for NCR THERMAL/OPS v2.
+ * Tailwind theme for the Delhi NCR Heat Atlas (v3 dark AI lab chrome).
  *
  * Every value comes from src/design/tokens.js (the single source of truth, UI_SPEC_v2 §4.1);
  * nothing here is a literal colour. v2 code uses the v2 names (bg-surface-2, border-hairline,
@@ -18,7 +18,7 @@ const ms = (token) => `${motion[token].ms}ms`;
 const bezier = (name) => `cubic-bezier(${easing[name].join(", ")})`;
 
 export default {
-  content: ["./index.html", "./src/**/*.{js,jsx}"],
+  content: ["./app/**/*.{js,jsx}", "./src/**/*.{js,jsx}", "./lib/**/*.{js,jsx}"],
   theme: {
     extend: {
       colors: {
@@ -41,6 +41,7 @@ export default {
         crit: c.crit,
         fog: c.fog,
         hatch: c.hatch,
+        brand: { a: c.brandA, b: c.brandB, c: c.brandC },
         zone: { 0: zoneColors[0], 1: zoneColors[1], 2: zoneColors[2], 3: zoneColors[3] },
         // v1 aliases (see header)
         panel: legacy.panel,
@@ -56,12 +57,13 @@ export default {
         mono: [...font.mono],
       },
       fontSize: {
-        micro: ["11px", { lineHeight: "1.3", letterSpacing: "0.14em" }],
+        micro: ["12px", { lineHeight: "1.3", letterSpacing: "0.01em" }],
         label: ["13px", { lineHeight: "1.3" }],
         body: ["14px", { lineHeight: "21px" }],
       },
       borderRadius: {
         panel: `${radius.panel}px`,
+        card: "20px",
       },
       boxShadow: {
         panel: shadow.panel,
@@ -86,6 +88,9 @@ export default {
         "expo-out": bezier("expoOut"),
         exit: bezier("exit"),
         "cubic-in-out": bezier("cubicInOut"),
+        out: bezier("out"),
+        "in-out": bezier("inOut"),
+        drawer: bezier("drawer"),
       },
       keyframes: {
         "live-pulse": {
@@ -99,12 +104,17 @@ export default {
         "ring-spin": {
           to: { transform: "rotate(360deg)" },
         },
+        shimmer: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(100%)" },
+        },
       },
       animation: {
         "live-pulse": "live-pulse 2.8s ease-in-out infinite",
         // v1 name kept: the status-dot pulse is the only ambient motion allowed (§5.2 L).
         "glow-pulse": "live-pulse 2.8s ease-in-out infinite",
         "scan-sweep": "scan-sweep 1.6s linear infinite",
+        shimmer: "shimmer 1.6s linear infinite",
       },
       zIndex: {
         stage: "0",

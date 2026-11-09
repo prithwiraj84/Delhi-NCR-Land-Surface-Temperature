@@ -46,7 +46,7 @@ export function DataCaveatsButton({ manifest }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="focus-ring inline-flex h-7 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-2.5 font-mono text-[11px] uppercase tracking-wider text-ink-muted hover:text-ink"
+        className="focus-ring inline-flex h-7 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-2.5 font-sans text-[11px] text-ink-muted hover:text-ink"
       >
         <Info aria-hidden="true" className="size-3.5" />
         <span className="hidden sm:inline">Caveats{notes.length ? ` (${notes.length})` : ""}</span>

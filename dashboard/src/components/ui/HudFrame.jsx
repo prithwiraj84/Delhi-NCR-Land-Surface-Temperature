@@ -35,7 +35,7 @@ export const HudFrame = forwardRef(function HudFrame(
 ) {
   const level = useMotionLevel();
   const [scan] = useState(() => level === "full" && claimScan(scanId));
-  const pad = { none: "p-0", sm: "p-2.5", md: "p-3.5" }[padding] ?? "p-3.5";
+  const pad = { none: "p-0", sm: "p-3", md: "p-4" }[padding] ?? "p-4";
   const autoId = useId();
   const headingId = `${props.id ?? autoId.replace(/:/g, "")}-title`;
   return (

@@ -122,7 +122,7 @@ export function DistrictLedger({ rows, now, first = 1990, last, ssp, nightAvaila
                   const sorted = h.column.getIsSorted();
                   const can = h.column.getCanSort();
                   return (
-                    <th key={h.id} scope="col" aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"} className="border-b border-hairline px-2 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-ink-faint">
+                    <th key={h.id} scope="col" aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"} className="border-b border-hairline px-2 py-1.5 font-sans text-[11px] font-medium text-ink-faint">
                       {can ? (
                         <button type="button" onClick={h.column.getToggleSortingHandler()} className="focus-ring inline-flex items-center gap-1 rounded hover:text-ink">
                           {flexRender(h.column.columnDef.header, h.getContext())}

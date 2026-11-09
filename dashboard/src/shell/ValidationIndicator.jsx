@@ -62,7 +62,7 @@ export function ValidationIndicator() {
   const state = !validation ? "pending" : errors.length ? "error" : warnings.length ? "warning" : "ok";
   const config = {
     pending: { icon: LoaderCircle, text: "Validating", tone: "text-ink-muted", spin: true },
-    ok: { icon: ShieldCheck, text: "Contract OK", tone: "text-ok" },
+    ok: { icon: ShieldCheck, text: "Data verified", tone: "text-ok" },
     warning: { icon: ShieldAlert, text: `${warnings.length} warning${warnings.length === 1 ? "" : "s"}`, tone: "text-warn" },
     error: { icon: ShieldX, text: `${errors.length} error${errors.length === 1 ? "" : "s"}`, tone: "text-crit" },
   }[state];
@@ -78,7 +78,7 @@ export function ValidationIndicator() {
         aria-haspopup="dialog"
         aria-disabled={!validation || undefined}
         aria-label={`Bundle validation: ${config.text}`}
-        className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-md px-2 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-muted hover:text-ink"
+        className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-md px-2 font-sans text-[11px] text-ink-muted hover:text-ink"
       >
         <Icon aria-hidden="true" className={cn("size-4", config.tone, config.spin && "animate-spin")} strokeWidth={1.5} />
         <span aria-hidden="true" className="hidden xl:inline">

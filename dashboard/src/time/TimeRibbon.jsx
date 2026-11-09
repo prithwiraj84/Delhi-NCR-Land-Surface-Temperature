@@ -142,7 +142,7 @@ function TierLegend({ ticks, className }) {
       {tiers.map((t) => {
         const id = normalizeTier(t);
         return (
-          <li key={t} className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-muted">
+          <li key={t} className="inline-flex items-center gap-1 font-sans text-[11px] text-ink-muted">
             <TierShape tier={id} size={10} />
             {TIER_META[id]?.label ?? t}
           </li>
@@ -617,7 +617,7 @@ function RibbonBody({ timeline, mode, variant, className, showModeControls, defa
                 type="button"
                 aria-expanded={tracksOpen}
                 onClick={() => setTracksOpen((v) => !v)}
-                className="focus-ring inline-flex h-6 items-center gap-1 rounded-md px-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-muted hover:bg-surface-3 hover:text-ink"
+                className="focus-ring inline-flex h-6 items-center gap-1 rounded-md px-1.5 font-sans text-[11px] text-ink-muted hover:bg-surface-3 hover:text-ink"
               >
                 Tracks {tracksOpen ? <ChevronDown aria-hidden="true" className="size-3.5" /> : <ChevronUp aria-hidden="true" className="size-3.5" />}
               </button>

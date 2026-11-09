@@ -1,3 +1,4 @@
+import { appEnv } from "./env.js";
 /**
  * Web-bundle loading (SPEC §4 / §5).
  *
@@ -55,7 +56,7 @@ export function setDataBaseUrl(base) {
  * (Ignores the runtime override; the resolver uses it to probe the default location.)
  */
 export function getDefaultDataBaseUrl() {
-  const env = import.meta.env ?? {};
+  const env = appEnv;
   const configured = typeof env.VITE_DATA_BASE_URL === "string" ? env.VITE_DATA_BASE_URL.trim() : "";
   const base = configured || `${env.BASE_URL ?? "/"}data`;
   return base.replace(/\/+$/, "");

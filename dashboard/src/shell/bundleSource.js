@@ -1,3 +1,4 @@
+import { appEnv } from "../lib/env.js";
 /**
  * Bundle source selection (SPEC §6): `?bundle=data|demo|fixture` in the page query string.
  *   data    -> public/data/ (the user's bundle: today the real v1 GEE bundle)
@@ -31,7 +32,7 @@ export function currentBundleSource(dataSource, search) {
 /** True when a build-time VITE_DATA_BASE_URL provides the default source. */
 export function hasCustomBaseUrl() {
   try {
-    return Boolean(import.meta.env?.VITE_DATA_BASE_URL);
+    return Boolean(appEnv.VITE_DATA_BASE_URL);
   } catch {
     return false;
   }

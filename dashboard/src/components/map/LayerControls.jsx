@@ -43,7 +43,7 @@ const LAYER_ICONS = {
 const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan focus-visible:ring-offset-1 focus-visible:ring-offset-bg";
 
 function SectionLabel({ children }) {
-  return <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">{children}</p>;
+  return <p className="mb-1.5 text-[10px] font-semibold text-ink-faint">{children}</p>;
 }
 
 /** Radio group of map layers with roving focus (Up/Down/Left/Right, Home/End). */
@@ -245,7 +245,7 @@ export default function LayerControls({
       <header className="flex items-center justify-between gap-2 border-b border-white/5 px-3 py-2">
         <div className="min-w-0">
           <p className="truncate font-display text-sm font-semibold text-ink-strong">Thermal Digital Twin</p>
-          <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-soft">Delhi NCR · XAI</p>
+          <p className="text-[10px] text-cyan-soft">Delhi NCR · XAI</p>
         </div>
         <button
           type="button"

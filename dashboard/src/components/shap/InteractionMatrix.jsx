@@ -349,7 +349,7 @@ function TopPairs({ pairs, names, metaByName, max, selectedFeature, colorFeature
   const label = (name) => metaByName.get(name)?.label ?? name;
   return (
     <div className="min-w-0 flex-1 space-y-1.5 2xl:max-w-xs">
-      <div className="flex justify-between text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+      <div className="flex justify-between text-[10px] text-ink-faint">
         <span>Strongest pairs</span>
         <span>°C</span>
       </div>

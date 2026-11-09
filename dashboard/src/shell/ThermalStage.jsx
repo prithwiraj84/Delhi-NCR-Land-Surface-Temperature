@@ -13,7 +13,8 @@
  * States: live, dimmed-paused, compare, lens (engine-drawn), lite (CPU path), webgl-lost (Retry
  * card), basemap-unavailable (thermal layers keep rendering over --void).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Deck } from "@deck.gl/core";
 import DeckGL from "@deck.gl/react";
 import { useStore } from "zustand";
 import { MonitorX, RotateCcw } from "lucide-react";
@@ -25,6 +26,24 @@ import { engineStore } from "../engine/engineStore.js";
 import { tierEffects } from "../engine/perfGovernor.js";
 import { useData } from "../state/DataContext.jsx";
 import { useSelectionStore, useTimeStore, useViewStore } from "../state/stores/index.js";
+
+/**
+ * Deck subclass that keeps the engine the single source of layers. @deck.gl/react forwards its
+ * render-time props to deck.setProps DURING render (those calls always carry `parent`). React 19
+ * can replay an uncommitted render (e.g. after the lazy basemap suspends) frames later, and the
+ * replay would hand deck the layer list captured back then, whose reticle layers deck has since
+ * finalized ("initialization of ScatterplotLayer … assertion failed", then GL_INVALID_OPERATION
+ * floods). Substituting the engine's CURRENT layers at call time makes a stale list impossible;
+ * the engine's own setProps({layers}) calls (no `parent`) pass through unchanged.
+ */
+function deckClassFor(engine) {
+  return class EngineDeck extends Deck {
+    setProps(props) {
+      if (props && "parent" in props && "layers" in props) props = { ...props, layers: engine.getLayers() ?? props.layers };
+      super.setProps(props);
+    }
+  };
+}
 
 const MOBILE_QUERY = "(max-width: 639.98px)";
 
@@ -95,7 +114,7 @@ function StageStatusChip({ status, reason, path, pathReason, basemapError }) {
   if (basemapError) lines.push("Basemap unavailable · thermal layers unaffected");
   if (!lines.length) return null;
   return (
-    <div data-testid="stage-status" className="pointer-events-none absolute bottom-40 left-1/2 z-[5] max-w-[min(32rem,calc(100%-2rem))] -translate-x-1/2 rounded-md border border-hairline bg-surface-2/95 px-3 py-1.5 text-center font-mono text-[11px] uppercase tracking-[0.14em] text-ink-muted">
+    <div data-testid="stage-status" className="pointer-events-none absolute bottom-40 left-1/2 z-[5] max-w-[min(32rem,calc(100%-2rem))] -translate-x-1/2 rounded-md border border-hairline bg-surface-2/95 px-3 py-1.5 text-center font-sans text-[11px] text-ink-muted">
       {lines.map((l) => (
         <div key={l}>{l}</div>
       ))}
@@ -243,6 +262,7 @@ export function ThermalStage({ layout = "live", active = true, dimmed = false })
     applyBasemapDim();
   }, [applyBasemapDim]);
 
+  const DeckClass = useMemo(() => (engine ? deckClassFor(engine) : undefined), [engine]);
   const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, tierEffects(perfTier).maxDpr) : 1;
 
   return (
@@ -251,6 +271,7 @@ export function ThermalStage({ layout = "live", active = true, dimmed = false })
         <DeckGL
           key={deckKey}
           ref={deckRef}
+          Deck={DeckClass}
           viewState={engine.getViewState()}
           onViewStateChange={engine.handleViewStateChange}
           controller={active ? CONTROLLER : false}

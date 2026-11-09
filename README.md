@@ -27,11 +27,10 @@ surface temperature (LST)** of the Delhi National Capital Region (25 districts, 
 >   profile. It demonstrates the pipeline and every dashboard feature. **It is not a finding about the real region.**
 >   The dashboard shows a persistent "SYNTHETIC · DEMO" badge and banner, and the manifest records
 >   `data_mode: "synthetic"`.
-> - **`dashboard/public/data/` holds the user's REAL bundle**: today the v1 Earth Engine bundle (MODIS Terra day,
->   2010–2025, 1 km) from a Kaggle run of the v1 notebook. The v2 dashboard reads it in a **v1-compatibility mode**:
->   night, DTR, projections and 250 m rasters show clear "unavailable — rerun notebook v2" states.
-> - A real v2 bundle (1990–2050, day + night) requires running this notebook on Kaggle with Earth Engine
->   (below). Nothing in this repository was produced by a real v2 run yet.
+> - **`dashboard/public/data/` holds the user's REAL bundle**: the v2 **full-profile** Earth Engine run on Kaggle
+>   (2× T4, November 2026): 8 observed frames 1990–2025 (day and night), 5 projected frames 2030–2050 for
+>   SSP1-2.6 / SSP2-4.5 / SSP5-8.5, 1 km grid with 250 m rasters. Validated with `notebook/validate_bundle.py`.
+>   Earlier bundles (v1 Earth Engine run, v2 pilot) remain in the git history.
 
 ---
 
@@ -71,9 +70,11 @@ surface temperature (LST)** of the Delhi National Capital Region (25 districts, 
                                                                                                 │
        outputs/ ── web/ (bundle v2)  web_bundle.zip  parquet/  geo/  models/  npz/  figures/  cache/
                                                                                                 │
-                    copy outputs/web/* into dashboard/public/data/  (or host it: VITE_DATA_BASE_URL)
+                    copy outputs/web/* into dashboard/public/data/  (or host it: NEXT_PUBLIC_DATA_BASE_URL)
                                                                                                 ▼
- ┌──────────────── dashboard/ · React 18 · Vite 5 · deck.gl ~9.4 · MapLibre · zustand · Tailwind ────────────────────────┐
+ ┌──────────── dashboard/ · Next.js 16 · React 19 · deck.gl 9.4 · MapLibre · zustand · Tailwind · Geist ────────────────┐
+ │  app/       Next.js site, statically generated from public/data: / · /findings · /methodology · /learn · /data ·     │
+ │             /about (SEO metadata, JSON-LD, sitemap, OG image) and /explore (the WebGL explorer, client-only)          │
  │  data/      LSTB reader (DecompressionStream, worker decode), bundle store, v1 → v2 adapter, contract validator        │
  │  engine/    MapEngine: persistent deck.gl stage, GPU thermal columns, 250 m raster + lens, compare split, H3,         │
  │             perf governor (tiers T0–T3), frame interpolation                                                          │
@@ -102,7 +103,12 @@ LST replication study/
 │   ├── validate_bundle.py         # v2 + v1 web-bundle validator (CLI)
 │   └── legacy_v1/                 # the tested v1 sections (reference only)
 ├── dashboard/
-│   ├── public/data/               # the user's bundle (today: REAL v1 GEE bundle)
+│   ├── app/                       # Next.js pages (site + /explore), sitemap, robots, OG image
+│   ├── lib/site/                  # build-time facts from public/data, SEO metadata, site config
+│   ├── src/                       # the explorer: engine, data layer, stores, views, design tokens
+│   ├── scripts/build-media.mjs    # real-data images for the site (npm run media)
+│   ├── public/data/               # the user's bundle (REAL v2 full-profile GEE bundle)
+│   ├── public/media/              # generated images (committed)
 │   └── public/demo/               # SYNTHETIC v2 demo bundle
 └── docs/  SPEC.md · SPEC_v1.md · UI_SPEC_v2.md · research/
 ```
@@ -463,38 +469,43 @@ its null model), which is the main correctness check of the science code.
 
 ## Dashboard: dev, build, deploy
 
-Requires Node 18+ (developed on Node 22). The dashboard needs a browser with `DecompressionStream`
+The dashboard is a **Next.js 16** site (React 19) with two parts:
+
+- **Content pages** (`/`, `/findings`, `/methodology`, `/learn`, `/data`, `/about`): statically generated at build
+  time from the bundle in `public/data/` (`lib/site/facts.js`), so every number on them comes from the pipeline run.
+  Each page has full SEO metadata (canonical, Open Graph, Twitter card) and schema.org JSON-LD (WebSite, Dataset,
+  Article, FAQPage); the site has `sitemap.xml`, `robots.txt`, a web manifest and a generated 1200 × 630 social
+  image. Lighthouse (mobile): 98–100 in performance and 100 in accessibility, best practices and SEO.
+- **The explorer** (`/explore`): the interactive WebGL app (deck.gl + MapLibre), loaded client-only.
+
+Requires Node 20.9+ (developed on Node 22). The explorer needs a browser with `DecompressionStream`
 (Chrome/Edge 80+, Firefox 113+, Safari 16.4+); other browsers get an explicit unsupported-browser message.
 
 ```bash
 cd dashboard
 npm ci                         # or npm install
-npm run dev                    # http://localhost:5173
-npm run lint && npm test       # ESLint + Vitest (47 files, 574 tests)
-npm run build                  # static site in dashboard/dist/
-npm run budget                 # JS budget report from the build manifest
-npx vite preview               # serve the production build (http://localhost:4173)
+npm run dev                    # http://localhost:3000 (explorer: /explore)
+npm run lint && npm test       # ESLint + Vitest
+npm run build                  # production build (static pages + explorer)
+npm start                      # serve the production build (http://localhost:3000)
+npm run media                  # regenerate public/media/ after copying a new bundle into public/data/
 ```
 
-**Choosing a bundle.** `?bundle=data` (the user's bundle in `public/data/`), `?bundle=demo` (the synthetic v2 demo
-in `public/demo/`) or `?bundle=fixture` (an in-memory synthetic fixture), also selectable in the Settings menu.
-Without the parameter the dashboard uses `VITE_DATA_BASE_URL` when set, else `data` when
+**Choosing a bundle.** `/explore?bundle=data` (the user's bundle in `public/data/`), `?bundle=demo` (the synthetic
+v2 demo in `public/demo/`) or `?bundle=fixture` (an in-memory synthetic fixture), also selectable in the Settings
+menu. Without the parameter the explorer uses `NEXT_PUBLIC_DATA_BASE_URL` when set, else `data` when
 `public/data/manifest.json` exists, else `demo`.
 
-- http://localhost:5173/?bundle=demo — every v2 feature (night, projections, rasters, lens).
-- http://localhost:5173/?bundle=data — the real v1 bundle in compatibility mode.
+**Loading a new bundle.** Replace the contents of `public/data/` with `outputs/web/*` (or unzip `web_bundle.zip`
+there), validate it with `python notebook/validate_bundle.py dashboard/public/data`, then run `npm run media` and
+`npm run build`: the content pages pick up the new numbers automatically.
 
-**Loading your real v2 bundle.** Keep a copy of the current `public/data/` (the v1 bundle) if you still need it,
-then replace its contents with `outputs/web/*` (or unzip `web_bundle.zip` there) so that
-`dashboard/public/data/manifest.json` is the v2 manifest. Validate it with
-`python notebook/validate_bundle.py dashboard/public/data`.
-
-**Hosting the bundle elsewhere.** Any static host or bucket works (CORS headers if on another origin):
-`VITE_DATA_BASE_URL=https://example.org/ncr-lst/web npm run build` (see `dashboard/.env.example`).
-
-**Deploying.** `dist/` is a plain static site (GitHub Pages, Netlify, S3, nginx). For a sub-path deployment build with
-`npx vite build --base /my/sub/path/`. Routing is hash-based (`#/control`, `#/timeline`, …), so no server rewrites
-are needed. The dashboard state (year, mode, SSP, layer, camera) is kept in the hash and can be shared as a link.
+**Deploying on Vercel.** Import the GitHub repository in Vercel, set **Root Directory = `dashboard`** (the Next.js
+preset is detected) and deploy. Canonical links, the sitemap and social cards use the production domain
+automatically (`VERCEL_PROJECT_PRODUCTION_URL`); set `NEXT_PUBLIC_SITE_URL` once you attach a custom domain. Optional
+variables are in `dashboard/.env.example` (`NEXT_PUBLIC_BASE_PATH` for a sub-path, `NEXT_PUBLIC_DATA_BASE_URL` for a
+bundle hosted elsewhere with CORS). Explorer routing is hash-based (`/explore#/timeline` …) and its state (year,
+mode, SSP, layer, camera) is kept in the hash, so links can be shared.
 
 **Keyboard.** `1`–`6` views · `Space` play · `←/→` frames · `Home/End` 1990/2050 · `D`/`N`/`T`/`A` day, night,
 toggle, diurnal range · `S` cycle SSP · `C` compare · `Z` lens · `G` grid/raster · `H` hottest cell · `B` Briefing ·

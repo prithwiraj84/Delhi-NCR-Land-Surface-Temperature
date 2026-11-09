@@ -36,7 +36,7 @@ export function FeatureTable({ xai, index, manifest }) {
               Value
             </th>
             <th scope="col" className="py-1 text-right font-medium">
-              <button type="button" onClick={() => setByRank((v) => !v)} aria-pressed={byRank} className="focus-ring inline-flex items-center gap-0.5 rounded px-0.5 uppercase">
+              <button type="button" onClick={() => setByRank((v) => !v)} aria-pressed={byRank} className="focus-ring inline-flex items-center gap-0.5 rounded px-0.5">
                 p-rank <ArrowDownUp aria-hidden="true" className="size-3" />
               </button>
             </th>

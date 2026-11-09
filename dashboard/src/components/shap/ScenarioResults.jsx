@@ -40,7 +40,7 @@ function toneOf(v) {
 function MiniStat({ label, value, hint }) {
   return (
     <div className="min-w-0 rounded-lg border border-panel-border bg-slate-950/40 px-2.5 py-2">
-      <div className="truncate text-[10px] uppercase tracking-[0.12em] text-ink-faint">{label}</div>
+      <div className="truncate text-[10px] text-ink-faint">{label}</div>
       <div className="truncate font-mono text-sm font-semibold text-ink-strong">{value}</div>
       {hint ? <div className="truncate text-[10px] text-ink-muted">{hint}</div> : null}
     </div>
@@ -66,7 +66,7 @@ function DeltaHistogram({ histogram }) {
   if (!data.length) return null;
   return (
     <figure className="space-y-1">
-      <figcaption className="text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+      <figcaption className="text-[10px] text-ink-faint">
         Per-cell ΔLST distribution (°C)
       </figcaption>
       <ResponsiveContainer width="100%" height={132}>
@@ -111,7 +111,7 @@ function DistrictBreakdown({ byDistrict }) {
   const maxAbs = Math.max(1e-6, ...rows.map((d) => Math.abs(d.mean)));
   return (
     <div className="space-y-1.5">
-      <div className="flex justify-between text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+      <div className="flex justify-between text-[10px] text-ink-faint">
         <span>By district (top {rows.length})</span>
         <span>mean Δ · cells</span>
       </div>
@@ -168,15 +168,15 @@ function AdditiveComparison({ modelMean, additive, featureLabel }) {
     <div className="space-y-2 rounded-lg border border-panel-border bg-slate-950/40 p-3">
       <div className="grid grid-cols-3 gap-2 text-center">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.12em] text-ink-faint">Model</div>
+          <div className="text-[10px] text-ink-faint">Model</div>
           <div className="font-mono text-sm font-semibold text-ink-strong">{fmtDeltaC(modelMean)}</div>
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-[0.12em] text-ink-faint">Additive</div>
+          <div className="text-[10px] text-ink-faint">Additive</div>
           <div className="font-mono text-sm font-semibold text-ink-strong">{fmtDeltaC(additive?.mean)}</div>
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-[0.12em] text-ink-faint">Non-additive</div>
+          <div className="text-[10px] text-ink-faint">Non-additive</div>
           <div className="font-mono text-sm font-semibold text-violet-soft">{fmtDeltaC(gap)}</div>
         </div>
       </div>
@@ -242,7 +242,7 @@ function ScenarioResults({ result, additive, featureLabel, formatChange, regionK
           className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full blur-3xl"
           style={{ backgroundColor: tone.color, opacity: 0.18 }}
         />
-        <div className="text-[10px] uppercase tracking-[0.14em] text-ink-muted">Mean ΔLST · changed cells</div>
+        <div className="text-[10px] text-ink-muted">Mean ΔLST · changed cells</div>
         <div className="mt-1 flex items-baseline gap-2" aria-live="polite">
           <span className="font-sans text-5xl font-semibold tracking-tight text-ink-strong">
             <AnimatedNumber

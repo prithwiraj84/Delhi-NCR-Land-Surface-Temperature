@@ -64,7 +64,7 @@ export function IconTip({ label, side = "bottom", children }) {
     <TooltipPrimitive.Provider delayDuration={300} skipDelayDuration={300}>
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-        <TooltipContent side={side} className="font-mono text-[11px] uppercase tracking-[0.08em]">
+        <TooltipContent side={side} className="font-sans text-[11px]">
           {label}
         </TooltipContent>
       </TooltipPrimitive.Root>

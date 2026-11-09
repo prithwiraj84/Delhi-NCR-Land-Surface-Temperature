@@ -51,7 +51,7 @@ export function FrameCard({ year, tier, sensor, overpass, window, res, ci, ciKin
         initial={flip ? { rotateX: 90, opacity: 0 } : false}
         animate={{ rotateX: 0, opacity: 1 }}
         transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
-        className="mt-1.5 flex items-center gap-1.5 font-mono text-[12px] font-semibold uppercase tracking-[0.1em] text-ink"
+        className="mt-1.5 flex items-center gap-1.5 font-sans text-[12px] font-semibold text-ink"
         style={{ transformOrigin: "50% 50%" }}
       >
         {!interpolated && <TierShape tier={id} size={11} />}

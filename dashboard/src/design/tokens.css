@@ -4,18 +4,18 @@
  * (tokens.test.js fails when this file is out of sync.)
  */
 :root {
-  --void: #05070D;
-  --bg: #070B14;
-  --surface-1: #0C1220;
-  --surface-2: #111A2B;
-  --surface-3: #18233A;
-  --hairline: rgba(160, 185, 225, 0.14);
-  --hairline-strong: rgba(160, 185, 225, 0.28);
-  --control-border: #63718A;
-  --ink-strong: #F4F7FB;
-  --ink: #DFE7F2;
-  --ink-muted: #A3B0C4;
-  --ink-faint: #8794AA;
+  --void: #05060A;
+  --bg: #08090D;
+  --surface-1: #0E1016;
+  --surface-2: #12141B;
+  --surface-3: #191C25;
+  --hairline: rgba(226, 232, 255, 0.08);
+  --hairline-strong: rgba(226, 232, 255, 0.16);
+  --control-border: #6B7286;
+  --ink-strong: #F7F8FB;
+  --ink: #E5E8EF;
+  --ink-muted: #A7AEBC;
+  --ink-faint: #8E95A4;
   --signal: #45E0FF;
   --reticle: #F4F7FB;
   --solar: #FFE27A;
@@ -29,9 +29,13 @@
   --crit: #FF6B6B;
   --fog: rgba(140, 160, 200, 0.10);
   --hatch: rgba(223, 231, 242, 0.22);
+  --brand-a: #A78BFA;
+  --brand-b: #6D8DFF;
+  --brand-c: #45E0FF;
   --surface-1-alpha: 0.72;
-  --surface-1-glass: rgba(12, 18, 32, 0.72);
-  --surface-2-solid: rgba(17, 26, 43, 0.96);
+  --surface-1-glass: rgba(14, 16, 22, 0.72);
+  --surface-2-solid: rgba(18, 20, 27, 0.96);
+  --brand-gradient: linear-gradient(120deg, #A78BFA 0%, #6D8DFF 48%, #45E0FF 100%);
   --mode-accent: #FFE27A;
   --ramp-solar: linear-gradient(90deg, #302376 0.0%, #5B23A8 16.7%, #9A2FA8 33.3%, #D6457A 50.0%, #F5774C 66.7%, #FDB54E 83.3%, #FFF3C4 100.0%);
   --ramp-nocturne: linear-gradient(90deg, #1C2D66 0.0%, #1B4589 16.7%, #16709F 33.3%, #1C9AA6 50.0%, #4CC2A4 66.7%, #A2E3B6 83.3%, #ECFBE9 100.0%);
@@ -42,9 +46,9 @@
   --zone-1: #22D3EE;
   --zone-2: #A78BFA;
   --zone-3: #FB7185;
-  --font-display: "Space Grotesk Variable", "Space Grotesk", "Inter Variable", system-ui, sans-serif;
-  --font-sans: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: "Geist Variable", Geist, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Geist Variable", Geist, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --layout-command-bar: 52px;
   --layout-telemetry: 44px;
   --layout-nav-rail: 64px;
@@ -57,11 +61,11 @@
   --layout-gutter: 16px;
   --layout-tablet: 640px;
   --layout-desktop: 1280px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-panel: 12px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-panel: 16px;
   --radius-pill: 999px;
-  --shadow-panel: 0 10px 30px -12px rgba(2, 4, 10, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-panel: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 12px 32px -16px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-glow-signal: 0 0 12px rgba(69, 224, 255, 0.55);
   --shadow-glow-alert: 0 0 12px rgba(255, 107, 107, 0.45);
   --shadow-ring-signal: 0 0 0 1px rgba(69, 224, 255, 0.38);
@@ -87,4 +91,7 @@
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --ease-cubic-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-sine-in-out: cubic-bezier(0.37, 0, 0.63, 1);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }

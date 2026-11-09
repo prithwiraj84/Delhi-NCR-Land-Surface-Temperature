@@ -21,31 +21,41 @@
  */
 import { create } from "zustand";
 
-const storeModules = import.meta.glob(["../state/stores/*.js", "!../state/stores/*.test.js", "!../state/stores/index.js"], {
-  eager: true,
-});
-const hookModules = import.meta.glob(["../data/hooks.js"], { eager: true });
+import { appEnv } from "../lib/env.js";
+import * as selectionStoreModule from "../state/stores/selectionStore.js";
+import * as timeStoreModule from "../state/stores/timeStore.js";
+import * as viewStoreModule from "../state/stores/viewStore.js";
+import * as hooksModuleImport from "../data/hooks.js";
+
+// Every stream has landed, so the Vite-era globs are now explicit imports, keyed by the same
+// paths (Next.js / webpack has no import.meta.glob). The fallbacks below stay for the tests.
+const storeModules = {
+  "../state/stores/selectionStore.js": selectionStoreModule,
+  "../state/stores/timeStore.js": timeStoreModule,
+  "../state/stores/viewStore.js": viewStoreModule,
+};
+const hookModules = { "../data/hooks.js": hooksModuleImport };
 
 /** Lazy loaders keyed by the path relative to this file. */
-export const stageLoaders = import.meta.glob(["./ThermalStage.jsx"]);
-export const viewLoaders = import.meta.glob([
-  "../views/control/MissionControl.jsx",
-  "../views/timeline/TimelineView.jsx",
-  "../views/drivers/DriversView.jsx",
-  "../views/zones/ZonesView.jsx",
-  "../views/lab/ModelLab.jsx",
-  "../views/sources/SourcesView.jsx",
-]);
-export const legacyLoaders = import.meta.glob([
-  "../components/MapContainer.jsx",
-  "../components/ShapDependenceViewer.jsx",
-  "../components/GovernanceZoning.jsx",
-  "../components/ModelPerformance.jsx",
-]);
+export const stageLoaders = { "./ThermalStage.jsx": () => import("./ThermalStage.jsx") };
+export const viewLoaders = {
+  "../views/control/MissionControl.jsx": () => import("../views/control/MissionControl.jsx"),
+  "../views/timeline/TimelineView.jsx": () => import("../views/timeline/TimelineView.jsx"),
+  "../views/drivers/DriversView.jsx": () => import("../views/drivers/DriversView.jsx"),
+  "../views/zones/ZonesView.jsx": () => import("../views/zones/ZonesView.jsx"),
+  "../views/lab/ModelLab.jsx": () => import("../views/lab/ModelLab.jsx"),
+  "../views/sources/SourcesView.jsx": () => import("../views/sources/SourcesView.jsx"),
+};
+export const legacyLoaders = {
+  "../components/MapContainer.jsx": () => import("../components/MapContainer.jsx"),
+  "../components/ShapDependenceViewer.jsx": () => import("../components/ShapDependenceViewer.jsx"),
+  "../components/GovernanceZoning.jsx": () => import("../components/GovernanceZoning.jsx"),
+  "../components/ModelPerformance.jsx": () => import("../components/ModelPerformance.jsx"),
+};
 
 const warned = new Set();
 function warnOnce(key, message) {
-  if (warned.has(key) || !import.meta.env?.DEV || import.meta.env?.MODE === "test") return;
+  if (warned.has(key) || !appEnv.DEV || appEnv.MODE === "test") return;
   warned.add(key);
   console.warn(`[shell] ${message}`);
 }

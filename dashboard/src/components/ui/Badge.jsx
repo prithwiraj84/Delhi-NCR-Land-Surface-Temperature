@@ -7,9 +7,8 @@ import { cn } from "../../lib/cn.js";
  * the hue lives only in the border, the tint and the optional dot, so a badge never relies on
  * colour alone (UI_SPEC §4.1). v1 variant names are kept and mapped onto the v2 palette.
  */
-// eslint-disable-next-line react-refresh/only-export-components -- shadcn convention: variants are reusable
 export const badgeVariants = cva(
-  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border font-mono font-medium uppercase tracking-[0.08em]",
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border font-sans font-medium tracking-normal",
   {
     variants: {
       variant: {
@@ -29,8 +28,8 @@ export const badgeVariants = cva(
         amber: "border-warn/50 bg-warn/10 text-ink",
       },
       size: {
-        sm: "px-2 py-0.5 text-[11px]",
-        md: "px-2.5 py-1 text-[11px]",
+        sm: "px-2.5 py-0.5 text-[11.5px]",
+        md: "px-3 py-1 text-[12px]",
       },
     },
     defaultVariants: { variant: "default", size: "md" },

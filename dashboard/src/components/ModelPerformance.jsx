@@ -176,11 +176,11 @@ export default function ModelPerformance() {
           <ChartLegend items={schemeLegend} label="Validation schemes" className="mb-2" />
           <div className="grid gap-5 xl:grid-cols-2">
             <div className="min-w-0">
-              <h4 className="mb-1 text-[11px] uppercase tracking-wider text-ink-faint">Mean ± 1 SD across folds</h4>
+              <h4 className="mb-1 text-[11px] text-ink-faint">Mean ± 1 SD across folds</h4>
               <GroupedBarChart rows={grouped} schemes={schemes} metric={metric} bestByScheme={bestByScheme} />
             </div>
             <div className="min-w-0">
-              <h4 className="mb-1 text-[11px] uppercase tracking-wider text-ink-faint">
+              <h4 className="mb-1 text-[11px] text-ink-faint">
                 Per-fold scores · tick = fold mean
               </h4>
               {points.length ? (

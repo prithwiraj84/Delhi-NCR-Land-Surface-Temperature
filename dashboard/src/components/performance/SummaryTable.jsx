@@ -158,7 +158,7 @@ export function SummaryTable({ rows, schemes }) {
           <caption className="sr-only">
             Cross-validation summary: mean and standard deviation across folds for every model and validation scheme.
           </caption>
-          <thead className="bg-bg-raised/70 text-[11px] uppercase tracking-wider text-ink-faint">
+          <thead className="bg-bg-raised/70 text-[11px] text-ink-faint">
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id}>
                 {group.headers.map((header) => {
@@ -179,7 +179,7 @@ export function SummaryTable({ rows, schemes }) {
                           type="button"
                           onClick={header.column.getToggleSortingHandler()}
                           className={cn(
-                            "focus-ring group inline-flex items-center gap-1 rounded px-1 py-0.5 uppercase tracking-wider",
+                            "focus-ring group inline-flex items-center gap-1 rounded px-1 py-0.5",
                             "transition-colors hover:text-ink",
                             sorted ? "text-cyan-soft" : "",
                             align === "right" && "flex-row-reverse",

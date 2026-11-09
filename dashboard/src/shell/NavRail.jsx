@@ -6,12 +6,14 @@
  *                                       Zones, More (Model Lab, Sources) + safe-area inset
  *
  * One tab stop (roving tabindex); arrow keys move focus, Enter/Space (native button) selects,
- * Home/End jump. The current route has aria-current="page" and a 2 px signal bar (no glow).
+ * Home/End jump. The current route has aria-current="page", a raised pill and a 2 px brand
+ * gradient bar (no glow). A home link to the site sits at the foot of the rail.
  * Targets are >= 44 px on the mobile bar.
  */
 import { useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { MoreHorizontal } from "lucide-react";
+import { House, MoreHorizontal } from "lucide-react";
+import { appEnv } from "../lib/env.js";
 import { transition } from "../design/motion.js";
 import { useMotionLevel } from "../design/useMotionLevel.js";
 import { cn } from "../lib/cn.js";
@@ -44,7 +46,7 @@ function VerticalRail({ route }) {
     ROUTES.findIndex((r) => r.id === route),
   );
   return (
-    <nav aria-label="Views" className="hidden w-16 shrink-0 flex-col items-stretch gap-1 border-r border-hairline bg-surface-2 py-2 sm:flex">
+    <nav aria-label="Views" className="hidden w-16 shrink-0 flex-col items-stretch gap-1 border-r border-hairline bg-bg/90 py-2.5 sm:flex">
       {ROUTES.map((item, i) => {
         const Icon = item.icon;
         const active = item.id === route;
@@ -60,16 +62,24 @@ function VerticalRail({ route }) {
             onClick={() => goTo(item.id)}
             onKeyDown={(e) => onKeyDown(e, i)}
             className={cn(
-              "focus-ring group relative mx-1 flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[11px] font-medium leading-tight transition-colors duration-instant",
-              active ? "bg-surface-3 text-ink-strong" : "text-ink-muted hover:bg-surface-3/60 hover:text-ink",
+              "focus-ring group relative mx-1.5 flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium leading-tight transition-[background-color,color] duration-quick",
+              active ? "bg-white/[0.06] text-ink-strong shadow-[inset_0_0_0_1px_rgba(226,232,255,0.08)]" : "text-ink-faint hover:bg-white/[0.03] hover:text-ink",
             )}
           >
-            <span aria-hidden="true" className={cn("absolute inset-y-2 -left-1 w-0.5 rounded-full", active ? "bg-signal" : "bg-transparent")} />
-            <Icon aria-hidden="true" className="size-5" strokeWidth={1.5} />
+            <span aria-hidden="true" className={cn("absolute inset-y-3 -left-1.5 w-[3px] rounded-full", active ? "bg-[image:var(--brand-gradient)]" : "bg-transparent")} />
+            <Icon aria-hidden="true" className="size-[19px]" strokeWidth={1.6} />
             <span>{item.short}</span>
           </button>
         );
       })}
+      <a
+        href={appEnv.BASE_URL}
+        title="Back to the Heat Atlas home page"
+        className="focus-ring mx-1.5 mt-auto flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium text-ink-faint transition-colors duration-quick hover:bg-white/[0.03] hover:text-ink"
+      >
+        <House aria-hidden="true" className="size-[18px]" strokeWidth={1.6} />
+        <span>Home</span>
+      </a>
     </nav>
   );
 }
@@ -87,7 +97,7 @@ function MobileBar({ route }) {
   const moreOpen = overlay === "more";
 
   return (
-    <nav aria-label="Views" className="relative z-chrome border-t border-hairline bg-surface-2 pb-[env(safe-area-inset-bottom)] sm:hidden">
+    <nav aria-label="Views" className="relative z-chrome border-t border-hairline bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl sm:hidden">
       <AnimatePresence>
         {moreOpen && (
           <motion.ul
@@ -145,7 +155,7 @@ function MobileBar({ route }) {
                 active ? "text-ink-strong" : "text-ink-muted",
               )}
             >
-              <span aria-hidden="true" className={cn("absolute inset-x-4 top-0 h-0.5 rounded-full", active ? "bg-signal" : "bg-transparent")} />
+              <span aria-hidden="true" className={cn("absolute inset-x-5 top-0 h-[3px] rounded-full", active ? "bg-[image:var(--brand-gradient)]" : "bg-transparent")} />
               <Icon aria-hidden="true" className="size-5" strokeWidth={1.5} />
               <span>{isMore && moreActive ? ROUTE_BY_ID[route].short : item.short}</span>
             </button>

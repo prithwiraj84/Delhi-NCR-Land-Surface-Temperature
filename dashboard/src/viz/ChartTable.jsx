@@ -70,7 +70,7 @@ export function ChartTable({
               <thead className="sticky top-0 bg-surface-2">
                 <tr>
                   {columns.map((c) => (
-                    <th key={c.key} scope="col" title={c.title} className={cn("border-b border-hairline px-2 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-ink-faint", c.align === "right" && "text-right")}>
+                    <th key={c.key} scope="col" title={c.title} className={cn("border-b border-hairline px-2 py-1.5 font-sans text-[11px] font-medium text-ink-faint", c.align === "right" && "text-right")}>
                       {c.label}
                     </th>
                   ))}

@@ -187,7 +187,7 @@ function ImportanceChart({ shapGlobal, metaByName, zonesMeta, year, groups, sele
         />
       ) : null}
 
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+      <div className="flex items-center justify-between text-[10px] text-ink-faint">
         <span>Feature</span>
         <span>mean |SHAP| °C</span>
       </div>

@@ -41,7 +41,7 @@ export function FrameProvenanceTable({ rows }) {
           <thead className="sticky top-0 bg-surface-2">
             <tr>
               {["Frame", "Mode", "Tier", "Sensor / source", "Overpass IST", "Window", "Scenes", "Coverage", "Native", "XAI · 250 m"].map((h) => (
-                <th key={h} scope="col" className="border-b border-hairline px-2 py-1.5 text-left font-mono text-[11px] font-medium uppercase tracking-[0.06em] text-ink-faint">
+                <th key={h} scope="col" className="border-b border-hairline px-2 py-1.5 text-left font-sans text-[11px] font-medium text-ink-faint">
                   {h}
                 </th>
               ))}

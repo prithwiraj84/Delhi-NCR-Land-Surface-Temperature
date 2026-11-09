@@ -35,9 +35,9 @@ export function TierGlyph({ tier, variant = "label", detail, downscaled = false,
   const body = (
     <>
       <TierShape tier={id} size={size} className="shrink-0" />
-      <span className={cn("shrink-0 whitespace-nowrap", variant === "short" && "font-mono text-[11px] uppercase tracking-[0.1em]")}>{text}</span>
+      <span className={cn("shrink-0 whitespace-nowrap", variant === "short" && "font-sans text-[11px]")}>{text}</span>
       {detail && <span className="min-w-0 truncate text-ink-muted">· {detail}</span>}
-      {downscaled && <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-ink-muted">· 250 m · Downscaled</span>}
+      {downscaled && <span className="font-sans text-[11px] text-ink-muted">· 250 m · Downscaled</span>}
     </>
   );
 

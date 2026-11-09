@@ -1,8 +1,8 @@
 /**
- * The six routes of NCR THERMAL/OPS v2 (UI_SPEC_v2 §2.1) and what the persistent map stage
+ * The six routes of the Delhi NCR Heat Atlas explorer (UI_SPEC_v2 §2.1) and what the persistent map stage
  * does behind each of them. Hash routing: `#/<route>?<params>` (params: state/urlSync.js).
  */
-import { BookOpenText, Boxes, FlaskConical, Layers3, LineChart, Radar } from "lucide-react";
+import { BrainCircuit, Database, FlaskConical, Hexagon, LineChart, Map as MapIcon } from "lucide-react";
 
 /**
  * Stage behaviour per route:
@@ -17,9 +17,9 @@ export const ROUTES = Object.freeze([
   Object.freeze({
     id: "control",
     key: "1",
-    label: "Control",
-    short: "Control",
-    icon: Radar,
+    label: "Heat map",
+    short: "Map",
+    icon: MapIcon,
     stage: "live",
     view: "../views/control/MissionControl.jsx",
     legacy: "../components/MapContainer.jsx",
@@ -39,9 +39,9 @@ export const ROUTES = Object.freeze([
   Object.freeze({
     id: "drivers",
     key: "3",
-    label: "Drivers",
+    label: "AI drivers",
     short: "Drivers",
-    icon: Layers3,
+    icon: BrainCircuit,
     stage: "dock-right",
     view: "../views/drivers/DriversView.jsx",
     legacy: "../components/ShapDependenceViewer.jsx",
@@ -50,9 +50,9 @@ export const ROUTES = Object.freeze([
   Object.freeze({
     id: "zones",
     key: "4",
-    label: "Zones",
+    label: "Heat zones",
     short: "Zones",
-    icon: Boxes,
+    icon: Hexagon,
     stage: "dock-left",
     view: "../views/zones/ZonesView.jsx",
     legacy: "../components/GovernanceZoning.jsx",
@@ -61,8 +61,8 @@ export const ROUTES = Object.freeze([
   Object.freeze({
     id: "lab",
     key: "5",
-    label: "Model Lab",
-    short: "Lab",
+    label: "Model lab",
+    short: "Model",
     icon: FlaskConical,
     stage: "hidden",
     view: "../views/lab/ModelLab.jsx",
@@ -72,9 +72,9 @@ export const ROUTES = Object.freeze([
   Object.freeze({
     id: "sources",
     key: "6",
-    label: "Sources",
-    short: "Sources",
-    icon: BookOpenText,
+    label: "Data sources",
+    short: "Data",
+    icon: Database,
     stage: "hidden",
     view: "../views/sources/SourcesView.jsx",
     legacy: null,

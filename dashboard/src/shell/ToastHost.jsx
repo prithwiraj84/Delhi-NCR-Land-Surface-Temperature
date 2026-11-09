@@ -79,7 +79,7 @@ function ToastItem({ toast, onDismiss, level }) {
               toast.action.onClick?.();
               onDismiss(toast.id);
             }}
-            className="focus-ring mt-1.5 inline-flex h-6 items-center rounded px-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-signal hover:bg-signal/10"
+            className="focus-ring mt-1.5 inline-flex h-6 items-center rounded px-1.5 font-sans text-[11px] text-signal hover:bg-signal/10"
           >
             {toast.action.label}
           </button>

@@ -70,7 +70,7 @@ export function ZoneHeader({ summaries, k, silhouette, total, prevTotal, year, p
 
       <div>
         <div className="mb-1.5 flex items-baseline justify-between gap-2">
-          <p className="text-[11px] uppercase tracking-wider text-ink-faint">Area share by zone · {year ?? MISSING}</p>
+          <p className="text-[11px] text-ink-faint">Area share by zone · {year ?? MISSING}</p>
           <p className="font-mono text-[11px] text-ink-faint">{isNum(total) ? fmtKm2(total) : ""}</p>
         </div>
         <div

@@ -1,15 +1,20 @@
 /*
- * NCR THERMAL/OPS v2 - global styles (UI_SPEC_v2 §4.5 surfaces, §12 preferences).
+ * Delhi NCR Heat Atlas - global styles (v3 "dark AI lab").
  *
- * Colour/motion custom properties come from src/design/tokens.css (generated from tokens.js,
- * imported first in src/main.jsx). This file only composes them: base typography, glass
- * panels with HUD corner brackets, scanline skeleton, grain, vignette, focus ring, MapLibre
- * chrome, and the user-preference / perf-tier / motion-level overrides.
+ * Colour/motion custom properties come from src/design/tokens.css (generated from tokens.js +
+ * motion.js, imported first in app/layout.jsx). This file composes them: base typography,
+ * glass panels, cards and buttons, shimmer skeletons, focus ring, MapLibre chrome, and the
+ * user-preference / perf-tier / motion-level overrides.
  *
- * Root attributes written by the shell (AppShell + SettingsMenu):
+ * Root attributes written by the explorer shell (AppShell + SettingsMenu):
+ *   html[data-app="explore"]               the full-screen WebGL explorer is mounted
  *   html[data-motion="full|reduced|off"]   effective motion level (§5.3)
  *   html[data-perf-tier="0..3"]            perf governor tier (§6.6): >= 1 => solid panels
  *   html[data-playing="true"]              playback running => panels solid (§3.2, budget)
+ *
+ * Motion follows the emil-design-eng rules: transform/opacity only, ease-out for anything that
+ * enters or leaves, <= 300 ms for UI, :active press feedback at scale(0.97), hover effects only
+ * on devices that can hover, and nothing animates on keyboard-driven, high-frequency actions.
  */
 @tailwind base;
 @tailwind components;
@@ -26,9 +31,9 @@
   color-scheme: dark;
   --focus: var(--signal);
   --bracket: var(--hairline-strong);
-  --scan-line: rgba(69, 224, 255, 0.3);
-  --grain-opacity: 0.03;
-  --panel-blur: 12px;
+  --scan-line: rgba(109, 141, 255, 0.35);
+  --grain-opacity: 0;
+  --panel-blur: 14px;
   transition: --mode-accent var(--motion-terminator) var(--ease-sine-in-out);
 }
 
@@ -41,20 +46,24 @@
   html {
     -webkit-text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
-    background-color: #070b14;
+    background-color: #08090d;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
     @apply font-sans text-ink antialiased;
-    background-color: var(--bg, #070b14);
-    font-size: 14px;
-    line-height: 21px;
+    background-color: var(--bg, #08090d);
+    font-size: 15px;
+    line-height: 1.6;
     min-height: 100dvh;
-    overflow: hidden;
+    font-feature-settings: "ss01" 1, "cv11" 1;
   }
 
-  #root {
-    min-height: 100dvh;
+  /* The explorer is a fixed full-screen app: no page scroll behind the map. */
+  html[data-app="explore"] body {
+    overflow: hidden;
+    font-size: 14px;
+    line-height: 21px;
   }
 
   h1,
@@ -62,14 +71,15 @@
   h3,
   h4 {
     @apply font-display;
+    letter-spacing: -0.015em;
   }
 
   code {
-    @apply rounded bg-void/70 px-1 py-px font-mono text-[0.85em] text-lunar;
+    @apply rounded-md bg-surface-3 px-1.5 py-px font-mono text-[0.85em] text-ink-strong;
   }
 
   ::selection {
-    background: rgba(69, 224, 255, 0.3);
+    background: rgba(109, 141, 255, 0.35);
     color: var(--ink-strong);
   }
 
@@ -88,7 +98,7 @@
 }
 
 @layer components {
-  /* ---- Glass panel (§4.5): surface-1 @ 72 % + blur 12 + saturate 140 %, hairline, radius 12 */
+  /* ---- Glass panel: surface-1 @ 72 % + blur 14 + saturate 140 %, hairline, soft shadow ---- */
   .glass,
   .glass-panel {
     background-color: var(--surface-1-glass);
@@ -107,8 +117,8 @@
   }
 
   /*
-   * HUD corner brackets: 8 px L-ticks at each corner drawn by eight gradient layers on a
-   * pseudo-element (no extra DOM). `.hud-active` turns them signal @ 60 %.
+   * v3 panel edge: the v2 HUD corner brackets are gone; `.hud` now draws a 1 px light catch
+   * along the top edge (a lit glass rim) and `.hud-active` a brand-tinted ring.
    */
   .hud {
     position: relative;
@@ -119,76 +129,53 @@
     inset: -1px;
     border-radius: inherit;
     pointer-events: none;
-    background:
-      linear-gradient(var(--bracket), var(--bracket)) top left / 8px 1px no-repeat,
-      linear-gradient(var(--bracket), var(--bracket)) top left / 1px 8px no-repeat,
-      linear-gradient(var(--bracket), var(--bracket)) top right / 8px 1px no-repeat,
-      linear-gradient(var(--bracket), var(--bracket)) top right / 1px 8px no-repeat,
-      linear-gradient(var(--bracket), var(--bracket)) bottom left / 8px 1px no-repeat,
-      linear-gradient(var(--bracket), var(--bracket)) bottom left / 1px 8px no-repeat,
-      linear-gradient(var(--bracket), var(--bracket)) bottom right / 8px 1px no-repeat,
-      linear-gradient(var(--bracket), var(--bracket)) bottom right / 1px 8px no-repeat;
+    padding: 1px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 38%);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
   }
   .hud-active {
-    --bracket: rgba(69, 224, 255, 0.6);
+    box-shadow:
+      0 0 0 1px rgba(109, 141, 255, 0.45),
+      var(--shadow-panel);
   }
 
-  /* One-time mount scan (§4.5 B): a 1 px signal line sweeps the panel top -> bottom. */
+  /* v2 one-time mount scan: retired in v3 (decorative motion on a frequent surface). */
   .mount-scan {
     position: relative;
-    overflow: hidden;
-  }
-  .mount-scan::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    top: 0;
-    height: 1px;
-    background: var(--scan-line);
-    pointer-events: none;
-    animation: mount-scan 600ms linear 1 forwards;
   }
 
-  /* Scanline skeleton (§5.2 K): surface-2 block with a 1 px signal line sweeping in 1.6 s. */
-  .scan-skeleton {
+  /* Skeletons: a soft light band sweeps across (linear, constant motion). */
+  .scan-skeleton,
+  .skeleton {
     position: relative;
     overflow: hidden;
     background-color: var(--surface-2);
     border-radius: var(--radius-md);
   }
-  .scan-skeleton::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    top: 0;
-    height: 1px;
-    background: var(--scan-line);
-    animation: skeleton-scan 1.6s linear infinite;
-  }
-  /* v1 name */
   .skeleton {
     background-color: var(--surface-3);
-    position: relative;
-    overflow: hidden;
   }
+  .scan-skeleton::after,
   .skeleton::after {
     content: "";
     position: absolute;
-    inset-inline: 0;
-    top: 0;
-    height: 1px;
-    background: var(--scan-line);
-    animation: skeleton-scan 1.6s linear infinite;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+    animation: shimmer 1.6s linear infinite;
   }
 
-  /* Micro label: JetBrains Mono 11 px, 0.14em, uppercase, ink-faint; never below 11 px. */
+  /* Section label: 12 px Geist, medium, sentence case, ink-faint. */
   .micro-label {
-    font-family: var(--font-mono);
-    font-size: 11px;
+    font-family: var(--font-sans);
+    font-size: 12px;
     line-height: 1.3;
     font-weight: 500;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
+    letter-spacing: 0.01em;
     color: var(--ink-faint);
   }
 
@@ -204,34 +191,23 @@
     @apply outline-none focus-visible:ring-2 focus-visible:ring-signal focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
   }
 
-  /* Static grain (§4.5): 128 px feTurbulence tile at 3 %, overlay blend, chrome only. */
+  /* Grain retired in v3 (kept as a no-op class so existing markup stays valid). */
   .grain {
     position: relative;
     isolation: isolate;
-  }
-  .grain::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 1;
-    opacity: var(--grain-opacity);
-    mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1 0'/></filter><rect width='128' height='128' filter='url(%23n)'/></svg>");
-    background-size: 128px 128px;
   }
 
   /* Stage vignette (transparent at 55 % to void @ 70 %) + one static sky glow in --mode-accent @ 6 %. */
   .stage-vignette {
     pointer-events: none;
     background:
-      radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(5, 7, 13, 0.7) 100%),
+      radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(5, 6, 10, 0.72) 100%),
       radial-gradient(ellipse at 50% -10%, color-mix(in srgb, var(--mode-accent) 6%, transparent) 0%, transparent 60%);
   }
 
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: rgba(160, 185, 225, 0.28) transparent;
+    scrollbar-color: rgba(226, 232, 255, 0.16) transparent;
   }
   .scrollbar-thin::-webkit-scrollbar {
     width: 8px;
@@ -241,21 +217,21 @@
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgba(160, 185, 225, 0.28);
+    background: rgba(226, 232, 255, 0.16);
     border-radius: 9999px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(69, 224, 255, 0.45);
+    background-color: rgba(109, 141, 255, 0.45);
   }
 
   .tooltip-pop {
     transform-origin: var(--radix-tooltip-content-transform-origin);
-    animation: tooltip-pop var(--motion-quick) var(--ease-quick);
+    animation: tooltip-pop 150ms var(--ease-out);
   }
 
-  /* v1 helpers kept (restyled): no neon glow, no drifting grid (removed in v2, §4.5). */
+  /* v1 helpers kept (restyled). */
   .neon-text {
     color: var(--signal);
   }
@@ -275,32 +251,212 @@
     white-space: nowrap;
     border: 0;
   }
+
+  /* ---- v3 building blocks (content pages and explorer chrome) ---------------------------- */
+
+  /* Brand gradient text (headings only; never for data values). */
+  .text-gradient {
+    background: var(--brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Hairline-bordered card on surface-2 with the lit top rim. */
+  .card {
+    position: relative;
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0) 40%), var(--surface-2);
+    border: 1px solid var(--hairline);
+    box-shadow: var(--shadow-panel);
+  }
+
+  /* Buttons: press feedback at scale(0.97) in 160 ms ease-out; colour change uses plain ease. */
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-full px-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-signal focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
+    height: 44px;
+    font-size: 15px;
+    transition:
+      transform 160ms var(--ease-out),
+      background-color 200ms ease,
+      border-color 200ms ease,
+      color 200ms ease;
+  }
+  .btn:active {
+    transform: scale(0.97);
+  }
+  .btn-primary {
+    background: var(--ink-strong);
+    color: #0a0b10;
+  }
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--ink-strong);
+    border: 1px solid var(--hairline-strong);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .btn-primary:hover {
+      background: #ffffff;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(226, 232, 255, 0.28);
+    }
+  }
+
+  /* Small pill badge ("Real Earth Engine data", "Projection"). */
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-hairline-strong bg-white/[0.03] px-3 py-1 text-[13px] font-medium text-ink-muted;
+  }
+
+  /* Faint engineering grid behind hero sections, fading out at the edges. */
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(226, 232, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(226, 232, 255, 0.045) 1px, transparent 1px);
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 100%);
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 100%);
+  }
+
+  /* Long-form reading (methodology, learn): comfortable measure and rhythm. */
+  .prose-atlas {
+    @apply text-[16px] leading-[1.75] text-ink-muted;
+    max-width: 68ch;
+  }
+  .prose-atlas p + p {
+    margin-top: 1.1em;
+  }
+  .prose-atlas strong {
+    @apply font-semibold text-ink-strong;
+  }
+  .prose-atlas a {
+    @apply text-ink-strong underline decoration-hairline-strong underline-offset-4;
+    transition: text-decoration-color 200ms ease;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .prose-atlas a:hover {
+      text-decoration-color: var(--brand-c);
+    }
+  }
 }
 
-@keyframes mount-scan {
+/* ---- Content-page motion (choreograph skill: one entrance per container, varied stagger) ---
+ *   Scroll reveal  [data-reveal] (app/_components/Reveal.jsx): fade + 14 px rise, 600 ms out.
+ *   Hero           .hero-in: one-shot keyframe, --d delay and --rise distance per element
+ *                  (lead rises 16 px, support 10 px, decoration only fades: .hero-fade).
+ *   Develop        .hero-develop: the heat map is revealed top -> bottom like a satellite
+ *                  swath (clip-path, strong ease-in-out), with a scan line riding its edge.
+ * Under reduced motion every one collapses to an opacity fade (no movement, no clip). */
+[data-reveal="armed"] {
+  opacity: 0;
+  transform: translateY(14px);
+}
+[data-reveal="shown"] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 600ms var(--ease-out) var(--reveal-delay, 0ms),
+    transform 600ms var(--ease-out) var(--reveal-delay, 0ms);
+}
+/* Chart bars grow from their baseline once their section is revealed (transform only). The
+   per-bar step shrinks the gap visually because the ease-out front-loads each bar's motion. */
+.bar-fill {
+  transform-origin: left center;
+}
+[data-reveal="armed"] .bar-fill {
+  transform: scaleX(0);
+}
+[data-reveal="shown"] .bar-fill {
+  transform: scaleX(1);
+  transition: transform 800ms var(--ease-out) calc(var(--reveal-delay, 0ms) + 120ms + var(--i, 0) * 45ms);
+}
+.hero-in {
+  animation: hero-in 600ms var(--ease-out) var(--d, 0ms) both;
+}
+/* Headline + intro: transform only, visible from the first frame (they are the LCP element;
+   fading them in from opacity 0 delays Largest Contentful Paint). */
+.hero-rise {
+  animation: hero-rise 600ms var(--ease-out) var(--d, 0ms) both;
+}
+@keyframes hero-rise {
   from {
-    transform: translateY(0);
-    opacity: 1;
+    transform: translateY(var(--rise, 12px));
   }
-  to {
-    transform: translateY(var(--scan-distance, 600px));
+}
+.hero-fade {
+  animation: hero-fade 450ms ease var(--d, 0ms) both;
+}
+.hero-develop {
+  animation: hero-develop 1200ms var(--ease-in-out) var(--d, 150ms) both;
+}
+.hero-scanline {
+  animation: hero-scanline 1200ms var(--ease-in-out) var(--d, 150ms) both;
+}
+@keyframes hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--rise, 12px));
+  }
+}
+@keyframes hero-fade {
+  from {
     opacity: 0;
   }
 }
-
-@keyframes skeleton-scan {
+@keyframes hero-develop {
   from {
-    top: 0;
+    clip-path: inset(0 0 100% 0);
   }
   to {
-    top: 100%;
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes hero-scanline {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(var(--scan-h, 100%));
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal="armed"] {
+    transform: none;
+  }
+  [data-reveal="shown"] {
+    transition: opacity 300ms ease;
+  }
+  .hero-in,
+  .hero-develop {
+    animation: hero-fade 300ms ease both;
+  }
+  .hero-rise {
+    animation: none;
+  }
+  .hero-scanline {
+    display: none;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
   }
 }
 
 @keyframes tooltip-pop {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.97);
   }
   to {
     opacity: 1;
@@ -329,7 +485,7 @@
 /* ---- MapLibre chrome restyled for the dark glass UI ------------------------------------ */
 .maplibregl-ctrl-attrib,
 .maplibregl-ctrl-attrib.maplibregl-compact {
-  background: rgba(7, 11, 20, 0.78) !important;
+  background: rgba(8, 9, 13, 0.78) !important;
   color: var(--ink-faint);
   font-family: var(--font-sans);
   font-size: 11px;
@@ -368,10 +524,6 @@
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
-:root[data-perf-tier="2"] .grain::after,
-:root[data-perf-tier="3"] .grain::after {
-  display: none;
-}
 
 /* ---- Motion levels (§5.3). "off" kills every CSS animation/transition; "reduced" keeps
         opacity-only transitions short and removes looping decoration. -------------------- */
@@ -382,12 +534,12 @@
   transition: none !important;
   scroll-behavior: auto !important;
 }
-:root[data-motion="reduced"] .mount-scan::after,
 :root[data-motion="reduced"] .scan-skeleton::after,
 :root[data-motion="reduced"] .skeleton::after,
 :root[data-motion="reduced"] .animate-live-pulse,
 :root[data-motion="reduced"] .animate-glow-pulse,
-:root[data-motion="reduced"] .animate-scan-sweep {
+:root[data-motion="reduced"] .animate-scan-sweep,
+:root[data-motion="reduced"] .animate-shimmer {
   animation: none !important;
 }
 :root[data-motion="reduced"] *,
@@ -402,6 +554,9 @@
   :root:not([data-motion="full"]) *::after {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
+  }
+  .btn:active {
+    transform: none;
   }
 }
 
@@ -418,11 +573,8 @@
 @media (prefers-contrast: more) {
   :root {
     --ink-faint: var(--ink-muted);
-    --hairline: rgba(160, 185, 225, 0.32);
-    --hairline-strong: rgba(160, 185, 225, 0.45);
-  }
-  .grain::after {
-    display: none;
+    --hairline: rgba(226, 232, 255, 0.3);
+    --hairline-strong: rgba(226, 232, 255, 0.45);
   }
 }
 
@@ -430,16 +582,21 @@
   .glass,
   .glass-panel,
   .glass-strong,
-  .solid-panel {
+  .solid-panel,
+  .card {
     border: 1px solid CanvasText;
     background: Canvas;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
-  .grain::after,
   .stage-vignette,
-  .hud::before {
+  .hud::before,
+  .bg-grid {
     display: none;
+  }
+  .text-gradient {
+    color: CanvasText;
+    background: none;
   }
   .shadow-glow-signal,
   .shadow-glow-alert {
@@ -448,8 +605,8 @@
 }
 
 @media print {
-  .grain::after,
-  .stage-vignette {
+  .stage-vignette,
+  .bg-grid {
     display: none;
   }
 }

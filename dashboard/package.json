@@ -1,18 +1,18 @@
 {
-  "name": "delhi-ncr-lst-dashboard",
+  "name": "delhi-ncr-heat-atlas",
   "private": true,
-  "version": "2.0.0",
-  "description": "NCR THERMAL/OPS v2: Delhi NCR land surface temperature 1990-2050 (day + night, SSP projections) with explainable-AI drivers, governance zones and honest model diagnostics.",
+  "version": "3.0.0",
+  "description": "Delhi NCR Heat Atlas: land surface temperature 1990-2050 (day and night, SSP projections) explained with machine learning. Next.js site + interactive WebGL explorer.",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "test": "vitest run",
     "lint": "eslint .",
     "tokens": "node src/design/writeTokensCss.mjs",
     "tokens:check": "node src/design/writeTokensCss.mjs --check",
-    "budget": "node scripts/check-budgets.mjs"
+    "media": "node scripts/build-media.mjs"
   },
   "dependencies": {
     "@deck.gl/aggregation-layers": "~9.4.0",
@@ -21,10 +21,10 @@
     "@deck.gl/geo-layers": "~9.4.0",
     "@deck.gl/layers": "~9.4.0",
     "@deck.gl/mesh-layers": "~9.4.0",
-    "@deck.gl/react": "~9.4.0",
-    "@fontsource-variable/inter": "^5.3.0",
-    "@fontsource-variable/jetbrains-mono": "^5.3.0",
-    "@fontsource-variable/space-grotesk": "^5.3.0",
+    "@deck.gl/react": "9.4.0",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@number-flow/react": "^0.6.2",
     "@radix-ui/react-slider": "^1.2.1",
     "@radix-ui/react-switch": "^1.1.1",
     "@radix-ui/react-tabs": "^1.1.1",
@@ -42,8 +42,9 @@
     "h3-js": "^4.1.0",
     "lucide-react": "^0.460.0",
     "maplibre-gl": "^4.7.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "next": "16.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "react-map-gl": "^7.1.7",
     "recharts": "^2.13.0",
     "tailwind-merge": "^2.5.4",
@@ -56,7 +57,6 @@
     "eslint": "^9.13.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",
-    "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
     "jsdom": "^26.1.0",
     "postcss": "^8.4.47",
@@ -64,5 +64,9 @@
     "vite": "^5.4.10",
     "vitest": "^2.1.4",
     "vitest-axe": "^0.1.0"
+  },
+  "author": "Prithwiraj Das",
+  "engines": {
+    "node": ">=20.9"
   }
 }

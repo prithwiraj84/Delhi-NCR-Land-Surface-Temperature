@@ -15,7 +15,7 @@ function Chip({ icon: Icon, label, value, detail, accent }) {
     <div className={CHIP}>
       <Icon className={cn("h-4 w-4 shrink-0", accent)} aria-hidden="true" />
       <div className="min-w-0 leading-tight">
-        <p className="text-[10px] uppercase tracking-wider text-ink-faint">{label}</p>
+        <p className="text-[10px] text-ink-faint">{label}</p>
         <p className="truncate font-display text-sm font-semibold text-ink-strong">
           {value}
           {detail ? <span className="ml-1 font-sans text-[11px] font-normal text-ink-muted">{detail}</span> : null}
@@ -35,7 +35,7 @@ export default function KpiChips({ year, kpis, loading, compact = false }) {
   return (
     <section className="pointer-events-auto flex flex-col items-end gap-2" aria-label={`Epoch ${year} key figures`}>
       <div className="relative flex items-baseline gap-2 rounded-xl border border-cyan/25 bg-bg/70 px-3 py-1 shadow-glow-cyan backdrop-blur-md">
-        <span className="text-[10px] uppercase tracking-[0.2em] text-cyan-soft">Epoch</span>
+        <span className="text-[10px] text-cyan-soft">Epoch</span>
         {/* popLayout (not "wait"): the new year renders in the same commit as the new KPI
             values, so the label can never lag behind the data while the old year fades out. */}
         <AnimatePresence mode="popLayout" initial={false}>

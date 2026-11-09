@@ -16,7 +16,7 @@ import { formatDuration, stageLabel, timingRows } from "./perfModel.js";
 function Fact({ label, children }) {
   return (
     <div className="min-w-0 rounded-lg border border-panel-border bg-bg-raised/50 px-3 py-2">
-      <dt className="text-[10px] uppercase tracking-wider text-ink-faint">{label}</dt>
+      <dt className="text-[10px] text-ink-faint">{label}</dt>
       <dd className="mt-0.5 truncate font-mono text-xs text-ink">{children}</dd>
     </div>
   );
@@ -62,7 +62,7 @@ export function HardwareCard({ hardware, timings }) {
         </div>
 
         <div>
-          <p className="mb-1.5 flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-ink-faint">
+          <p className="mb-1.5 flex items-center gap-1.5 text-[11px] text-ink-faint">
             <MemoryStick aria-hidden="true" className="size-3.5 text-cyan" />
             GPUs ({gpuCount})
           </p>
@@ -97,7 +97,7 @@ export function HardwareCard({ hardware, timings }) {
 
       <div className="min-w-0">
         <div className="mb-2 flex items-baseline justify-between gap-2">
-          <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-ink-faint">
+          <p className="flex items-center gap-1.5 text-[11px] text-ink-faint">
             <Timer aria-hidden="true" className="size-3.5 text-violet" />
             Stage timings
           </p>

@@ -6,22 +6,22 @@ import { cn } from "../../lib/cn.js";
 /**
  * Button with a visible keyboard focus ring (2 px signal, 2 px offset). Hit targets are
  * >= 24 px (WCAG 2.2 2.5.8); `size="touch"` gives 44 px for touch layouts. No glow (the glow
- * budget is reserved for the playhead, the selection reticle and one alert).
+ * budget is reserved for the playhead, the selection reticle and one alert). Press feedback:
+ * scale(0.97) in 160 ms ease-out (emil-design-eng); colours change with plain ease.
  */
-// eslint-disable-next-line react-refresh/only-export-components -- shadcn convention: variants are reusable
 export const buttonVariants = cva(
   [
-    "focus-ring inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-md",
-    "font-medium transition-[background-color,border-color,color] duration-instant",
+    "focus-ring inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg",
+    "font-medium transition-[background-color,border-color,color,transform] duration-quick ease-out active:scale-[0.97]",
     "disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-4 [&_svg]:shrink-0",
   ],
   {
     variants: {
       variant: {
-        primary: "border border-signal/55 bg-signal/15 text-ink-strong hover:bg-signal/25",
-        secondary: "border border-control bg-surface-3 text-ink hover:border-ink-faint hover:bg-panel-hover",
-        ghost: "border border-transparent text-ink-muted hover:bg-surface-3/70 hover:text-ink",
-        outline: "border border-control bg-transparent text-ink hover:border-signal/60",
+        primary: "border border-transparent bg-ink-strong text-[#0A0B10] hover:bg-white",
+        secondary: "border border-hairline-strong bg-white/[0.04] text-ink hover:border-control hover:bg-white/[0.07]",
+        ghost: "border border-transparent text-ink-muted hover:bg-white/[0.05] hover:text-ink",
+        outline: "border border-hairline-strong bg-transparent text-ink hover:border-brand-b/70",
         danger: "border border-crit/55 bg-crit/15 text-ink-strong hover:bg-crit/25",
         // v1 name
         violet: "border border-lunar/55 bg-lunar/15 text-ink-strong hover:bg-lunar/25",

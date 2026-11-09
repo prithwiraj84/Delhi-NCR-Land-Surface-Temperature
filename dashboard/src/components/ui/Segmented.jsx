@@ -7,8 +7,8 @@ import { cn } from "../../lib/cn.js";
 /**
  * Segmented control = radio group with roving tabindex (UI_SPEC §12): one tab stop, arrow
  * keys move AND select (wrapping), Home/End jump to the ends, disabled options are skipped.
- * The active indicator is a surface-3 pill with a 2 px signal underline that slides with the
- * spring-ui token (chrome only; it jumps under Reduced/Off motion).
+ * The active indicator is a raised pill with a 1 px ring in the option accent that slides with
+ * the spring-ui token (chrome only; it jumps under Reduced/Off motion).
  *
  * Unavailable options stay visible with their reason (e.g. "Night unavailable in v1
  * bundle") in the tooltip and accessible description, instead of disappearing.
@@ -54,7 +54,7 @@ export function Segmented({ value, onChange, options, ariaLabel, size = "md", cl
   const heights = { sm: "h-7 text-xs", md: "h-8 text-[13px]", touch: "h-11 text-sm" }[size] ?? "h-8 text-[13px]";
 
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className={cn("inline-flex items-center gap-0.5 rounded-md border border-control/80 bg-surface-2 p-0.5", className)}>
+    <div role="radiogroup" aria-label={ariaLabel} className={cn("inline-flex items-center gap-0.5 rounded-full border border-hairline-strong bg-white/[0.03] p-0.5", className)}>
       {options.map((opt, i) => {
         const selected = opt.value === value;
         const tabbable = selected || (!options.some((o) => o.value === value) && i === selectedIndex);
@@ -73,7 +73,7 @@ export function Segmented({ value, onChange, options, ariaLabel, size = "md", cl
             onClick={() => !opt.disabled && !selected && onChange(opt.value)}
             onKeyDown={(e) => onKeyDown(e, i)}
             className={cn(
-              "focus-ring relative inline-flex min-w-6 select-none items-center justify-center gap-1.5 rounded px-2.5 font-medium transition-colors duration-instant",
+              "focus-ring relative inline-flex min-w-6 select-none items-center justify-center gap-1.5 rounded-full px-3 font-medium transition-colors duration-quick",
               heights,
               selected ? "text-ink-strong" : "text-ink-muted hover:text-ink",
               opt.disabled && "cursor-not-allowed opacity-50 hover:text-ink-muted",
@@ -84,8 +84,8 @@ export function Segmented({ value, onChange, options, ariaLabel, size = "md", cl
                 aria-hidden="true"
                 layoutId={layoutId ? `${layoutId}-indicator` : undefined}
                 transition={level === "full" ? springs.ui : { duration: 0 }}
-                className="absolute inset-0 rounded bg-surface-3"
-                style={{ boxShadow: `inset 0 -2px 0 0 ${accent?.(opt.value) ?? "var(--signal)"}` }}
+                className="absolute inset-0 rounded-full bg-white/[0.09]"
+                style={{ boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent?.(opt.value) ?? "var(--signal)"} 55%, transparent)` }}
               />
             )}
             <span className="relative inline-flex items-center gap-1.5">

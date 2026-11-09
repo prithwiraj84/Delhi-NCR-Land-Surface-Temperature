@@ -54,13 +54,13 @@ function ContinuousLegend({ metric }) {
         })}
       </div>
       {diverging ? (
-        <div className="mt-0.5 flex justify-between text-[10px] uppercase tracking-wider">
+        <div className="mt-0.5 flex justify-between text-[10px]">
           <span className="text-cyan-soft">◀ cooling</span>
           <span className="text-ink-faint">0 = no effect</span>
           <span className="text-rose-soft">warming ▶</span>
         </div>
       ) : (
-        <div className="mt-0.5 flex justify-between text-[10px] uppercase tracking-wider text-ink-faint">
+        <div className="mt-0.5 flex justify-between text-[10px] text-ink-faint">
           <span>p02 · cooler</span>
           <span>hotter · p98</span>
         </div>
@@ -109,7 +109,7 @@ export default function MapLegend({ metric, shares, footnote }) {
     >
       <header className="mb-2 flex items-baseline justify-between gap-2">
         <h3 className="truncate font-display text-[13px] font-semibold text-ink-strong">{metric.title}</h3>
-        {metric.unit ? <span className="shrink-0 text-[10px] uppercase tracking-wider text-ink-faint">{metric.unit}</span> : null}
+        {metric.unit ? <span className="shrink-0 text-[10px] text-ink-faint">{metric.unit}</span> : null}
       </header>
       {!metric.available ? (
         <p className="text-xs text-ink-muted">{metric.emptyReason}</p>

@@ -48,7 +48,7 @@ const STEPS = [
     body: (
       <>
         Copy <code>outputs/web/*</code> (or unzip <code>web_bundle.zip</code>) into <code>dashboard/public/data/</code> (a synthetic run writes <code>public/demo/</code>),
-        or point <code>VITE_DATA_BASE_URL</code> at a hosted copy.
+        or point <code>NEXT_PUBLIC_DATA_BASE_URL</code> at a hosted copy.
       </>
     ),
   },

@@ -161,7 +161,7 @@ function FoldTable({ points, metric }) {
       <div className="scrollbar-thin max-h-64 overflow-auto px-3 pb-3">
         <table className="w-full text-left">
           <caption className="sr-only">Per-fold {metric.label} for every model and validation scheme</caption>
-          <thead className="sticky top-0 bg-bg-raised text-[11px] uppercase tracking-wider text-ink-faint">
+          <thead className="sticky top-0 bg-bg-raised text-[11px] text-ink-faint">
             <tr>
               <th scope="col" className="py-1.5 pr-3 font-medium">Scheme</th>
               <th scope="col" className="py-1.5 pr-3 font-medium">Model</th>

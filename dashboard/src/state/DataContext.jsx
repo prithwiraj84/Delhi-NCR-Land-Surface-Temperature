@@ -466,7 +466,6 @@ export function DataProvider({ children, store = defaultBundleStore, autoLoad = 
 }
 
 /** Access the shared data/UI state (v1 facade + v2 additions). Must be used inside <DataProvider>. */
-// eslint-disable-next-line react-refresh/only-export-components -- the hook belongs with its provider (SPEC_v1 5.1)
 export function useData() {
   const context = useContext(DataContext);
   if (!context) throw new Error("useData() must be used inside <DataProvider>.");

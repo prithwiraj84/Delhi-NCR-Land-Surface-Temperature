@@ -21,6 +21,11 @@ export const easing = Object.freeze({
   exit: Object.freeze([0.4, 0, 1, 1]),
   cubicInOut: Object.freeze([0.65, 0, 0.35, 1]),
   sineInOut: Object.freeze([0.37, 0, 0.63, 1]),
+  // Strong curves from the emil-design-eng skill: UI enters AND exits ease-out (never ease-in);
+  // on-screen movement uses the strong ease-in-out; sheets/drawers use the iOS drawer curve.
+  out: Object.freeze([0.23, 1, 0.32, 1]),
+  inOut: Object.freeze([0.77, 0, 0.175, 1]),
+  drawer: Object.freeze([0.32, 0.72, 0, 1]),
 });
 
 /**
@@ -31,7 +36,7 @@ export const motion = Object.freeze({
   instant: Object.freeze({ ms: 80, ease: "linear" }),
   quick: Object.freeze({ ms: 140, ease: "quick" }),
   base: Object.freeze({ ms: 220, ease: "expoOut" }),
-  exit: Object.freeze({ ms: 160, ease: "exit" }),
+  exit: Object.freeze({ ms: 160, ease: "out" }),
   layer: Object.freeze({ ms: 400, ease: "cubicInOut" }),
   epoch: Object.freeze({ ms: 800, ease: "cubicInOut" }),
   elev: Object.freeze({ ms: 550, ease: "cubicInOut" }),

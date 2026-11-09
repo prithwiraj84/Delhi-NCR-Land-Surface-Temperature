@@ -177,7 +177,7 @@ export function PolicyTable({ rows, zoneList, manifest, ciLabel = "95% CI" }) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-wider text-ink-muted">Priority</span>
+          <span className="text-[11px] font-medium text-ink-muted">Priority</span>
           <SegmentedToggle
             label="Filter by priority"
             options={[{ value: ALL, label: "All" }, ...PRIORITIES.map((p) => ({ value: p.id, label: p.label }))]}
@@ -195,7 +195,7 @@ export function PolicyTable({ rows, zoneList, manifest, ciLabel = "95% CI" }) {
           className="w-48"
         />
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-wider text-ink-muted">Zones</span>
+          <span className="text-[11px] font-medium text-ink-muted">Zones</span>
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Show or hide zones">
             {zoneList.map((z) => {
               const on = !hiddenZones.has(z.id);
@@ -247,7 +247,7 @@ export function PolicyTable({ rows, zoneList, manifest, ciLabel = "95% CI" }) {
             Recommendations across all governance zones, with the model-based change in land surface temperature and its
             bootstrap {ciLabel}. Expected changes are associations, not causal effects, and are not additive across rows.
           </caption>
-          <thead className="bg-bg-raised/70 text-[11px] uppercase tracking-wider text-ink-faint">
+          <thead className="bg-bg-raised/70 text-[11px] text-ink-faint">
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id}>
                 {group.headers.map((header) => {
@@ -266,7 +266,7 @@ export function PolicyTable({ rows, zoneList, manifest, ciLabel = "95% CI" }) {
                           type="button"
                           onClick={header.column.getToggleSortingHandler()}
                           className={cn(
-                            "focus-ring group inline-flex items-center gap-1 rounded px-1 py-0.5 uppercase tracking-wider transition-colors hover:text-ink",
+                            "focus-ring group inline-flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:text-ink",
                             sorted && "text-cyan-soft",
                             right && "flex-row-reverse",
                           )}

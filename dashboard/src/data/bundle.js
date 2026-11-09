@@ -17,6 +17,7 @@
  * status "empty" with instructions, exactly like v1.
  */
 
+import { appEnv } from "../lib/env.js";
 import { DataLoadError, getDefaultDataBaseUrl, isUsableManifest } from "../lib/data.js";
 import { fetchBytes, parseJsonBytes } from "./fetch.js";
 
@@ -27,7 +28,7 @@ const trimSlash = (s) => String(s).replace(/\/+$/, "");
 function envOf(env) {
   if (env) return env;
   try {
-    return import.meta.env ?? {};
+    return appEnv;
   } catch (_error) {
     return {};
   }

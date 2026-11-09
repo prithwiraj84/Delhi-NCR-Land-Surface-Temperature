@@ -224,7 +224,7 @@ function ScenarioSimulator({ metaByName, dependenceKeyFor = (f) => f }) {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
           <Sparkles aria-hidden="true" className="h-3.5 w-3.5 text-cyan" />
           Presets
         </div>
@@ -246,7 +246,7 @@ function ScenarioSimulator({ metaByName, dependenceKeyFor = (f) => f }) {
 
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
-            <span id="scenario-delta-label" className="text-[11px] font-medium uppercase tracking-wider text-ink-muted">
+            <span id="scenario-delta-label" className="text-[11px] font-medium text-ink-muted">
               Change (Δ)
             </span>
             <span className="font-mono text-sm font-semibold text-ink-strong">
@@ -329,7 +329,7 @@ function ScenarioSimulator({ metaByName, dependenceKeyFor = (f) => f }) {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
             <FlaskConical aria-hidden="true" className="h-3.5 w-3.5 text-cyan" />
             Result · {year ?? "—"} epoch
           </div>

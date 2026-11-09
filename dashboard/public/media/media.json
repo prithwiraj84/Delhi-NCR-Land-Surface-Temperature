@@ -1,0 +1,186 @@
+{
+  "rasters": [
+    {
+      "key": "day_1990",
+      "mode": "day",
+      "year": 1990,
+      "tier": "observed-sparse",
+      "file": "lst-day-1990.webp",
+      "thumb": "lst-day-1990-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "day_1995",
+      "mode": "day",
+      "year": 1995,
+      "tier": "observed-sparse",
+      "file": "lst-day-1995.webp",
+      "thumb": "lst-day-1995-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "day_2000",
+      "mode": "day",
+      "year": 2000,
+      "tier": "observed",
+      "file": "lst-day-2000.webp",
+      "thumb": "lst-day-2000-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "day_2005",
+      "mode": "day",
+      "year": 2005,
+      "tier": "observed",
+      "file": "lst-day-2005.webp",
+      "thumb": "lst-day-2005-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "day_2010",
+      "mode": "day",
+      "year": 2010,
+      "tier": "observed",
+      "file": "lst-day-2010.webp",
+      "thumb": "lst-day-2010-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "day_2015",
+      "mode": "day",
+      "year": 2015,
+      "tier": "observed",
+      "file": "lst-day-2015.webp",
+      "thumb": "lst-day-2015-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "day_2020",
+      "mode": "day",
+      "year": 2020,
+      "tier": "observed",
+      "file": "lst-day-2020.webp",
+      "thumb": "lst-day-2020-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "day_2025",
+      "mode": "day",
+      "year": 2025,
+      "tier": "observed",
+      "file": "lst-day-2025.webp",
+      "thumb": "lst-day-2025-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "night_1990",
+      "mode": "night",
+      "year": 1990,
+      "tier": "modelled",
+      "file": "lst-night-1990.webp",
+      "thumb": "lst-night-1990-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "night_1995",
+      "mode": "night",
+      "year": 1995,
+      "tier": "modelled",
+      "file": "lst-night-1995.webp",
+      "thumb": "lst-night-1995-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "night_2000",
+      "mode": "night",
+      "year": 2000,
+      "tier": "reconstructed",
+      "file": "lst-night-2000.webp",
+      "thumb": "lst-night-2000-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "night_2005",
+      "mode": "night",
+      "year": 2005,
+      "tier": "observed",
+      "file": "lst-night-2005.webp",
+      "thumb": "lst-night-2005-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "night_2010",
+      "mode": "night",
+      "year": 2010,
+      "tier": "observed",
+      "file": "lst-night-2010.webp",
+      "thumb": "lst-night-2010-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "night_2015",
+      "mode": "night",
+      "year": 2015,
+      "tier": "observed",
+      "file": "lst-night-2015.webp",
+      "thumb": "lst-night-2015-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "night_2020",
+      "mode": "night",
+      "year": 2020,
+      "tier": "observed",
+      "file": "lst-night-2020.webp",
+      "thumb": "lst-night-2020-thumb.webp",
+      "width": 960,
+      "height": 1045
+    },
+    {
+      "key": "night_2025",
+      "mode": "night",
+      "year": 2025,
+      "tier": "observed",
+      "file": "lst-night-2025.webp",
+      "thumb": "lst-night-2025-thumb.webp",
+      "width": 960,
+      "height": 1045
+    }
+  ],
+  "projection": {
+    "file": "lst-day-2050-ssp245.webp",
+    "scenario": "ssp245",
+    "year": 2050,
+    "grid": "EPSG:32643 1 km"
+  },
+  "domains": {
+    "day": [
+      30,
+      58
+    ],
+    "night": [
+      12,
+      30
+    ]
+  },
+  "bounds": [
+    75.46,
+    26.68,
+    78.525,
+    30.015
+  ]
+}

@@ -34,7 +34,7 @@ function ThresholdCard({ card, index }) {
       />
       <header className="flex items-center gap-2">
         <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: card.accent }} />
-        <h4 className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">{card.title}</h4>
+        <h4 className="text-[11px] font-medium text-ink-muted">{card.title}</h4>
       </header>
       <div className="flex items-baseline gap-1.5">
         {Icon ? <Icon aria-hidden="true" className="h-4 w-4 shrink-0 self-center text-ink-muted" /> : null}

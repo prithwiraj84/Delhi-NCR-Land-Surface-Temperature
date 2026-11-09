@@ -20,3 +20,10 @@ Thumbs.db
 # SYNTHETIC in the manifest, the UI and the README). Large files are gzip-compressed (D3).
 # Since v2, public/data/ holds the user's REAL bundle and the synthetic v2 demo lives in public/demo/
 # (also tracked on purpose).
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.vercel

@@ -25,7 +25,7 @@ const WARM = THEME.rose;
 export function CardLabel({ children, right }) {
   return (
     <div className="mb-1.5 flex items-baseline justify-between gap-2">
-      <h4 className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-faint">{children}</h4>
+      <h4 className="text-[10px] font-medium text-ink-faint">{children}</h4>
       {right ? <span className="text-[10px] text-ink-faint">{right}</span> : null}
     </div>
   );

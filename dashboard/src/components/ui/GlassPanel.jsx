@@ -9,7 +9,6 @@ import { cn } from "../../lib/cn.js";
  * v1 are kept as names but render a hairline accent ring only (glow budget = 3).
  * For HUD corner brackets use <HudFrame> (or add `hud` to className).
  */
-// eslint-disable-next-line react-refresh/only-export-components -- shadcn convention: variants are reusable
 export const glassPanelVariants = cva("relative rounded-panel text-ink", {
   variants: {
     variant: {
