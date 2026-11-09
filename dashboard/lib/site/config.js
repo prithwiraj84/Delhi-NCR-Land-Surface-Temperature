@@ -3,9 +3,26 @@
  *
  * The public address is NEXT_PUBLIC_SITE_URL when set, else Vercel's production domain
  * (VERCEL_PROJECT_PRODUCTION_URL, available at build time on Vercel), else localhost.
+ * A bare host ("example.org", as typed into a hosting dashboard) gets https:// added; a value
+ * that is still not a valid URL falls back to the next candidate instead of failing the build.
  */
-const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "";
-const rawUrl = process.env.NEXT_PUBLIC_SITE_URL || (vercelHost ? `https://${vercelHost}` : "http://localhost:3000");
+function normalizeSiteUrl(value) {
+  const v = String(value ?? "").trim().replace(/\/+$/, "");
+  if (!v) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : `https://${v}`;
+  try {
+    const u = new URL(withScheme);
+    return `${u.origin}${u.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return null;
+  }
+}
+
+const rawUrl =
+  normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL) ??
+  normalizeSiteUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL) ??
+  normalizeSiteUrl(process.env.VERCEL_URL) ??
+  "http://localhost:3000";
 const basePath = (process.env.NEXT_PUBLIC_BASE_PATH || "").replace(/\/+$/, "");
 
 export const siteConfig = Object.freeze({

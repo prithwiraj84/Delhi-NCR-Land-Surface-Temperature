@@ -10,7 +10,7 @@
  */
 
 import { CollisionFilterExtension } from "@deck.gl/extensions";
-import { GeoJsonLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 
 /** deck compares extensions by identity: one shared instance. */
 const COLLISION_FILTER = new CollisionFilterExtension();
@@ -24,19 +24,38 @@ const VOID = [5, 7, 13];
 
 /** District hairlines; `highlightId` (district id) is drawn at 1.5 px full ink. */
 export function createBoundaryLayer(districtsGeo, { highlightId = null, idOf = defaultDistrictId } = {}) {
-  return new GeoJsonLayer({
+  // A plain PathLayer over the polygon rings: a GeoJsonLayer is a composite layer that also keeps a
+  // (here unused) SolidPolygonLayer fill sublayer, which cost ~4 ms of every camera frame.
+  return new PathLayer({
     id: "district-boundaries",
-    data: districtsGeo,
-    stroked: true,
-    filled: false,
-    getLineColor: (f) => (highlightId !== null && idOf(f) === highlightId ? [...INK_STRONG, 235] : [...INK, 82]),
-    getLineWidth: (f) => (highlightId !== null && idOf(f) === highlightId ? 1.5 : 1),
-    lineWidthUnits: "pixels",
-    lineWidthMinPixels: 1,
-    updateTriggers: { getLineColor: highlightId, getLineWidth: highlightId },
+    data: boundaryPaths(districtsGeo, idOf),
+    getPath: (d) => d.path,
+    getColor: (d) => (highlightId !== null && d.id === highlightId ? [...INK_STRONG, 235] : [...INK, 82]),
+    getWidth: (d) => (highlightId !== null && d.id === highlightId ? 1.5 : 1),
+    widthUnits: "pixels",
+    widthMinPixels: 1,
+    updateTriggers: { getColor: highlightId, getWidth: highlightId },
     pickable: false,
     parameters: ALWAYS_ON_TOP,
   });
+}
+
+const pathCache = new WeakMap();
+
+/** Closed rings of every (Multi)Polygon feature as `{id, path}` rows, cached per GeoJSON object. */
+export function boundaryPaths(districtsGeo, idOf = defaultDistrictId) {
+  if (!districtsGeo || typeof districtsGeo !== "object") return [];
+  const hit = pathCache.get(districtsGeo);
+  if (hit && hit.idOf === idOf) return hit.rows;
+  const rows = [];
+  for (const f of districtsGeo.features ?? []) {
+    const g = f?.geometry;
+    const polys = g?.type === "Polygon" ? [g.coordinates] : g?.type === "MultiPolygon" ? g.coordinates : [];
+    const id = idOf(f);
+    for (const poly of polys) for (const ring of poly) if (ring?.length > 1) rows.push({ id, path: ring });
+  }
+  pathCache.set(districtsGeo, { idOf, rows });
+  return rows;
 }
 
 /** District id of a boundary feature (v1/v2 GeoJSON carry `properties.id`; else `district_id`). */
@@ -106,6 +125,29 @@ export function createLabelLayer(labels) {
  * Selection reticles: `pinned` and `hover` are `{lon, lat, z}` (z = prism top in metres × the
  * elevation scale) or null. White ring with a 2 px void halo (D5); hover is thinner.
  */
+/**
+ * A fully transparent reticle ring (same layer type, props and pipeline parameters as the real
+ * reticles), drawn once at idle by the engine warm-up so the first hover does not stall ~250 ms
+ * while the ScatterplotLayer shader compiles.
+ */
+export function createReticleWarmLayer(lon, lat) {
+  return new ScatterplotLayer({
+    id: "reticle-warm",
+    data: [{ lon, lat, z: 0 }],
+    getPosition: (x) => [x.lon, x.lat, x.z],
+    radiusUnits: "meters",
+    getRadius: 1100,
+    radiusMinPixels: 8,
+    stroked: true,
+    filled: false,
+    getLineColor: [0, 0, 0, 0],
+    lineWidthUnits: "pixels",
+    getLineWidth: 2,
+    pickable: false,
+    parameters: ALWAYS_ON_TOP,
+  });
+}
+
 export function createReticleLayers({ pinned = null, hover = null, cellSizeM = 1000 }) {
   const out = [];
   const radius = (Number.isFinite(cellSizeM) ? cellSizeM : 1000) * 1.1;

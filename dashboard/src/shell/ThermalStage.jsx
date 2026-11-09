@@ -28,18 +28,26 @@ import { useData } from "../state/DataContext.jsx";
 import { useSelectionStore, useTimeStore, useViewStore } from "../state/stores/index.js";
 
 /**
- * Deck subclass that keeps the engine the single source of layers. @deck.gl/react forwards its
- * render-time props to deck.setProps DURING render (those calls always carry `parent`). React 19
- * can replay an uncommitted render (e.g. after the lazy basemap suspends) frames later, and the
- * replay would hand deck the layer list captured back then, whose reticle layers deck has since
- * finalized ("initialization of ScatterplotLayer … assertion failed", then GL_INVALID_OPERATION
- * floods). Substituting the engine's CURRENT layers at call time makes a stale list impossible;
- * the engine's own setProps({layers}) calls (no `parent`) pass through unchanged.
+ * Deck subclass that keeps the engine the single source of layers AND camera. @deck.gl/react
+ * forwards its render-time props to deck.setProps DURING render (those calls always carry
+ * `parent`). React 19 can replay an uncommitted render (e.g. after the lazy basemap suspends)
+ * frames later, and the replay would hand deck what was captured back then:
+ *   - layers: reticle layers deck has since finalized ("initialization of ScatterplotLayer …
+ *     assertion failed", then GL_INVALID_OPERATION floods);
+ *   - viewState: an OLD camera, which yanked the map back during wheel zoom and pans (measured:
+ *     40 wheel notches reached zoom 11.4 instead of 14, programmatic zooms were undone, and the
+ *     250 m raster never switched on), i.e. the "laggy zoom".
+ * Substituting the engine's CURRENT layers and view state at call time makes stale values
+ * impossible; the engine's own setProps({layers} / {viewState}) calls (no `parent`) pass through.
  */
 function deckClassFor(engine) {
   return class EngineDeck extends Deck {
     setProps(props) {
-      if (props && "parent" in props && "layers" in props) props = { ...props, layers: engine.getLayers() ?? props.layers };
+      if (props && "parent" in props) {
+        props = { ...props };
+        if ("layers" in props) props.layers = engine.getLayers() ?? props.layers;
+        if ("viewState" in props) props.viewState = engine.getViewState() ?? props.viewState;
+      }
       super.setProps(props);
     }
   };

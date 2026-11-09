@@ -67,6 +67,6 @@
   },
   "author": "Prithwiraj Das",
   "engines": {
-    "node": ">=20.9"
+    "node": "22.x"
   }
 }

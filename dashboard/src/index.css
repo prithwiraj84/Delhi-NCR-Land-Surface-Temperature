@@ -511,6 +511,18 @@
   filter: invert(0.85);
 }
 
+/* ---- Explorer: near-opaque panels instead of frosted glass ---------------------------------
+ * The explorer's panels float over a WebGL canvas that redraws on every camera frame, so a
+ * backdrop blur behind them must be recomputed per frame by the compositor. Measured on the map
+ * (wheel zoom + pan, 2x pixel ratio): p90 frame 27 ms with blur vs 7.5 ms without. The content
+ * pages keep their glass (static backgrounds, no per-frame cost). */
+html[data-app="explore"] .glass,
+html[data-app="explore"] .glass-panel {
+  background-color: rgba(14, 16, 22, 0.9);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* ---- Performance tiers + playback: solid panels (no backdrop blur), §6.6 / §3.2 ---------- */
 :root[data-perf-tier="1"] .glass,
 :root[data-perf-tier="2"] .glass,

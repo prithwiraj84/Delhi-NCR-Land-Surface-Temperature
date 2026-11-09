@@ -33,6 +33,8 @@ const nextConfig = {
     ];
   },
   images: { unoptimized: true },
+  // Opt-in browser source maps for performance profiling (LST_SOURCEMAPS=1 npm run build).
+  productionBrowserSourceMaps: process.env.LST_SOURCEMAPS === "1",
 };
 
 export default nextConfig;

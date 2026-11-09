@@ -42,7 +42,7 @@ import { createRasterTexture } from "./layers/ThermalRasterLayer.js";
 import ThermalRasterLayer from "./layers/ThermalRasterLayer.js";
 import { createThermalColumns, FLAT_MATERIAL, MATERIAL } from "./layers/ThermalColumnLayer.js";
 import { createLensLayers, lensMaskProps, lensRing } from "./layers/lens.js";
-import { createBoundaryLayer, createLabelLayer, createReticleLayers, districtLabelData } from "./layers/overlays.js";
+import { createBoundaryLayer, createLabelLayer, createReticleLayers, createReticleWarmLayer, districtLabelData } from "./layers/overlays.js";
 import { createSwathLayers } from "./layers/swath.js";
 import { buildHexIndex, createH3Layer, h3ResolutionFor, hexMeans, hexModes, loadH3 } from "./layers/h3.js";
 import { blendPresets, createStageLighting } from "./lighting.js";
@@ -950,6 +950,20 @@ export class MapEngine {
     this._memoUsed = new Set();
 
     if (raster.layer && dev.value > 0) layers.push(raster.layer(dev.value, null));
+    // One invisible draw of the 250 m raster at idle (see _scheduleWarmup): compiles its shader and
+    // uploads its texture before the first zoom past RASTER_AUTO_ZOOM needs them, instead of a
+    // 200-400 ms freeze in the middle of that zoom. Dropped again on the next frame.
+    if (raster.warmLayer) {
+      layers.push(raster.warmLayer());
+      this._warmRaster = "drawn";
+      requestAnimationFrame(() => this.invalidate());
+    } else if (this._warmRaster === "drawn") this._warmRaster = "done";
+    if (this._warmReticle === "wanted" && this.geo) {
+      const [w, so, e, no] = this.geo.bounds;
+      layers.push(createReticleWarmLayer((w + e) / 2, (so + no) / 2));
+      this._warmReticle = "drawn";
+      requestAnimationFrame(() => this.invalidate());
+    } else if (this._warmReticle === "drawn") this._warmReticle = "done";
 
     let columnsDrawn = false;
     // Analyst ▸ H3 hexagons replaces the prisms with their hexagon aggregate (same LUT/domain);
@@ -1017,6 +1031,11 @@ export class MapEngine {
     this.layers = layers;
     this.animating = animating || interacting;
     this.deck.setProps({ layers, effects: this.effects });
+
+    if (display && !this._warmScheduled) {
+      this._warmScheduled = true;
+      this._scheduleWarmup();
+    }
 
     // After the first paint, prefetch the other mode's observation cube on idle so the first
     // Day ↔ Night sweep does not wait on a download (UI_SPEC §10 "night on first toggle or idle").
@@ -1472,7 +1491,9 @@ export class MapEngine {
     const zoom = this.viewState.zoom ?? HOME_ZOOM;
     const lensWanted = Boolean(v.lens) && fx.lensAllowed && !this.mobile;
     const wantRaster = wantMode === "raster" || (wantMode === "auto" && !this.mobile && zoom >= RASTER_AUTO_ZOOM);
-    if (!wantRaster && !lensWanted) return none(null, true);
+    // Idle warm-up (_scheduleWarmup): load the textures and hand back an invisible layer only.
+    const warming = this._warmRaster === "wanted" && wantMode === "auto" && !this.mobile && !wantRaster && !lensWanted;
+    if (!wantRaster && !lensWanted && !warming) return none(null, true);
     if (this.rasterFailed) return none("raster shader unavailable on this device");
     if (!this.device || !this.lut) return none("GPU not ready");
     if (tl.schema === "v1") return none("250 m rasters are unavailable in a v1 bundle — rerun notebook v2");
@@ -1536,6 +1557,7 @@ export class MapEngine {
         pickable: false,
         ...(extra ?? {}),
       });
+    if (warming) return { ...none(null, true), warmLayer: () => make("thermal-raster-warm", 0) };
     return {
       visible: wantRaster,
       available: true,
@@ -1560,6 +1582,35 @@ export class MapEngine {
         };
       },
     };
+  }
+
+  /**
+   * First-interaction warm-up, run once on idle shortly after the first paint. Measured without
+   * it: the first hover froze the page ~300-450 ms while deck compiled its picking shaders, and the
+   * first zoom past RASTER_AUTO_ZOOM froze it another ~200-400 ms (raster shader + texture).
+   *   - one off-screen pick compiles the picking shaders and allocates the picking framebuffer;
+   *   - one invisible draw of the current 250 m raster (_rasterPlan "warming") compiles its shader
+   *     and uploads its texture;
+   *   - one transparent reticle ring compiles the ScatterplotLayer shader the first hover needs.
+   * Both are best-effort: if they are skipped, the old one-time cost simply comes back.
+   */
+  _scheduleWarmup() {
+    const run = () => {
+      if (!this.deck) return;
+      try {
+        const canvas = this.deck.getCanvas?.() ?? this.deck.canvas;
+        const w = canvas?.clientWidth || 800;
+        const h = canvas?.clientHeight || 600;
+        this.deck.pickObject({ x: Math.round(w / 2), y: Math.round(h / 2), radius: 0 });
+      } catch (error) {
+        console.warn("[engine] picking warm-up skipped", error);
+      }
+      if (!this._warmReticle) this._warmReticle = "wanted";
+      if (!this._warmRaster) this._warmRaster = "wanted";
+      this.invalidate();
+    };
+    const later = () => (typeof requestIdleCallback === "function" ? requestIdleCallback(run, { timeout: 3000 }) : setTimeout(run, 300));
+    setTimeout(later, 1200);
   }
 
   /** Prefetch the rasters of the frames next to the bracket (±1, current mode) on idle. */
