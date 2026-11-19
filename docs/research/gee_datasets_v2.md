@@ -344,7 +344,7 @@ Notes:
 1. For each epoch, export the finished predictor stack once with `Export.image.toAsset` (batch: no interactive deadline, retried server side) at 100 m, in EPSG:32643 on the v1 grid transform.
 2. Then `computePixels` the assets at 250 m or 100 m. Each pass costs only seconds of EECU, and reruns and debugging are almost free.
 
-The Kaggle service account can start batch tasks into `projects/ncr-lst-510004/assets/...`.
+The Kaggle service account can start batch tasks into `projects/<GEE_PROJECT>/assets/...`.
 
 **EECU and wall-clock estimates.** These are my own estimates, not measured. Calibrate with a one-epoch pilot and read the EECU used from the task list or Cloud Monitoring.
 
