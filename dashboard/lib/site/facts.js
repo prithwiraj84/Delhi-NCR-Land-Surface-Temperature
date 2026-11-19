@@ -27,18 +27,29 @@ const round = (v, dp = 1) => (num(v) === null ? null : Math.round(v * 10 ** dp) 
 
 let cache = null;
 
-/** Files of the web bundle (name, bytes), for the downloads table. */
+/**
+ * Files of the web bundle (name, bytes), for the downloads table. Files of one sub-folder level
+ * (the 250 m rasters in raster/) are listed as "raster/<name>".
+ */
 function listFiles() {
+  const out = [];
+  const walk = (dir, prefix) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name.startsWith(".")) continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory() && !prefix) walk(full, `${e.name}/`);
+      else if (e.isFile()) out.push({ name: `${prefix}${e.name}`, bytes: fs.statSync(full).size });
+    }
+  };
   try {
-    return fs
-      .readdirSync(DATA, { withFileTypes: true })
-      .filter((e) => e.isFile() && !e.name.startsWith("."))
-      .map((e) => ({ name: e.name, bytes: fs.statSync(path.join(DATA, e.name)).size }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    walk(DATA, "");
   } catch {
     return [];
   }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
 }
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /** All facts, computed once per build. */
 export function getFacts() {
@@ -69,6 +80,17 @@ export function getFacts() {
     const evidence = obs.filter((r) => r.tier !== "modelled");
     const first = evidence[0];
     const last = evidence.at(-1);
+    const low = evidence.reduce((a, r) => (a === null || r.mean < a.mean ? r : a), null);
+    const tierYears = (tier) => obs.filter((r) => r.tier === tier).map((r) => r.year);
+    // Trends of the annual (not frame) series: ERA5-Land air temperature and the satellite record.
+    const annualTrend = (key) => {
+      const a = s.trend?.annual?.[key];
+      if (!a || num(a.slope_per_decade) === null) return null;
+      return { perDecade: round(a.slope_per_decade, 2), ci: a.ci?.map((v) => round(v, 2)) ?? null, period: a.period ?? null, n: a.n_years ?? null };
+    };
+    const air = annualTrend(mode === "day" ? "era5_tmax" : "era5_tmin");
+    const sat = annualTrend("satellite");
+    const sensors = [...new Set((s.annual?.satellite ?? []).map((r) => r.sensor).filter(Boolean))];
     const dec = s.decomposition ?? {};
     const proj = Object.fromEntries(
       scenarios.map((id) => {
@@ -96,7 +118,22 @@ export function getFacts() {
       first: first ? { year: first.year, mean: first.mean } : null,
       last: last ? { year: last.year, mean: last.mean } : null,
       change: first && last ? round(last.mean - first.mean, 1) : null,
-      trend: s.trend?.obs ? { perDecade: round(s.trend.obs.slope_per_decade, 2), ci: s.trend.obs.ci?.map((v) => round(v, 2)), period: s.trend.obs.period } : null,
+      low: low ? { year: low.year, mean: low.mean } : null,
+      tiers: { sparse: tierYears("observed-sparse"), reconstructed: tierYears("reconstructed"), modelled: tierYears("modelled") },
+      trend:
+        s.trend?.obs && num(s.trend.obs.slope_per_decade) !== null
+          ? {
+              perDecade: round(s.trend.obs.slope_per_decade, 2),
+              ci: s.trend.obs.ci?.map((v) => round(v, 2)) ?? null,
+              period: s.trend.obs.period ?? null,
+              n: s.trend.obs.n_frames ?? s.trend.obs.frames?.length ?? null,
+              method: s.trend.obs.method ?? null,
+            }
+          : null,
+      annual: {
+        air: air ? { ...air, variable: mode === "day" ? "daily maximum" : "daily minimum" } : null,
+        satellite: sat ? { ...sat, sensors } : null,
+      },
       baseline: num(series?.baseline_level_c?.[mode]),
       uhi: num(obs.at(-1)?.uhi),
       hotCoreKm2: num(obs.at(-1)?.hot_core_km2),
@@ -111,9 +148,13 @@ export function getFacts() {
     const m = metrics?.modes?.[mode];
     if (!m) return null;
     const block = (m.summary ?? []).filter((r) => r.scheme === "block20");
+    const headModel = m.headline?.spatial?.model ?? "xgboost";
+    const district = (m.summary ?? []).find((r) => r.scheme === "district" && r.model === headModel);
     return {
       spatial: m.headline?.spatial ? { r2: round(m.headline.spatial.r2, 3), rmse: round(m.headline.spatial.rmse, 2), model: m.headline.spatial.model } : null,
       temporal: m.headline?.temporal ? { r2: round(m.headline.temporal.r2, 3), rmse: round(m.headline.temporal.rmse, 2) } : null,
+      // Whole districts held out (a harder, smaller-sample spatial test than 20 km blocks).
+      district: district && num(district.r2_pooled) !== null ? { r2: round(district.r2_pooled, 3), rmse: round(district.rmse_pooled, 2) } : null,
       benchmarks: block
         .map((r) => ({ id: r.model, label: MODEL_LABEL[r.model] ?? r.model, r2: round(r.r2_pooled, 3), rmse: round(r.rmse_pooled, 2), mae: round(r.mae_pooled, 2), n: r.n }))
         .sort((a, b) => b.r2 - a.r2),
@@ -164,6 +205,29 @@ export function getFacts() {
   const cs = metrics?.climate_sensitivity ?? {};
   const projMeta = metrics?.projection_meta?.day?.ssp245 ?? null;
 
+  // Scenarios whose climate deltas are pattern-scaled from another SSP (not in NEX-GDDP-CMIP6 on Earth Engine).
+  const patternScaled = Object.entries(metrics?.cmip6?.scenarios ?? {})
+    .filter(([, v]) => v?.method === "pattern-scaled" && v.source_scenario)
+    .map(([id, v]) => {
+      const r = Object.entries(v.gsat_ratio ?? {})
+        .map(([y, x]) => [Number(y), num(x)])
+        .filter(([, x]) => x !== null)
+        .sort((a, b) => a[0] - b[0]);
+      return { id, from: v.source_scenario, ratio: r.length ? { first: round(r[0][1], 2), firstYear: r[0][0], last: round(r.at(-1)[1], 2), lastYear: r.at(-1)[0] } : null };
+    });
+
+  // Driver groups the final model may only cool with (monotone constraint −1).
+  const featureGroup = Object.fromEntries((manifest?.features ?? []).map((ft) => [ft.id ?? ft.name, ft.group]));
+  const monotoneCooling = (mode) => [
+    ...new Set(
+      Object.entries(metrics?.modes?.[mode]?.monotone ?? {})
+        .filter(([, sign]) => sign === -1)
+        .map(([feat]) => groupLabel[featureGroup[feat]] ?? null)
+        .filter(Boolean),
+    ),
+  ];
+  const season = Array.isArray(manifest?.season) && manifest.season.length === 2 ? manifest.season.map((d) => MONTHS[Number(String(d).slice(0, 2)) - 1]) : null;
+
   cache = {
     generatedAt: manifest?.generated_at ?? null,
     dataMode: manifest?.data_mode ?? null,
@@ -178,10 +242,16 @@ export function getFacts() {
       districts: (manifest?.districts ?? []).length,
     },
     season: manifest?.season ?? null,
+    seasonLabel: season && season.every(Boolean) ? `${season[0]}–${season[1]}` : null,
     years: { observed: observedYears, projected: projectedYears, all: frames.map((f) => f.year) },
+    // Sensor of every observed frame per mode (manifest.timeline.frames[].{day,night}.sensor).
+    frameSensors: Object.fromEntries(
+      ["day", "night"].map((mode) => [mode, frames.filter((fr) => fr.kind === "observed" && fr[mode]?.sensor).map((fr) => ({ year: fr.year, sensor: fr[mode].sensor }))]),
+    ),
     scenarios,
     features: { count: (manifest?.features ?? []).length, groups: (manifest?.groups ?? []).length },
-    modes: (manifest?.modes ?? []).map((m) => ({ id: m.id, label: m.label, target: m.target })),
+    modes: (manifest?.modes ?? []).map((m) => ({ id: m.id, label: m.label, target: m.target, overpass: m.reference_overpass_ist ?? null })),
+    monotone: { day: monotoneCooling("day"), night: monotoneCooling("night") },
     day: modeSummary("day"),
     night: modeSummary("night"),
     accuracy: { day: accuracy("day"), night: accuracy("night") },
@@ -192,12 +262,19 @@ export function getFacts() {
       day: cs.day ? { beta: round(cs.day.beta, 2), ci: cs.day.ci?.map((v) => round(v, 2)), years: cs.day.n_years } : null,
       night: cs.night ? { beta: round(cs.night.beta, 2), ci: cs.night.ci?.map((v) => round(v, 2)), years: cs.night.n_years } : null,
     },
-    projection: projMeta ? { nMc: projMeta.n_mc, nGcm: projMeta.n_gcm, nLand: projMeta.n_land_real, omitted: projMeta.omitted_feedbacks ?? [] } : null,
+    projection: projMeta ? { nMc: projMeta.n_mc, nGcm: projMeta.n_gcm, nLand: projMeta.n_land_real, omitted: projMeta.omitted_feedbacks ?? [], patternScaled } : null,
     bootstrap: manifest?.bootstrap?.day ? { n: manifest.bootstrap.day.n, blockKm: manifest.bootstrap.day.block_size_km } : null,
     hardware: metrics?.hardware ? { gpus: metrics.hardware.gpus ?? [], xgb: metrics.hardware.xgb_version, python: metrics.hardware.python } : null,
     downscale: metrics?.downscaling?.night?.scale_invariance?.available
-      ? { r2: metrics.downscaling.night.scale_invariance.r2, bilinearR2: metrics.downscaling.night.scale_invariance.bilinear_r2 }
+      ? {
+          r2: metrics.downscaling.night.scale_invariance.r2,
+          bilinearR2: metrics.downscaling.night.scale_invariance.bilinear_r2,
+          coarseM: num(metrics.downscaling.night.scale_invariance.coarse_res_m),
+          fineM: num(metrics.downscaling.night.scale_invariance.fine_res_m),
+        }
       : null,
+    // Neighbourhood (focal) windows, in grid cells.
+    focalWindows: (manifest?.focal?.windows ?? []).filter((w) => Number.isFinite(w)),
     notes: manifest?.notes ?? [],
     files: listFiles(),
     media,
@@ -210,7 +287,72 @@ export function getFacts() {
 export function signed(v, dp = 1, unit = " °C") {
   if (v === null || v === undefined || !Number.isFinite(v)) return "n/a";
   const s = v.toFixed(dp);
-  return `${v > 0 ? "+" : v < 0 ? "−" : "±"}${s.replace("-", "")}${unit}`;
+  // The sign follows the rounded value, so −0.02 at 1 dp prints "±0.0", never "−0.0".
+  const r = Number(s);
+  return `${r > 0 ? "+" : r < 0 ? "−" : "±"}${s.replace("-", "")}${unit}`;
+}
+
+/**
+ * A [lo, hi] interval as "+0.73 to +1.40 °C" (null when it is not a finite pair). `plain`
+ * drops the signs, for quantities that are not changes (e.g. the sensitivity β).
+ */
+export function rangeText(ci, dp = 2, unit = " °C", plain = false) {
+  if (!(Array.isArray(ci) && ci.length === 2 && ci.every((v) => Number.isFinite(v)))) return null;
+  return plain ? `${ci[0].toFixed(dp)} to ${ci[1].toFixed(dp)}${unit}` : `${signed(ci[0], dp, "")} to ${signed(ci[1], dp, unit)}`;
+}
+
+/**
+ * One sentence comparing the frame trend with the bundle's annual series of the same mode
+ * (ERA5-Land air temperature, satellite LST), or null when neither annual trend is exported.
+ */
+export function annualContrast(summary, mode, seasonLabel = null) {
+  const a = summary?.annual ?? {};
+  const parts = [];
+  const span = (t) => (t.period ? `${t.period[0]}–${t.period[1]}` : null);
+  const describe = (t, what) => {
+    const r = rangeText(t.ci);
+    const extra = [span(t), r ? `95 % range ${r}` : null].filter(Boolean).join(", ");
+    return `${what} changed by ${signed(t.perDecade, 2)} per decade${extra ? ` (${extra})` : ""}`;
+  };
+  if (a.air) parts.push({ t: a.air, text: describe(a.air, `ERA5-Land${seasonLabel ? ` ${seasonLabel}` : ""} ${a.air.variable} air temperature`) });
+  if (a.satellite) {
+    const who = a.satellite.sensors?.length ? a.satellite.sensors.join(" and ") : "satellite";
+    parts.push({ t: a.satellite, text: describe(a.satellite, `the ${who} ${mode === "night" ? "night-time" : "daytime"} surface temperature`) });
+  }
+  if (!parts.length) return null;
+  const warming = (t) => Array.isArray(t.ci) && t.ci[0] > 0;
+  const zero = (t) => Array.isArray(t.ci) && t.ci[0] <= 0 && t.ci[1] >= 0;
+  const list = parts.map((p) => p.text).join(" and ");
+  if (parts.every((p) => warming(p.t))) return `The annual records in the bundle also show warming: ${list}.`;
+  const lead = parts.some((p) => warming(p.t)) ? "The annual records in the bundle give a mixed picture" : "The annual records in the bundle do not show the same warming";
+  const tail = parts.every((p) => zero(p.t)) ? `; ${parts.length > 1 ? "neither range excludes" : "its range includes"} zero` : "";
+  return `${lead}: ${list}${tail}.`;
+}
+
+/**
+ * Why XGBoost is the main model even when another benchmark scores marginally higher on the
+ * 20 km blocks (what the pipeline actually does: monotone constraints, exact GPU TreeSHAP).
+ */
+export function modelChoice(f, mode = "day") {
+  const b = f.accuracy?.[mode]?.benchmarks ?? [];
+  const xgb = b.find((r) => r.id === "xgboost");
+  const best = b[0];
+  if (!xgb || !best) return null;
+  const cooling = (f.monotone?.[mode] ?? []).map((l) => l.charAt(0).toLowerCase() + l.slice(1));
+  const coolList = cooling.length > 1 ? `${cooling.slice(0, -1).join(", ")} or ${cooling.at(-1)}` : cooling[0];
+  const why = `${coolList ? `its final models are trained with monotone constraints, so more ${coolList} can never raise a cell's predicted temperature, and ` : ""}their SHAP values are computed exactly with TreeSHAP on the GPU`;
+  const where = `${mode === "night" ? "night-time" : "daytime"} R² on the 20 km blocks`;
+  if (best.id === "xgboost") return `XGBoost is the main model and also has the best ${where}; ${why}.`;
+  return `${best.label} scores marginally higher (${where}: ${best.r2.toFixed(3)} vs ${xgb.r2.toFixed(3)}), but XGBoost stays the main model: ${why}.`;
+}
+
+const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+
+/** A count in words for prose ("three"), numerals above twelve; "" when not an integer. */
+export function spell(n, capital = false) {
+  if (!Number.isInteger(n)) return "";
+  const w = n >= 0 && n < WORDS.length ? WORDS[n] : String(n);
+  return capital ? w[0].toUpperCase() + w.slice(1) : w;
 }
 
 /** Scenario labels. */

@@ -7,7 +7,7 @@
  *   - clicking a chart's x position commits the year (snapped to the nearest frame, since
  *     only frames are data).
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { useTimeStore } from "../state/stores/timeStore.js";
 
@@ -40,9 +40,15 @@ export function commitChartYear(year) {
  * @param {(year: number) => number} x scale (year -> px); re-subscribes when it changes
  */
 export function useYearCursor(ref, x) {
+  // Re-apply when the ref moves to a new element (e.g. a chart's loading box → its plot).
+  const [node, setNode] = useState(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- runs after every render on purpose (a ref change triggers no render); setNode fires only when the ref moved
+  useEffect(() => {
+    if (ref.current !== node) setNode(ref.current);
+  });
   useEffect(() => {
     const apply = (t) => {
-      const el = ref.current;
+      const el = node;
       if (!el) return;
       const ok = Number.isFinite(t) && x && t >= x.domain[0] && t <= x.domain[1];
       el.style.opacity = ok ? "1" : "0";
@@ -52,5 +58,5 @@ export function useYearCursor(ref, x) {
     return useTimeStore.subscribe((s, prev) => {
       if (s.scrubT !== prev.scrubT) apply(s.scrubT);
     });
-  }, [ref, x]);
+  }, [node, x]);
 }

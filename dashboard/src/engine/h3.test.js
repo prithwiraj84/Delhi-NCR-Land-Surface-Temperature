@@ -94,5 +94,17 @@ describe("MapEngine with the analyst H3 toggle", () => {
 
     view.getState().setAnalyst({ h3: false });
     expect(await settle(() => Boolean(find("thermal-columns")) && !find("thermal-h3"))).toBe(true);
+
+    // Projected frames: the hexagons carry the VSUP fog like the columns, and drop it with the switch.
+    view.getState().setAnalyst({ h3: true });
+    time.getState().setYear(2040);
+    expect(await settle(() => Boolean(find("thermal-h3")) && engine.current?.A.year === 2040 && Boolean(engine.current.A.vsup))).toBe(true);
+    const fogged = Uint8Array.from(engine.h3.colors);
+    view.getState().setUncertaintyFog(false);
+    expect(await settle(() => Boolean(find("thermal-h3")) && engine.current?.ck.endsWith("|nofog") && engine.h3.key?.includes("|nofog"))).toBe(true);
+    const clear = engine.h3.colors;
+    let differ = 0;
+    for (let i = 0; i < clear.length; i += 4) if (clear[i] !== fogged[i] || clear[i + 1] !== fogged[i + 1] || clear[i + 2] !== fogged[i + 2]) differ += 1;
+    expect(differ).toBeGreaterThan(0);
   }, 60000);
 });

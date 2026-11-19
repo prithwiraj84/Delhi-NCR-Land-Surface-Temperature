@@ -77,7 +77,12 @@ function ProjectionList({ proj, selectedSsp }) {
               day {fmtSigned(r.day.delta, 1)} [{fmtSigned(r.day.lo, 1)}, {fmtSigned(r.day.hi, 1)}]
             </span>
           )}
-          {r.night && <span className="tnum font-mono text-ink-muted">night {fmtSigned(r.night.delta, 1)}</span>}
+          {r.night && (
+            <span className="tnum font-mono text-ink-muted">
+              night {fmtSigned(r.night.delta, 1)}
+              {Number.isFinite(r.night.lo) && Number.isFinite(r.night.hi) ? ` [${fmtSigned(r.night.lo, 1)}, ${fmtSigned(r.night.hi, 1)}]` : ""}
+            </span>
+          )}
         </li>
       ))}
     </ul>

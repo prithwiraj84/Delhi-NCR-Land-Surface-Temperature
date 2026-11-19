@@ -8,7 +8,7 @@ import { Reveal } from "../../_components/Reveal.jsx";
 import { Eyebrow, PageIntro, Section } from "../../_components/ui.jsx";
 import { JsonLd } from "../../../lib/site/JsonLd.jsx";
 import { withBase } from "../../../lib/site/config.js";
-import { getFacts, signed } from "../../../lib/site/facts.js";
+import { annualContrast, getFacts, rangeText, signed } from "../../../lib/site/facts.js";
 import { pageMetadata } from "../../../lib/site/meta.js";
 
 export const metadata = pageMetadata({
@@ -38,7 +38,7 @@ const TERMS = [
   {
     icon: Satellite,
     term: "Landsat, MODIS and VIIRS",
-    body: "Earth-observing satellites. Landsat sees 30 m detail every 16 days around 10:30 in the morning; MODIS and VIIRS see 1 km detail but pass every day and night, so they provide the night-time record.",
+    body: "Earth-observing satellites. Landsat passes every 16 days around 10:30 in the morning; its thermal sensors see 60–120 m detail (delivered on a 30 m grid). MODIS and VIIRS see about 1 km but pass every day and night, so they provide the night-time record.",
   },
   {
     icon: BrainCircuit,
@@ -82,30 +82,64 @@ const TERMS = [
   },
 ];
 
+/** "Is Delhi NCR getting hotter?", guarded by the exported trend CI and the annual series. */
+function hotterAnswer(f) {
+  const dt = f.day?.trend;
+  if (!dt) return "The trend is reported on the findings page once the bundle exports it.";
+  const nt = f.night?.trend;
+  const range = rangeText(dt.ci);
+  const clear = Array.isArray(dt.ci) && dt.ci[0] > 0;
+  const lowYear = f.day?.low?.year;
+  const sparse = f.day?.tiers?.sparse ?? [];
+  const annual = [f.day?.annual?.air, f.day?.annual?.satellite].filter(Boolean);
+  const annualAgrees = annual.length > 0 && annual.every((t) => Array.isArray(t.ci) && t.ci[0] > 0);
+  const contrast = annualContrast(f.day, "day", f.seasonLabel);
+  return [
+    clear ? "In the satellite frames, yes, with caveats." : Array.isArray(dt.ci) && dt.ci[1] < 0 ? "Not in the satellite frames: they show cooling." : "Not clearly: the frame trend's range includes zero.",
+    `Across the ${dt.n ?? f.years.observed.length} observed${f.seasonLabel ? ` ${f.seasonLabel}` : ""} frames${dt.period ? ` (${dt.period[0]}–${dt.period[1]})` : ""}, the region's mean daytime land surface temperature changed by about ${signed(dt.perDecade, 2)} per decade (Theil–Sen trend${range ? `, 95 % range ${range}` : ""})${
+      nt ? `, and night-time surfaces by ${signed(nt.perDecade, 2)} per decade since ${nt.period?.[0] ?? f.night?.first?.year}` : ""
+    }.`,
+    lowYear || sparse.length
+      ? `The change is not steady${lowYear ? `: the daytime series is lowest in ${lowYear}` : ""}${sparse.length ? `${lowYear ? "," : ""} and the ${sparse.join(" and ")} frames rest on few clear scenes` : ""}.`
+      : "",
+    contrast ?? "",
+    clear && annual.length > 0 && !annualAgrees ? "So the frames point to warmer surfaces, but how much warmer is still uncertain." : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export default function LearnPage() {
   const f = getFacts();
   const faqs = [
     {
       q: "Is Delhi NCR getting hotter?",
-      a: `Yes. The region's mean daytime land surface temperature in April–June rose from ${f.day?.first?.mean?.toFixed(1)} °C in ${f.day?.first?.year} to ${f.day?.last?.mean?.toFixed(1)} °C in ${f.day?.last?.year}, about ${signed(f.day?.trend?.perDecade, 2)} per decade, and night-time surfaces warmed by ${signed(f.night?.change, 1)} since ${f.night?.first?.year}.`,
+      a: hotterAnswer(f),
     },
     {
       q: "Why are cities cooler than farmland during the day?",
-      a: `In the pre-monsoon season much of the farmland is harvested and bare. Dry, bare soil heats up faster than the mix of buildings, trees and watered gardens in towns, so by day built-up areas are about ${Math.abs(f.day?.uhi ?? 0).toFixed(1)} °C cooler than rural land. At night the order reverses: cities are about ${f.night?.uhi?.toFixed(1)} °C warmer because they release the heat they stored.`,
+      a:
+        Number.isFinite(f.day?.uhi) && Number.isFinite(f.night?.uhi) && f.day.uhi < 0 && f.night.uhi > 0
+          ? `In the pre-monsoon season much of the farmland is harvested and bare. Dry, bare soil heats up faster than the mix of buildings, trees and watered gardens in towns, so by day built-up areas are about ${Math.abs(f.day.uhi).toFixed(1)} °C cooler than rural land. At night the order reverses: cities are about ${f.night.uhi.toFixed(1)} °C warmer because they release the heat they stored.`
+          : "In the pre-monsoon season much of the farmland is harvested and bare, and dry, bare soil heats up faster than the mix of buildings, trees and watered gardens in towns. The measured day and night differences are on the findings page.",
     },
     {
       q: "What does the AI model actually do?",
-      a: `It predicts each 1 km cell's surface temperature from ${f.features.count} features such as vegetation, built-up land, water, terrain and weather. SHAP then shows how much each feature pushed the prediction up or down, which is how the atlas explains why a place is hot.`,
+      a: `It predicts each ${f.area.gridM ? `${f.area.gridM / 1000} km ` : ""}cell's surface temperature from ${f.features.count ? `${f.features.count} ` : ""}features such as vegetation, built-up land, water, terrain and weather. SHAP then shows how much each feature pushed the prediction up or down, which is how the atlas explains why a place is hot.`,
     },
     {
       q: "How accurate is the model?",
       a: f.accuracy.day?.spatial
-        ? `On 20 km blocks it never saw during training, the daytime model explains ${Math.round(f.accuracy.day.spatial.r2 * 100)} % of the variation (R² ${f.accuracy.day.spatial.r2.toFixed(2)}) with a typical error of ${f.accuracy.day.spatial.rmse} °C. The night model reaches R² ${f.accuracy.night?.spatial?.r2.toFixed(2)}.`
+        ? `On 20 km blocks it never saw during training, the daytime model explains ${Math.round(f.accuracy.day.spatial.r2 * 100)} % of the variation (R² ${f.accuracy.day.spatial.r2.toFixed(2)}) with a typical error of ${f.accuracy.day.spatial.rmse} °C.${
+            f.accuracy.night?.spatial ? ` The night model reaches R² ${f.accuracy.night.spatial.r2.toFixed(2)}.` : ""
+          }`
         : "Accuracy is reported on the findings page.",
     },
     {
-      q: "How reliable are the 2050 projections?",
-      a: "They are scenarios, not forecasts. They combine climate-model warming with simulated urban growth, and they leave out factors such as irrigation change and heat-wave frequency. Each projection comes with a 5–95 % range from 500 simulations; read the range, not just the middle value.",
+      q: `How reliable are the ${f.years.projected.length ? `${f.years.projected.at(-1)} ` : ""}projections?`,
+      a: `They are scenarios, not forecasts. They combine climate-model warming with simulated urban growth, and they leave out factors such as irrigation change and heat-wave frequency. Each projection comes with a 5–95 % range from ${
+        f.projection?.nMc ? `${f.projection.nMc} ` : "many "
+      }simulations; read the range, not just the middle value.`,
     },
     {
       q: "Where does the data come from?",

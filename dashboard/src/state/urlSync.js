@@ -38,13 +38,17 @@ export const URL_ENUMS = Object.freeze({
   r: Object.freeze(["grid", "raster", "auto"]),
   h: Object.freeze(["flat", "anom", "abs"]),
   q: Object.freeze(["p05", "p50", "p95", "spread"]),
+  dm: Object.freeze(["fixed", "shared", "frame"]),
 });
 
-/** Static defaults that are omitted from the URL. */
-export const URL_DEFAULTS = Object.freeze({ m: "day", s: "245", l: "lst", h: "anom", q: "p50" });
+/**
+ * Static defaults that are omitted from the URL. `fog` (uncertainty fog on), `lens` and `h3`
+ * (off) are written only when they differ from their defaults ("fog=0", "lens=1", "h3=1").
+ */
+export const URL_DEFAULTS = Object.freeze({ m: "day", s: "245", l: "lst", h: "anom", q: "p50", dm: "fixed" });
 
 /** Param order in written URLs (stable, human-scannable). */
-const PARAM_ORDER = Object.freeze(["y", "m", "s", "v", "l", "r", "h", "q", "c", "d", "z", "cmp", "cam"]);
+const PARAM_ORDER = Object.freeze(["y", "m", "s", "v", "l", "r", "h", "q", "dm", "fog", "lens", "h3", "c", "d", "z", "cmp", "cam"]);
 
 const toInt = (v) => (/^-?\d+$/.test(String(v ?? "").trim()) ? Number.parseInt(v, 10) : null);
 
@@ -60,36 +64,60 @@ export function sspToUrl(ssp) {
 /** "245" -> "ssp245". */
 export const sspFromUrl = (code) => (URL_ENUMS.s.includes(String(code)) ? `ssp${code}` : null);
 
-/** Parse `cmp`: "y:1990" | "s:585" | "m:night" -> {kind, value} (null when malformed). */
+/**
+ * Parse `cmp`: "y:1990" | "y:1990,2050" | "s:585" | "s:126,585" | "m:night" -> {kind, value, b?}
+ * (null when malformed). `value` is side A; `b` (side B) is present only when the link carries it
+ * (older single-value links leave B to the current year / SSP).
+ */
 export function parseCompare(raw) {
   const m = /^([ysm]):(.+)$/.exec(String(raw ?? "").trim());
   if (!m) return null;
   const [, k, v] = m;
+  const [va, vb, ...extra] = v.split(",");
+  if (extra.length) return null;
   if (k === "y") {
-    const y = toInt(v);
-    return y !== null && y >= YEAR_MIN && y <= YEAR_MAX ? { kind: "year", value: y } : null;
+    const year = (x) => {
+      const y = toInt(x);
+      return y !== null && y >= YEAR_MIN && y <= YEAR_MAX ? y : null;
+    };
+    const a = year(va);
+    if (a === null) return null;
+    if (vb === undefined) return { kind: "year", value: a };
+    const b = year(vb);
+    return b === null ? null : { kind: "year", value: a, b };
   }
   if (k === "s") {
-    const s = sspFromUrl(v);
-    return s ? { kind: "ssp", value: s } : null;
+    const a = sspFromUrl(va);
+    if (!a) return null;
+    if (vb === undefined) return { kind: "ssp", value: a };
+    const b = sspFromUrl(vb);
+    return b ? { kind: "ssp", value: a, b } : null;
   }
-  return v === "night" || v === "day" ? { kind: "mode", value: v } : null;
+  return vb === undefined && (v === "night" || v === "day") ? { kind: "mode", value: v } : null;
 }
 
-/** Inverse of parseCompare. Accepts store-style compare objects ({kind, a, b}) too. */
-export function formatCompare(compare) {
+/**
+ * Inverse of parseCompare. Accepts store-style compare objects ({kind, a, b}) too. Side B is
+ * written for year / SSP compares when it is set (a year compare with `b: null` follows the
+ * playhead and stays single-valued). `withB: false` formats side A only.
+ */
+export function formatCompare(compare, { withB = true } = {}) {
   if (!compare || !compare.kind) return null;
   const kind = { y: "year", year: "year", s: "ssp", ssp: "ssp", m: "mode", mode: "mode" }[compare.kind];
   const value = compare.value ?? compare.a;
   if (kind === "year") {
     const y = toInt(value);
-    return y !== null ? `y:${y}` : null;
+    if (y === null) return null;
+    const b = withB && compare.b !== null && compare.b !== undefined ? toInt(compare.b) : null;
+    return b !== null ? `y:${y},${b}` : `y:${y}`;
   }
   if (kind === "ssp") {
     const s = sspToUrl(value);
-    return s ? `s:${s}` : null;
+    if (!s) return null;
+    const b = withB ? sspToUrl(compare.b) : null;
+    return b ? `s:${s},${b}` : `s:${s}`;
   }
-  if (kind === "mode") return `m:${compare.b === "day" ? "day" : "night"}`;
+  if (kind === "mode") return `m:${(compare.b ?? compare.value) === "day" ? "day" : "night"}`;
   return null;
 }
 
@@ -157,6 +185,12 @@ export function parseLocation(hash) {
   if (cmp) params.compare = cmp;
   const cam = parseCamera(q.get("cam"));
   if (cam) params.camera = cam;
+  // Display state that changes the drawn colours / layers (absent = default).
+  if (URL_ENUMS.dm.includes(q.get("dm"))) params.domainMode = q.get("dm");
+  const flag = (k) => (q.get(k) === "1" ? true : q.get(k) === "0" ? false : undefined);
+  if (flag("fog") !== undefined) params.uncertaintyFog = flag("fog");
+  if (flag("lens") !== undefined) params.lens = flag("lens");
+  if (flag("h3") !== undefined) params.h3 = flag("h3");
 
   return { route, params, anchor };
 }
@@ -184,6 +218,10 @@ export function formatLocation({ route, params = {}, anchor = null } = {}) {
   if (cmp) out.cmp = cmp;
   const cam = formatCamera(params.camera);
   if (cam) out.cam = cam;
+  if (URL_ENUMS.dm.includes(params.domainMode)) out.dm = params.domainMode;
+  if (params.uncertaintyFog === false) out.fog = "0";
+  if (params.lens === true) out.lens = "1";
+  if (params.h3 === true) out.h3 = "1";
 
   for (const [k, v] of Object.entries(URL_DEFAULTS)) if (out[k] === v) delete out[k];
 
@@ -220,10 +258,14 @@ export function reportCamera(viewState) {
         bearing: viewState.bearing ?? 0,
       }
     : null;
-  cameraListeners.forEach((fn) => fn());
+  cameraListeners.forEach((fn) => fn({ source: "report" }));
 }
 
-/** Subscribe to camera arrivals from the URL (shared links / back-forward). */
+/**
+ * Subscribe to camera changes: arrivals from the URL (shared links / back-forward) call
+ * `listener({source: "url"})`, the engine's own reports `listener({source: "report"})` (the
+ * engine ignores its echo; the URL writer schedules a write for both).
+ */
 export function onUrlCamera(listener) {
   cameraListeners.add(listener);
   return () => cameraListeners.delete(listener);
@@ -249,6 +291,10 @@ export function paramsFromStores({ time, view, selection }) {
     zone: s.zoneId,
     compare: t.compare,
     camera: v.camera ?? urlCamera,
+    domainMode: v.domainMode,
+    uncertaintyFog: v.uncertaintyFog,
+    lens: v.lens,
+    h3: v.analyst?.h3,
   };
 }
 
@@ -261,10 +307,22 @@ function setVia(store, key, value) {
 }
 
 /**
+ * Selection values from a URL: validated (integer index / id, in range) before they reach the
+ * store, through the store's own validated action when it has one. `null` clears.
+ */
+function setSelection(selection, key, action, value, valid) {
+  if (value !== null && !valid(value)) return;
+  const state = selection.getState();
+  if (Object.is(state[key], value)) return;
+  if (typeof state[action] === "function") state[action](value);
+  else selection.setState({ [key]: value });
+}
+
+/**
  * Apply parsed URL params to the stores. `availableSsps` (ids like "ssp245") restricts `s`
  * to the scenarios the manifest actually has (§2.2 "only those in the manifest").
  */
-export function applyParamsToStores({ route, params: parsed }, { time, view, selection }, { availableSsps = null, resetAbsent = false } = {}) {
+export function applyParamsToStores({ route, params: parsed }, { time, view, selection }, { availableSsps = null, resetAbsent = false, cellCount = null } = {}) {
   // Back/forward to a URL that omits a param means "its default" (defaults are never written).
   const params = resetAbsent
     ? {
@@ -277,6 +335,10 @@ export function applyParamsToStores({ route, params: parsed }, { time, view, sel
         district: null,
         zone: null,
         compare: null,
+        domainMode: URL_DEFAULTS.dm,
+        uncertaintyFog: true,
+        lens: false,
+        h3: false,
         ...parsed,
       }
     : parsed;
@@ -297,11 +359,15 @@ export function applyParamsToStores({ route, params: parsed }, { time, view, sel
   // timeStore compare kinds are "y" | "s" | "m" (COMPARE_KINDS); "off" is {kind: null}.
   if (params.compare) {
     const current = time.getState();
+    // Side B from the link when it carries one ("y:1990,2050"); an older single-value link
+    // leaves B to the current year / SSP, and then only side A is compared with the store.
+    const hasB = params.compare.b !== undefined && params.compare.b !== null;
     let compare = null;
-    if (params.compare.kind === "year") compare = { kind: "y", a: params.compare.value, b: current.year };
-    else if (params.compare.kind === "ssp") compare = { kind: "s", a: params.compare.value, b: current.ssp };
+    if (params.compare.kind === "year") compare = { kind: "y", a: params.compare.value, b: hasB ? params.compare.b : current.year };
+    else if (params.compare.kind === "ssp") compare = { kind: "s", a: params.compare.value, b: hasB ? params.compare.b : current.ssp };
     else compare = { kind: "m", a: "day", b: params.compare.value };
-    if (formatCompare(current.compare) !== formatCompare(compare)) {
+    const same = hasB || compare.kind === "m" ? formatCompare(current.compare) === formatCompare(compare) : current.compare?.kind === compare.kind && formatCompare(current.compare, { withB: false }) === formatCompare(compare, { withB: false });
+    if (!same) {
       if (typeof current.setCompare === "function") current.setCompare(compare);
       else time.setState({ compare });
     }
@@ -314,23 +380,35 @@ export function applyParamsToStores({ route, params: parsed }, { time, view, sel
     if (params[key] !== undefined) setVia(view, key, params[key]);
   }
   if (params.shapFeature) setVia(view, "shapFeature", params.shapFeature);
-  if (params.cell !== undefined) setVia(selection, "pinnedIndex", params.cell);
-  if (params.district !== undefined) setVia(selection, "districtId", params.district);
-  if (params.zone !== undefined) setVia(selection, "zoneId", params.zone);
+  // Display state carried since the fog / domain / lens / H3 params: applied only to stores
+  // that have the field (older or reduced stores ignore them).
+  const vs = view.getState();
+  if (URL_ENUMS.dm.includes(params.domainMode) && "domainMode" in vs) setVia(view, "domainMode", params.domainMode);
+  if (typeof params.uncertaintyFog === "boolean" && "uncertaintyFog" in vs) setVia(view, "uncertaintyFog", params.uncertaintyFog);
+  if (typeof params.lens === "boolean" && "lens" in vs) setVia(view, "lens", params.lens);
+  if (typeof params.h3 === "boolean" && vs.analyst && Boolean(vs.analyst.h3) !== params.h3) {
+    if (typeof vs.setAnalyst === "function") vs.setAnalyst({ h3: params.h3 });
+    else view.setState({ analyst: { ...vs.analyst, h3: params.h3 } });
+  }
+  const maxCell = Number.isInteger(cellCount) && cellCount > 0 ? cellCount : Infinity;
+  if (params.cell !== undefined) setSelection(selection, "pinnedIndex", "pin", params.cell, (i) => Number.isInteger(i) && i >= 0 && i < maxCell);
+  if (params.district !== undefined) setSelection(selection, "districtId", "setDistrict", params.district, (id) => Number.isInteger(id) && id >= 0);
+  if (params.zone !== undefined) setSelection(selection, "zoneId", "setZone", params.zone, (id) => Number.isInteger(id) && id >= 0 && id <= 3);
   if (params.camera) {
     urlCamera = params.camera;
     if ("camera" in view.getState()) setVia(view, "camera", params.camera);
-    cameraListeners.forEach((fn) => fn());
+    cameraListeners.forEach((fn) => fn({ source: "url" }));
   }
 }
 
 /**
  * Start syncing. Returns `stop()`. Safe to call once per app; a second call stops the first.
  * @param {{time, view, selection}} stores zustand hooks/stores (getState/setState/subscribe)
- * @param {{win?: Window, debounceMs?: number, getAvailableSsps?: () => string[]|null}} [options]
+ * @param {{win?: Window, debounceMs?: number, getAvailableSsps?: () => string[]|null, getCellCount?: () => number|null}} [options]
+ *   `getCellCount` bounds the pinned cell index `c` (unbounded while unknown).
  */
 let activeStop = null;
-export function startUrlSync(stores, { win = typeof window !== "undefined" ? window : null, debounceMs = URL_DEBOUNCE_MS, getAvailableSsps = () => null } = {}) {
+export function startUrlSync(stores, { win = typeof window !== "undefined" ? window : null, debounceMs = URL_DEBOUNCE_MS, getAvailableSsps = () => null, getCellCount = () => null } = {}) {
   if (!win) return () => {};
   activeStop?.();
   const { time, view, selection } = stores;
@@ -381,7 +459,7 @@ export function startUrlSync(stores, { win = typeof window !== "undefined" ? win
     const loc = current();
     applying = true;
     try {
-      applyParamsToStores(loc, stores, { availableSsps: getAvailableSsps(), resetAbsent });
+      applyParamsToStores(loc, stores, { availableSsps: getAvailableSsps(), resetAbsent, cellCount: getCellCount() });
     } finally {
       applying = false;
     }

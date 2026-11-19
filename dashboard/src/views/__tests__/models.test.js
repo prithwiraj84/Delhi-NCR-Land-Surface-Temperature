@@ -283,7 +283,19 @@ describe("lab model", () => {
     expect(fm.rows * fm.cols).toBe(16);
     expect(fm.worst.rmse).toBe(Math.max(...fm.cells.map((c) => c.rmse)));
     expect(loeoRows(slice)[0]).toMatchObject({ year: 1990 });
-    expect(aoaSummary(slice).pct.at(-1).year).toBe(2050);
+    // pct_inside holds the observed frames only (projected shares live in projection_meta).
+    const aoa = aoaSummary(slice);
+    expect(aoa.pct.at(-1).year).toBe(2025);
+    // RMSE by DI decile: the export's {decile, di_lo, di_hi, rmse, n} objects are read (T-R1).
+    expect(aoa.deciles).toHaveLength(10);
+    expect(aoa.deciles.filter((x) => Number.isFinite(x.rmse)).length).toBeGreaterThan(0);
+    expect(aoa.deciles[0]).toMatchObject({ decile: 1, diLo: expect.any(Number) });
+    // Older bundles exported bare numbers: still read.
+    expect(aoaSummary({ aoa: { di_threshold: 0.3, rmse_by_di_decile: [1.1, 1.3] } }).deciles.map((x) => x.rmse)).toEqual([1.1, 1.3]);
+    expect(aoaSummary({ aoa: { rmse_by_di_decile: [{ decile: 0, di_lo: 0, di_hi: 0.07, rmse: 0.97, n: 10 }, { decile: 9, di_lo: 0.2, di_hi: null, rmse: null, n: 3 }] } }).deciles).toEqual([
+      { id: "1", decile: 1, rmse: 0.97, diLo: 0, diHi: 0.07, n: 10 },
+      { id: "2", decile: 2, rmse: null, diLo: 0.2, diHi: null, n: 3 },
+    ]);
     const d = downscalingSummary(metrics);
     expect(skillGain(d.night.rmse, d.night.bilinear)).toBeGreaterThan(0);
     // A downscaler that loses to bilinear has a negative gain (the panel then says "higher error"),

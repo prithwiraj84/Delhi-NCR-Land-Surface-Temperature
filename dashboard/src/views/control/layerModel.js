@@ -80,7 +80,7 @@ export function layerAvailability(layer, { timeline, year, mode, scenarioReady =
     if (v1) return no("Uncertainty is not in a v1 bundle — rerun notebook v2");
     if (!frame) return no("Uncertainty needs an exact frame");
     const tier = tierOf(timeline, frame.year, mode);
-    return UNCERTAIN_TIERS.has(tier) ? ok : no(`${frame.year} is ${tier ?? "unavailable"}: uncertainty fans exist for projected and modelled frames`);
+    return UNCERTAIN_TIERS.has(tier) ? ok : no(`${frame.year} is ${tier ?? "unavailable"}: uncertainty fans exist for projected, modelled and reconstructed frames`);
   }
 
   if (layer === "aoa") {
@@ -118,6 +118,18 @@ export function zoneEntries(manifest, mode) {
   });
 }
 
+/** Human labels of the driver-family keys the engine colours by (raw keys, e.g. "spectral", "meteorology"). */
+const FAMILY_LABELS = Object.freeze({
+  spectral: "Spectral indices",
+  landcover: "Land cover",
+  urban: "Urban form",
+  population: "Population",
+  terrain: "Terrain",
+  meteorology: "Climate & weather",
+  climate: "Climate & weather",
+  water: "Water",
+});
+
 const VARIABLE_TITLES = Object.freeze({
   abs: "LST",
   anom: "Anomaly vs frame mean",
@@ -148,7 +160,7 @@ export function legendSpec({ layer, variable, mode, domainMode = "fixed", domain
   }
   if (layer === "unc") {
     const d = domainFor(timeline, mode, "spread") ?? [0, 4];
-    return { ...base, kind: "continuous", ramp: "mist", domain: d, title: "Spread p95 − p05", signed: false, fixed: true };
+    return { ...base, kind: "continuous", ramp: "mist", domain: d, title: "Spread p95 − p05", signed: false, fixed: true, arms: ["narrower", "wider"] };
   }
   if (layer === "resid") {
     const b = robustAbsBound(xai?.resid, 0.5);
@@ -181,6 +193,8 @@ export function legendSpec({ layer, variable, mode, domainMode = "fixed", domain
     fixed: Array.isArray(d) && !(layer !== "pred" && domain?.stretched),
     stretched: layer !== "pred" && Boolean(domain?.stretched),
     shared: domainMode === "shared" && v === "abs",
+    // Diurnal range is not a temperature: its arms speak of the day–night swing.
+    arms: mode === "dtr" && layer === "lst" ? ["smaller swing", "larger swing"] : null,
     // Δ on a bundle whose levels are not harmonised is never drawn (T-F4-08): say why.
     note: v === "delta" && timeline && timeline.harmonised !== true ? LEVELS_NOT_HARMONISED : Array.isArray(d) ? null : `No fixed ${v} domain for ${mode} in this bundle`,
   };
@@ -203,6 +217,19 @@ export function legendFromEngine(spec, engine, { layer, mode, variable = null })
   // the reason (D22 a; e.g. surface UHI at a projected year).
   if (engine.kind === "unavailable") {
     return { ...spec, kind: "unavailable", ramp: null, domain: null, signed: false, stretched: false, fixed: false, shared: false, entries: null, note: engine.note ?? "not available for this frame", engine: true };
+  }
+  // Dominant driver: list exactly the categories the engine drew. With more SHAP groups than
+  // distinguishable colours (18 groups) it colours by driver FAMILY, so the per-group legend would
+  // repeat a colour and disagree with the map. Zones keep the spec entries (they carry the caveats).
+  if (layer === "driver" && engine.kind === "categorical" && spec.kind === "categorical" && Array.isArray(engine.categories)) {
+    const families = engine.categories.length < (spec.entries?.length ?? 0);
+    return {
+      ...spec,
+      entries: engine.categories.map((c) => ({ ...c, label: FAMILY_LABELS[c.label] ?? c.label })),
+      title: families ? "Dominant driver family (largest |SHAP|)" : spec.title,
+      note: families ? "Colours are driver families (more drivers than distinguishable colours); hover a cell for its driver" : spec.note,
+      engine: true,
+    };
   }
   if (spec.kind !== "continuous" || engine.kind === "categorical") return spec;
   const domain = Number.isFinite(engine.lo) && Number.isFinite(engine.hi) ? [engine.lo, engine.hi] : spec.domain;

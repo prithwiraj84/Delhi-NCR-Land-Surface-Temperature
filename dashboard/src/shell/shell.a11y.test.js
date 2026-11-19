@@ -309,4 +309,32 @@ describe("assembled AppShell", () => {
     await press("m");
     expect(deps.useViewStore.getState().motionPref).toBe("system");
   });
+
+  it("Space plays on a non-Control route (the shell mounts the playback loop)", async () => {
+    const { buildTimeline } = await import("../data/timeline.js");
+    const { createSynthV2 } = await import("../data/fixtures/synthV2.js");
+    const { AppShell } = await import("./AppShell.jsx");
+    deps.useTimeStore.getState().configure(buildTimeline(createSynthV2().manifest), { year: 2010 });
+    window.location.hash = "#/timeline";
+    deps.useViewStore.setState({ route: "timeline" });
+    try {
+      const node = await render(h(AppShell));
+      await waitFor(() => expect(node.querySelector('[data-testid="view-timeline"]')).toBeTruthy());
+      expect(node.querySelector('[data-testid="view-control"]')).toBeNull();
+      document.body.focus();
+      await press(" ");
+      expect(deps.useTimeStore.getState().playing).toBe(true);
+      // Off motion: no tween, the next frame is committed on the loop's first tick.
+      await waitFor(() => expect(deps.useTimeStore.getState().year).toBeGreaterThan(2010));
+      await press(" ");
+      const t = deps.useTimeStore.getState();
+      expect(t.playing).toBe(false);
+      expect(t.dragging).toBe(false);
+      expect(t.year).toBe(t.scrubT);
+    } finally {
+      await act(async () => root?.unmount());
+      root = null;
+      deps.useTimeStore.getState().reset();
+    }
+  });
 });

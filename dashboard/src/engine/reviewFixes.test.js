@@ -375,3 +375,92 @@ describe("hover cost (T-F4-24)", () => {
     expect(deck._pickRequest.event === null || deck._pickRequest.event.type === "pointermove").toBe(true);
   });
 });
+
+describe("review fix pass (compare, raster warm-up, device reset, legend hatch, camera echo)", () => {
+  const compareLayers = (deck) => (deck.props.layers ?? []).filter((l) => l.id.startsWith("thermal-compare"));
+
+  it("compare keeps its attribute wrappers while nothing changes, and applies the brush", async () => {
+    const { engine, deck, time, selection } = setup();
+    await settle(engine, () => thermalLayer(deck));
+    time.getState().setCompare({ kind: "y", a: 1990, b: 2050, splitPx: 500 });
+    expect(await settle(engine, () => compareLayers(deck).length === 2)).toBe(true);
+    const [l1, r1] = compareLayers(deck);
+    engine._tick(performance.now());
+    const [l2, r2] = compareLayers(deck);
+    // Same data object: deck sees no data change and re-uploads nothing.
+    expect(l2.props.data).toBe(l1.props.data);
+    expect(r2.props.data).toBe(r1.props.data);
+    const before = Uint8Array.from(engine.compareCache.sides.left.colors);
+    selection.getState().setBrushMask(new Uint8Array(n())); // nothing selected: every cell dims
+    engine._tick(performance.now());
+    const after = engine.compareCache.sides.left.colors;
+    const i = before.findIndex((v, k) => k % 4 === 0 && v > 40);
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(after[i]).toBeLessThan(before[i] * 0.3);
+    expect(compareLayers(deck)[0].props.data).not.toBe(l2.props.data);
+  });
+
+  it("compare never develops an unsplit raster (or lens) and reports the raster hidden", async () => {
+    const { engine, deck, view, time, store } = setup();
+    await settle(engine, () => thermalLayer(deck));
+    view.getState().setRenderMode("raster");
+    view.getState().setLens(true);
+    time.getState().setCompare({ kind: "y", a: 1990, b: 2050, splitPx: 500 });
+    expect(await settle(engine, () => compareLayers(deck).length === 2)).toBe(true);
+    for (let k = 0; k < 5; k += 1) engine._tick(performance.now());
+    expect(store.getState().raster.visible).toBe(false);
+    expect(store.getState().lens.on).toBe(false);
+    expect((deck.props.layers ?? []).some((l) => l.id.startsWith("thermal-raster") || l.id.startsWith("lens-"))).toBe(false);
+  });
+
+  it("the raster warm-up is neutral: an invisible placeholder draw, nothing reported or downloaded", async () => {
+    const { engine, deck, store } = setup();
+    await settle(engine, () => thermalLayer(deck));
+    const rasterKeys = () => Object.keys(bundle.getState().resources).filter((k) => k.startsWith("raster:"));
+    const keysBefore = rasterKeys();
+    const statusBefore = store.getState().raster;
+    engine._warmRaster = "wanted";
+    engine._tick(performance.now());
+    const warm = (deck.props.layers ?? []).find((l) => l.id === "thermal-raster-warm");
+    expect(warm).toBeTruthy();
+    expect(warm.props.textureA.props.width).toBe(1);
+    expect(store.getState().raster).toBe(statusBefore);
+    expect(store.getState().raster).toMatchObject({ visible: false, available: true, reason: null });
+    expect(rasterKeys()).toEqual(keysBefore);
+  });
+
+  it("a new device clears the old device's failure and warm-up flags (Retry really retries)", async () => {
+    const { engine } = setup();
+    Object.assign(engine, { rasterFailed: true, gpuFailed: true, _warmScheduled: true, _warmRaster: "done", _warmReticle: "done" });
+    engine.setDevice(fakeDevice());
+    expect([engine.rasterFailed, engine.gpuFailed, engine._warmScheduled, engine._warmRaster, engine._warmReticle]).toEqual([false, false, false, undefined, undefined]);
+    engine.rasterFailed = true;
+    engine.resetGpu();
+    expect(engine.rasterFailed).toBe(false);
+  });
+
+  it("the legend says when the drawn frame hatches outside-AOA cells", async () => {
+    const { engine, deck, view, time, store } = setup();
+    time.getState().setYear(2040);
+    expect(await settle(engine, () => thermalLayer(deck) && engine.current?.A.year === 2040)).toBe(true);
+    const aoa = engine.current.A.aoa;
+    const expected = Boolean(aoa && aoa.some(Boolean));
+    expect(expected).toBe(true);
+    expect(store.getState().legend.hatch).toBe(true);
+    view.getState().setLayer("zones");
+    expect(await settle(engine, () => store.getState().legend?.kind === "categorical")).toBe(true);
+    expect(store.getState().legend.hatch).toBe(false);
+  });
+
+  it("does not fly to the camera it reported itself; a URL camera still flies", async () => {
+    const { applyParamsToStores, reportCamera } = await import("../state/urlSync.js");
+    const { engine, time, view, selection } = setup();
+    const flights = [];
+    engine.flyTo = (cam) => flights.push(cam);
+    reportCamera({ longitude: 77.1, latitude: 28.5, zoom: 9, pitch: 0, bearing: 0 });
+    expect(flights).toHaveLength(0);
+    applyParamsToStores({ route: null, params: { camera: { longitude: 77.3, latitude: 28.7, zoom: 10, pitch: 0, bearing: 0 } } }, { time, view, selection });
+    expect(flights).toHaveLength(1);
+    reportCamera(null); // leave no URL camera for later engines
+  });
+});

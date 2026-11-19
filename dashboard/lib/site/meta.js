@@ -5,7 +5,7 @@
  */
 import { siteConfig } from "./config.js";
 
-const OG_IMAGE = Object.freeze({ url: "/opengraph-image", width: 1200, height: 630, alt: `${siteConfig.name}: land surface temperature 1990–2050, explained with AI` });
+const OG_IMAGE = Object.freeze({ url: "/opengraph-image", width: 1200, height: 630, alt: `${siteConfig.name}: land surface temperature, observed and projected, explained with AI` });
 
 export function pageMetadata({ title, description, path, type = "website", ogTitle }) {
   const fullTitle = ogTitle ?? (title ? `${title} · ${siteConfig.name}` : `${siteConfig.name}: ${siteConfig.tagline}`);

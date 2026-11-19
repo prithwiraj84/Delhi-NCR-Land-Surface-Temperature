@@ -48,8 +48,8 @@ describe("resolveShortcut", () => {
     expect(resolveShortcut(key(","))).toEqual({ type: "stepYear", delta: -1 });
     expect(resolveShortcut(key("PageUp"))).toEqual({ type: "stepYear", delta: 10 });
     expect(resolveShortcut(key("PageDown"))).toEqual({ type: "stepYear", delta: -10 });
-    expect(resolveShortcut(key("Home"))).toEqual({ type: "setYear", year: 1990 });
-    expect(resolveShortcut(key("End"))).toEqual({ type: "setYear", year: 2050 });
+    expect(resolveShortcut(key("Home"))).toEqual({ type: "setYear", edge: "first" });
+    expect(resolveShortcut(key("End"))).toEqual({ type: "setYear", edge: "last" });
     expect(resolveShortcut(key("d"))).toEqual({ type: "mode", mode: "day" });
     expect(resolveShortcut(key("N"))).toEqual({ type: "mode", mode: "night" }); // caps lock
     expect(resolveShortcut(key("t"))).toEqual({ type: "toggleDayNight" });
@@ -104,6 +104,28 @@ describe("resolveShortcut", () => {
     expect(resolveShortcut(key(" ", { repeat: true }))).toBeNull();
   });
 
+  it("Space belongs to native and ARIA controls it activates (never toggles playback there)", () => {
+    for (const target of [
+      el("INPUT", { type: "checkbox" }),
+      el("INPUT", { type: "radio" }),
+      el("INPUT", { type: "submit" }),
+      el("SELECT"),
+      el("SUMMARY"),
+      el("A"),
+      el("DIV", { role: "switch" }),
+      el("DIV", { role: "checkbox" }),
+      el("SPAN", { role: "radio" }),
+      el("DIV", { role: "tab" }),
+      el("LI", { role: "option" }),
+    ]) {
+      expect(resolveShortcut(key(" ", { target })), `${target.tagName} ${target.getAttribute("role") ?? target.type ?? ""}`).toBeNull();
+    }
+    // The ribbon slider, a range input and the page still play / pause.
+    expect(resolveShortcut(key(" ", { target: el("DIV", { role: "slider" }) }))).toEqual({ type: "togglePlay" });
+    expect(resolveShortcut(key(" ", { target: el("INPUT", { type: "range" }) }))).toEqual({ type: "togglePlay" });
+    expect(resolveShortcut(key(" "))).toEqual({ type: "togglePlay" });
+  });
+
   it("every letter shortcut in the sheet resolves to an action", () => {
     const letters = SHORTCUTS.filter((s) => s.keys.length === 1 && /^[A-Z]$/.test(s.keys[0])).map((s) => s.keys[0]);
     for (const l of letters) expect(resolveShortcut(key(l.toLowerCase())), l).not.toBeNull();
@@ -129,16 +151,40 @@ describe("runAction", () => {
     expect(stores.time.getState().year).toBe(1990);
   });
 
-  it("refuses unavailable modes with a toast + announcement instead of switching", () => {
+  it("Home / End and clamping follow the timeline's first and last years", () => {
+    const stores = makeStores();
+    stores.time.setState({ first: 2000, last: 2040 });
+    const ctx = { stores, years: stores.years, win: null };
+    runAction(resolveShortcut(key("Home")), ctx);
+    expect(stores.time.getState().year).toBe(2000);
+    runAction(resolveShortcut(key("End")), ctx);
+    expect(stores.time.getState().year).toBe(2040);
+    runAction({ type: "stepYear", delta: 10 }, ctx);
+    expect(stores.time.getState().year).toBe(2040);
+    // Without a configured span the frame years bound it.
+    const bare = makeStores();
+    runAction({ type: "setYear", edge: "first" }, { stores: bare, years: [2010, 2020, 2030], win: null });
+    expect(bare.time.getState().year).toBe(2010);
+  });
+
+  it("refuses unavailable modes with one spoken message (the toast) instead of switching", () => {
     const stores = makeStores();
     const toast = vi.fn();
     const announce = vi.fn();
     runAction({ type: "mode", mode: "night" }, { stores, availableModes: { day: true, night: false, dtr: false }, toast, announce, win: null });
     expect(stores.time.getState().mode).toBe("day");
     expect(toast).toHaveBeenCalledOnce();
-    expect(announce.mock.calls[0][0]).toMatch(/Night is unavailable/);
+    expect(toast.mock.calls[0][0].body).toMatch(/Night is unavailable/);
+    expect(announce).not.toHaveBeenCalled();
     runAction({ type: "toggleDayNight" }, { stores, availableModes: { day: true, night: true, dtr: true }, win: null });
     expect(stores.time.getState().mode).toBe("night");
+  });
+
+  it("does not report a mode switch the store refused", () => {
+    const stores = makeStores();
+    stores.time.setState({ setMode: vi.fn(() => false) });
+    expect(runAction({ type: "mode", mode: "dtr" }, { stores, win: null })).toBe(false);
+    expect(stores.time.getState().mode).toBe("day");
   });
 
   it("cycles render mode and motion preference, toggles lens/compare/briefing", () => {

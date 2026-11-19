@@ -195,8 +195,9 @@ function InteractionMatrix({ interactions, metaByName, zonesMeta, selectedFeatur
             <div
               role="grid"
               aria-label="Mean absolute SHAP interaction. Rows: plotted feature; columns: colour feature."
-              aria-rowcount={k}
-              aria-colcount={k}
+              // +1: the header row and the row-header column are part of the grid.
+              aria-rowcount={k + 1}
+              aria-colcount={k + 1}
               className="grid w-max gap-px"
               // Phones: the label column (≤ 24vw) and 12 px cells let all 17 columns fit a 390 px screen
               // without hidden sideways scrolling; from ~667 px up the sizes are unchanged.
@@ -204,7 +205,9 @@ function InteractionMatrix({ interactions, metaByName, zonesMeta, selectedFeatur
             >
               {/* column headers (vertical text) */}
               <div role="row" className="contents">
-                <span role="columnheader" aria-hidden="true" />
+                <span role="columnheader">
+                  <span className="sr-only">Plotted feature (rows) by colour feature (columns)</span>
+                </span>
                 {names.map((name, j) => (
                   <span
                     key={`col-${name}`}
@@ -236,42 +239,55 @@ function InteractionMatrix({ interactions, metaByName, zonesMeta, selectedFeatur
                     const diagonal = i === j;
                     const isActivePair = i === selectedIdx && j === colorIdx;
                     const inCross = i === selectedIdx || j === colorIdx;
+                    const rank = diagonal ? null : pairRank.ranks.get(`${i}-${j}`);
+                    const rowLabel = metaByName.get(rowName)?.label ?? rowName;
+                    const colLabel = metaByName.get(colName)?.label ?? colName;
+                    // A gridcell that contains the button (a <button role="gridcell"> would lose its
+                    // button semantics). The button's name carries everything the visual readout shows.
                     return (
-                      <button
+                      <div
                         key={`${rowName}-${colName}`}
-                        ref={(el) => {
-                          if (el) cellRefs.current.set(`${i}-${j}`, el);
-                          else cellRefs.current.delete(`${i}-${j}`);
-                        }}
-                        type="button"
                         role="gridcell"
-                        tabIndex={cursor.i === i && cursor.j === j ? 0 : -1}
                         aria-selected={isActivePair}
-                        aria-label={`${metaByName.get(rowName)?.label ?? rowName} by ${metaByName.get(colName)?.label ?? colName}: ${isNum(v) ? fmt(v, 3) : "no value"} °C`}
-                        onMouseEnter={(e) => showReadout(i, j, e.currentTarget)}
-                        onFocus={(e) => {
-                          setCursor({ i, j });
-                          showReadout(i, j, e.currentTarget);
-                        }}
-                        onBlur={() => setFocus(null)}
-                        onKeyDown={(e) => onKeyDown(e, i, j)}
-                        onClick={() => onSelectCell(rowName, colName)}
-                        className={cn(
-                          "relative aspect-square min-h-[12px] rounded-[3px] outline-none transition-[transform,box-shadow] duration-150",
-                          "hover:z-10 hover:scale-[1.18] focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-cyan",
-                          isActivePair && "z-10 ring-2 ring-cyan shadow-glow-cyan",
-                          !isActivePair && inCross && "ring-1 ring-slate-400/25",
-                        )}
-                        style={{ backgroundColor: cellFill(i, j) }}
+                        className="relative aspect-square min-h-[12px]"
                       >
-                        {diagonal && !includeDiagonal ? (
-                          <span
-                            aria-hidden="true"
-                            className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                            style={{ backgroundColor: THEME.inkMuted }}
-                          />
-                        ) : null}
-                      </button>
+                        <button
+                          ref={(el) => {
+                            if (el) cellRefs.current.set(`${i}-${j}`, el);
+                            else cellRefs.current.delete(`${i}-${j}`);
+                          }}
+                          type="button"
+                          tabIndex={cursor.i === i && cursor.j === j ? 0 : -1}
+                          aria-label={
+                            diagonal
+                              ? `${rowLabel} main effect: ${isNum(v) ? fmt(v, 3) : "no value"} °C`
+                              : `${rowLabel} by ${colLabel}: ${isNum(v) ? fmt(v, 3) : "no value"} °C${rank ? `, rank ${rank} of ${pairRank.total} pairs` : ""}`
+                          }
+                          onMouseEnter={(e) => showReadout(i, j, e.currentTarget)}
+                          onFocus={(e) => {
+                            setCursor({ i, j });
+                            showReadout(i, j, e.currentTarget);
+                          }}
+                          onBlur={() => setFocus(null)}
+                          onKeyDown={(e) => onKeyDown(e, i, j)}
+                          onClick={() => onSelectCell(rowName, colName)}
+                          className={cn(
+                            "absolute inset-0 rounded-[3px] outline-none transition-[transform,box-shadow] duration-150",
+                            "hover:z-10 hover:scale-[1.18] focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-cyan",
+                            isActivePair && "z-10 ring-2 ring-cyan shadow-glow-cyan",
+                            !isActivePair && inCross && "ring-1 ring-slate-400/25",
+                          )}
+                          style={{ backgroundColor: cellFill(i, j) }}
+                        >
+                          {diagonal && !includeDiagonal ? (
+                            <span
+                              aria-hidden="true"
+                              className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                              style={{ backgroundColor: THEME.inkMuted }}
+                            />
+                          ) : null}
+                        </button>
+                      </div>
                     );
                   })}
                 </div>

@@ -22,6 +22,12 @@ describe("palette query parsing", () => {
     expect(parseFrameQuery("2100")).toBeNull();
     expect(parseFrameQuery("gurugram")).toBeNull();
   });
+  it("one-letter mode abbreviations need a year or SSP beside them", () => {
+    expect(parseFrameQuery("d")).toBeNull();
+    expect(parseFrameQuery("n")).toBeNull();
+    expect(parseFrameQuery("2040 n 245")).toEqual({ year: 2040, mode: "night", ssp: "ssp245" });
+    expect(parseFrameQuery("night")).toEqual({ year: null, mode: "night", ssp: null });
+  });
   it("parses cell ids", () => {
     expect(parseCellQuery("#48211")).toBe(48211);
     expect(parseCellQuery("cell 12")).toBe(12);
@@ -48,6 +54,10 @@ describe("palette search", () => {
     expect(res[0].group).toBe("Years");
     expect(res[0].action).toEqual({ type: "goToFrame", year: 2045, mode: "night", ssp: "ssp585" });
     expect(searchPalette(items, "2032", { years })[0].hint).toMatch(/interpolated/);
+  });
+  it("typing a district's first letter never ranks a mode switch first", () => {
+    for (const q of ["d", "n", "D", "N"]) expect(searchPalette(items, q, { years }).some((i) => i.group === "Years")).toBe(false);
+    expect(searchPalette(items, "d", { years })[0]).toMatchObject({ group: "Districts", label: "Delhi NCT" });
   });
   it("finds districts, cells, layers and commands", () => {
     expect(searchPalette(items, "gurug")[0]).toMatchObject({ group: "Districts", action: { type: "selectDistrict", districtId: 1 } });

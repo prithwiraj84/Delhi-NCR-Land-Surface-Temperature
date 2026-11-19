@@ -1,7 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, it, expect } from "vitest";
 import {
   compileModel,
   checkModelAgainstPython,
+  modelFocalSpec,
   predictionToCelsius,
   MODEL_FORMAT,
 } from "../model.js";
@@ -13,6 +16,7 @@ import {
   publicDataExists,
   readJson,
   PUBLIC_DATA_DIR,
+  PUBLIC_DEMO_DIR,
 } from "./testUtils.js";
 
 const modelJson = fixture("model_web.json");
@@ -134,5 +138,37 @@ describe.skipIf(!publicDataExists("model_web.json"))("real bundle: public/data/m
       const diff = Math.abs(model.predictRow(r) - real.check.expected[i]);
       expect(diff, `check row ${i}`).toBeLessThan(1e-4);
     });
+  });
+});
+
+// v2 bundles ship one web model per mode (SPEC §5.2 `model_web_<mode>.json`, 47 features +
+// FOCAL_SPEC). Checked in the served bundle (public/data, LST_BUNDLE_DIR) and the synthetic demo.
+const V2_MODEL_FILES = [
+  ["public/data", PUBLIC_DATA_DIR],
+  ["public/demo", PUBLIC_DEMO_DIR],
+].flatMap(([label, dir]) => ["day", "night"].map((mode) => ({ label, dir, mode, file: `model_web_${mode}.json` })));
+
+describe.each(V2_MODEL_FILES)("real v2 model: $label/$file", ({ dir, mode, file }) => {
+  const present = fs.existsSync(path.join(dir, file));
+  it.skipIf(!present)("compiles, matches the manifest features / FOCAL_SPEC and every Python check row within 1e-4", () => {
+    const real = readJson(dir, file);
+    expect(real.format).toBe(MODEL_FORMAT);
+    const model = compileModel(real);
+    if (typeof real.mode === "string") expect(model.mode).toBe(mode);
+    expect(model.focal).toEqual(modelFocalSpec(real));
+    if (fs.existsSync(path.join(dir, "manifest.json"))) {
+      const manifest = readJson(dir, "manifest.json");
+      expect(model.features).toEqual((manifest.features ?? []).map((f) => f.name));
+    }
+    const rows = real.check?.rows ?? [];
+    if (rows.length) {
+      const report = checkModelAgainstPython(model, real, 1e-4);
+      expect(report.n).toBe(rows.length);
+      expect(report.failures, `max |Δ| ${report.maxAbsDiff}`).toBe(0);
+    } else {
+      // No embedded reference rows: the strongest check left is a finite prediction everywhere,
+      // including the all-missing row (default directions).
+      expect(Number.isFinite(model.predictRow(new Array(model.features.length).fill(null)))).toBe(true);
+    }
   });
 });

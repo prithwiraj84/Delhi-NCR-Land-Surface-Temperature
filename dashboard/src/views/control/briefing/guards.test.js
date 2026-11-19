@@ -143,7 +143,10 @@ describe("Briefing guards on the synthetic v2 fixture", () => {
 // The user's REAL v1 bundle (read-only)
 // ---------------------------------------------------------------------------------------
 
-const realV1 = publicDataExists("manifest.json") && String(readJson(PUBLIC_DATA_DIR, "manifest.json").schema_version ?? "").startsWith("1");
+/** schema_version of the real bundle in public/data ("" when absent): picks the v1 or v2 suite. */
+const realSchema = () => (publicDataExists("manifest.json") ? String(readJson(PUBLIC_DATA_DIR, "manifest.json").schema_version ?? "") : "");
+const realV1 = realSchema().startsWith("1");
+const realV2 = realSchema().startsWith("2");
 
 describe.skipIf(!realV1)("Briefing guards on the REAL v1 bundle", () => {
   let ctx;
@@ -206,5 +209,52 @@ describe.skipIf(!realV1)("Briefing guards on the REAL v1 bundle", () => {
   it("every step renders without unresolved variables or empty-placeholder dashes", () => {
     for (const step of evaluateBriefing(ctx.stats)) expect(step.text).not.toMatch(/\{\{|undefined|NaN|null|\)—|—\./);
     expect(evaluateStep(stepById("baseline"), ctx.stats).text).toMatch(/^2010: the first frame of the record — MODIS Terra/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// The user's REAL v2 bundle (public/data, read-only; the Kaggle full export)
+// ---------------------------------------------------------------------------------------
+
+describe.skipIf(!realV2)("Briefing guards on the REAL v2 bundle", () => {
+  let ctx;
+  beforeAll(async () => {
+    const store = createBundleStore({ fetchImpl: createFsFetch(PUBLIC_DATA_DIR) });
+    ctx = await loadContext(store, { source: { id: "data", baseUrl: "/data", explicit: true, reason: "test" } });
+  }, 300000);
+
+  it("evaluates all nine steps with no unresolved variables or empty placeholders", () => {
+    const out = evaluateBriefing(ctx.stats);
+    expect(out).toHaveLength(9);
+    for (const step of out) {
+      expect(step.text).not.toMatch(/\{\{|undefined|NaN|null|\)—|—\./);
+      expect(step.state).toBeTruthy();
+    }
+    expect(evaluateStep(stepById("baseline"), ctx.stats).text).toMatch(/^1990: the first frame of the record — Landsat/);
+  });
+
+  it("each claim follows the real data: signed day / night UHI, the exported trend, projections", () => {
+    const day = evaluateStep(stepById("day-fringe"), ctx.stats);
+    expect(guards.dayUhiNegative(ctx.stats)).toBe(ctx.stats.uhi_day < 0);
+    expect(day.text).toMatch(ctx.stats.uhi_day < 0 ? /−\d+\.\d °C by day: built-up land is cooler/ : /\+\d+\.\d °C by day: built-up land is warmer/);
+    const night = evaluateStep(stepById("night-flip"), ctx.stats);
+    expect(guards.nightUhiPositive(ctx.stats)).toBe(ctx.stats.uhi_night > 0);
+    expect(night.state.mode).toBe("night");
+    const trend = scopeSeries(ctx.series, "ncr", "day").trend?.obs;
+    const significant = Boolean(trend) && (trend.ci[0] > 0 || trend.ci[1] < 0);
+    expect(guards.dayTrendSignificant(ctx.stats)).toBe(significant);
+    expect(evaluateStep(stepById("playback"), ctx.stats).text).toMatch(significant ? /°C per decade \(.* exported trend with CI\)/ : /no clear trend/);
+    expect(guards.projectionsExist(ctx.stats)).toBe(true);
+    expect(evaluateStep(stepById("cross-now"), ctx.stats).text).toMatch(/model \+ CMIP6 scenario, not observations/);
+    expect(guards.scenarioPairExists(ctx.stats)).toBe(true);
+    expect(evaluateStep(stepById("scenarios-2050"), ctx.stats).state.cmp).toEqual({ kind: "s", a: "ssp126", b: "ssp585" });
+  });
+
+  it("how-sure quotes the pooled spatial-block headline and the AOA of NOW", () => {
+    expect(ctx.stats.skill.pooled).toBe(true);
+    const step = evaluateStep(stepById("how-sure"), ctx.stats);
+    expect(step.text).toMatch(/Spatial-block CV R² \d\.\d\d \(pooled, 20 km blocks\)/);
+    expect(step.text).toMatch(/\d+ % of cells lie inside the area of applicability in 2025/);
+    expect(step.state.layer).toBe("aoa");
   });
 });

@@ -6,6 +6,7 @@
  * Protocol
  *   {type: "grid", key, width, height, pixel}                 cache a cell -> pixel index
  *   {type: "render", id, gridKey, values, lut, lo, hi, mask?}  -> {id, bitmap} | {id, error}
+ *                                                                 | {id, missingGrid: key} (evicted: re-send it)
  */
 import { rasterizeCells } from "./thumbRaster.js";
 
@@ -19,9 +20,13 @@ self.onmessage = (event) => {
     return;
   }
   if (msg.type !== "render") return;
+  if (!grids.has(msg.gridKey)) {
+    // Only the last few grids are kept: the client re-sends an evicted one and retries.
+    self.postMessage({ id: msg.id, missingGrid: msg.gridKey });
+    return;
+  }
   try {
     const grid = grids.get(msg.gridKey);
-    if (!grid) throw new Error(`thumb worker: grid "${msg.gridKey}" was not sent`);
     const rgba = rasterizeCells({ ...grid, values: msg.values, lut: msg.lut, lo: msg.lo, hi: msg.hi, mask: msg.mask ?? null });
     const canvas = new OffscreenCanvas(grid.width, grid.height);
     const ctx = canvas.getContext("2d");

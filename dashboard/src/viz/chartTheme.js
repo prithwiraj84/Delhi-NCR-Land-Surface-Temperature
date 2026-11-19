@@ -243,7 +243,9 @@ export const COMPONENT_COLORS = Object.freeze({
   sensitivity: "#d95926",
   land: "#199e70",
   model: "#9085e9",
-  climate: "#d95926",
+  // Reference dark slot 4 (yellow), distinct from `sensitivity`; shown beside `land`
+  // (FutureDecomposition): CVD ΔE 8.4, normal-vision ΔE 19.8, ≥ 3:1 on #111A2B.
+  climate: "#c98500",
 });
 
 export const COMPONENT_LABELS = Object.freeze({

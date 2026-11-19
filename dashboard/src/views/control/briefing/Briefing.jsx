@@ -59,6 +59,8 @@ export function Briefing({ className }) {
   const data = useData() ?? {};
   const headingRef = useRef(null);
   const applied = useRef(null);
+  // Index of the last applied step: stepping BACK into a step must not replay its bounded playback.
+  const appliedIndex = useRef(-1);
   const level = useMotionLevel();
   const total = BRIEFING_STEPS.length;
   const current = steps?.[Math.min(step, total - 1)] ?? null;
@@ -67,16 +69,20 @@ export function Briefing({ className }) {
   useEffect(() => {
     if (!active) {
       applied.current = null;
+      appliedIndex.current = -1;
       return;
     }
     if (!current || applied.current === current.id) return;
+    const forward = current.index > appliedIndex.current;
     applied.current = current.id;
+    appliedIndex.current = current.index;
     applyBriefingState(current.state, {
       time: useTimeStore,
       view: useViewStore,
       playback: usePlaybackStatus,
       setScenario: data.setScenario,
       presets: data.presets ?? [],
+      play: forward,
     });
   }, [active, current, data.setScenario, data.presets]);
 

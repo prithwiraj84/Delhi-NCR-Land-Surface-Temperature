@@ -1287,8 +1287,17 @@ export function createSynthV2({ seed = 20250, width = 55, height = 67, optionalK
       fold_geometry: { block20: { block_km: 20, n_rows: 4, n_cols: 4, fold_of_block: Array.from({ length: 16 }, (_, k) => k % 5), rmse_of_block: Array.from({ length: 16 }, (_, k) => round(rmse + 0.1 * Math.sin(k), 3)) } },
       aoa: {
         di_threshold: 0.47,
-        pct_inside: Object.fromEntries([...FRAMES_OBS, ...FRAMES_PROJ].map((y) => [String(y), y > NOW ? round(0.97 - 0.006 * ((y - NOW) / 5), 3) : 0.99])),
-        rmse_by_di_decile: Array.from({ length: 10 }, (_, k) => round(rmse * (0.8 + 0.05 * k), 3)),
+        // Same shapes as the real export: pct_inside keyed by OBSERVED frames only (projected
+        // frames: projection_meta[mode][ssp].pct_outside_aoa); one {decile, di_lo, di_hi, rmse, n}
+        // object per DI decile.
+        pct_inside: Object.fromEntries(FRAMES_OBS.map((y) => [String(y), 0.99])),
+        rmse_by_di_decile: Array.from({ length: 10 }, (_, k) => ({
+          decile: k,
+          di_lo: round(k * 0.06, 4),
+          di_hi: round((k + 1) * 0.06, 4),
+          rmse: round(rmse * (0.8 + 0.05 * k), 3),
+          n: Math.round((n * FRAMES_OBS.length) / 10),
+        })),
         ...(optionalKeys ? { resid_rho_block20: mode === "day" ? 0.36 : 0.42, proj_resid_q90: Array.from({ length: 10 }, (_, k) => round(rmse * (1.3 + 0.08 * k), 3)) } : {}),
       },
       persistent_residual: { lambda: 3, loeo_rmse_without: round(rmse + 0.08, 3), loeo_rmse_with: round(rmse - 0.04, 3) },

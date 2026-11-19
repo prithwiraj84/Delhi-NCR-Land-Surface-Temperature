@@ -298,18 +298,22 @@ export function formatP(p) {
 
 export const ALPHA = 0.05;
 
-/** Seconds -> "0.8 s" / "12.3 s" / "4 m 05 s" / "1 h 02 m". */
+/**
+ * Seconds -> "0.8 s" / "12.3 s" / "4 m 05 s" / "1 h 02 m". Rounding carries into the next unit
+ * (119.6 s -> "2 m 00 s", never "1 m 60 s").
+ */
 export function formatDuration(seconds) {
   if (!isNum(seconds)) return MISSING;
-  if (seconds < 60) return `${fmt(seconds, seconds < 10 ? 1 : 0)} s`;
-  if (seconds < 3600) {
-    const m = Math.floor(seconds / 60);
-    const s = Math.round(seconds - m * 60);
-    return `${m} m ${String(s).padStart(2, "0")} s`;
+  const dp = seconds < 10 ? 1 : 0;
+  if (seconds < 60 && Number(seconds.toFixed(dp)) < 60) return `${fmt(seconds, dp)} s`;
+  const totalSeconds = Math.round(seconds);
+  if (totalSeconds < 3600) {
+    const m = Math.floor(totalSeconds / 60);
+    return `${m} m ${String(totalSeconds - m * 60).padStart(2, "0")} s`;
   }
-  const h = Math.floor(seconds / 3600);
-  const m = Math.round((seconds - h * 3600) / 60);
-  return `${h} h ${String(m).padStart(2, "0")} m`;
+  const totalMinutes = Math.round(seconds / 60);
+  const h = Math.floor(totalMinutes / 60);
+  return `${h} h ${String(totalMinutes - h * 60).padStart(2, "0")} m`;
 }
 
 /**

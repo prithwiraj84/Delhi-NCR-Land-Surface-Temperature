@@ -12,8 +12,15 @@ import { useEffect, useState } from "react";
  */
 export function useSize(ref, fallback = { width: 640, height: 240 }) {
   const [size, setSize] = useState(fallback);
+  const [node, setNode] = useState(null);
+  // Follow the ref to whichever element it points at now (a chart swaps its loading / empty box
+  // for the real one): an observer left on a detached node would freeze the size.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- runs after every render on purpose (a ref change triggers no render); setNode fires only when the ref moved
   useEffect(() => {
-    const el = ref.current;
+    if (ref.current !== node) setNode(ref.current);
+  });
+  useEffect(() => {
+    const el = node;
     if (!el) return undefined;
     const measure = () => {
       const r = el.getBoundingClientRect();
@@ -24,6 +31,6 @@ export function useSize(ref, fallback = { width: 640, height: 240 }) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ref]);
+  }, [node]);
   return size;
 }

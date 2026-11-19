@@ -10,7 +10,7 @@
  * gradient bar (no glow). A home link to the site sits at the foot of the rail.
  * Targets are >= 44 px on the mobile bar.
  */
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { House, MoreHorizontal } from "lucide-react";
 import { appEnv } from "../lib/env.js";
@@ -20,6 +20,9 @@ import { cn } from "../lib/cn.js";
 import { setStoreField, useViewStore } from "./deps.js";
 import { MOBILE_MORE, MOBILE_PRIMARY, ROUTE_BY_ID, ROUTES } from "./routes.js";
 import { useShellUi } from "./uiStore.js";
+import { useFocusTrap } from "./useFocusTrap.js";
+
+const DESKTOP_QUERY = "(min-width: 640px)";
 
 function useRovingKeys(count, refs, vertical) {
   return (event, index) => {
@@ -95,13 +98,40 @@ function MobileBar({ route }) {
   const moreActive = MOBILE_MORE.includes(route);
   const activeIndex = moreActive ? items.length - 1 : Math.max(0, MOBILE_PRIMARY.indexOf(route));
   const moreOpen = overlay === "more";
+  const navRef = useRef(null);
+  const menuRef = useRef(null);
+
+  // Focus moves into the menu on open and returns to "More" on close (Esc closes it through the
+  // global keyboard map); an outside press or growing to the desktop layout also closes it, so a
+  // hidden menu can never keep the global shortcuts blocked.
+  useFocusTrap(menuRef, moreOpen);
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const onPointer = (e) => navRef.current && !navRef.current.contains(e.target) && close();
+    document.addEventListener("pointerdown", onPointer);
+    let mql = null;
+    try {
+      mql = window.matchMedia?.(DESKTOP_QUERY) ?? null;
+    } catch {
+      mql = null;
+    }
+    const onWide = () => mql?.matches && close();
+    if (mql?.matches) close();
+    else mql?.addEventListener?.("change", onWide);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      mql?.removeEventListener?.("change", onWide);
+    };
+  }, [moreOpen, close]);
 
   return (
-    <nav aria-label="Views" className="relative z-chrome border-t border-hairline bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl sm:hidden">
+    <nav ref={navRef} aria-label="Views" className="relative z-chrome border-t border-hairline bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl sm:hidden">
       <AnimatePresence>
         {moreOpen && (
           <motion.ul
+            ref={menuRef}
             id="nav-more-menu"
+            aria-label="More views"
             initial={level === "off" ? false : { opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0, transition: transition("quick") }}
             exit={{ opacity: 0, transition: transition("exit", { scale: 0.6 }) }}

@@ -530,7 +530,9 @@ export function createFrameSource({ bundle, onUpdate = null }) {
       // The pred layer always shows absolute predicted LST (D22 b).
       const variable = desc.layer === "pred" ? "abs" : desc.q === "spread" ? "spread" : desc.variable;
       domain = domainFor(tl, desc.mode, variable);
-      if (variable === "abs" && desc.domainMode === "shared") {
+      // "Day+Night" shared scale: the day ∪ night domain for day and night only. DTR is a
+      // different quantity (a range, amplitude ramp) and keeps its own domain.
+      if (variable === "abs" && desc.domainMode === "shared" && desc.mode !== "dtr") {
         const d = domainFor(tl, "day", "abs");
         const n = domainFor(tl, "night", "abs");
         if (d && n) domain = [Math.min(d[0], n[0]), Math.max(d[1], n[1])];

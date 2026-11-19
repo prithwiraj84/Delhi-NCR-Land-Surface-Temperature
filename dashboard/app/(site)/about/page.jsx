@@ -7,6 +7,7 @@ import { Reveal } from "../../_components/Reveal.jsx";
 import { Eyebrow, PageIntro, Section } from "../../_components/ui.jsx";
 import { JsonLd } from "../../../lib/site/JsonLd.jsx";
 import { absoluteUrl, siteConfig } from "../../../lib/site/config.js";
+import { getFacts } from "../../../lib/site/facts.js";
 import { pageMetadata } from "../../../lib/site/meta.js";
 
 export const metadata = pageMetadata({
@@ -18,7 +19,7 @@ export const metadata = pageMetadata({
 });
 
 const PRINCIPLES = [
-  ["Honest validation", "Accuracy is measured on places and years the model never saw, and the less flattering number is the headline."],
+  ["Honest validation", "Accuracy is measured on places and years the model never saw, never on a random split that would flatter it, and the harder tests are reported next to the headline."],
   ["Evidence on every value", "Each frame carries its evidence tier, and the explorer marks cells where the model is outside its comfort zone."],
   ["Explanations, with limits", "SHAP shows what the model relies on; the site says clearly where that stops being a statement about causes."],
   ["Open by default", "Public data in, open results out: every number on this site comes from a downloadable, validated bundle."],
@@ -27,13 +28,16 @@ const PRINCIPLES = [
 const STACK = [
   ["Data", "Google Earth Engine, Landsat, MODIS, VIIRS, ERA5-Land, GHSL, CMIP6"],
   ["Modelling", "Python, XGBoost, LightGBM, scikit-learn, PyTorch (graph neural network), SHAP"],
-  ["Compute", "Kaggle notebooks on 2× NVIDIA T4 GPUs"],
+  ["Compute", "Kaggle notebooks on GPUs"],
   ["Website", "Next.js, React, Tailwind CSS, static generation for search engines"],
   ["Explorer", "deck.gl and luma.gl (WebGL), MapLibre, Web Workers, zustand"],
   ["Design", "Geist type, a colour-blind-safe data palette, motion guided by Emil Kowalski's design-engineering principles"],
 ];
 
 export default function AboutPage() {
+  // The GPUs of the run that produced the bundle (metrics.hardware).
+  const gpus = getFacts().hardware?.gpus ?? [];
+  const stack = STACK.map(([k, v]) => (k === "Compute" && gpus.length ? [k, `Kaggle notebooks on ${gpus.length}× ${gpus[0]} GPU${gpus.length > 1 ? "s" : ""}`] : [k, v]));
   const personLd = {
     "@context": "https://schema.org",
     "@type": "ProfilePage",
@@ -62,7 +66,7 @@ export default function AboutPage() {
 
       <Section id="stack" eyebrow="Technology" title="How it is built">
         <Reveal as="dl" className="grid gap-px overflow-hidden rounded-[20px] border border-hairline bg-hairline sm:grid-cols-2">
-          {STACK.map(([k, v]) => (
+          {stack.map(([k, v]) => (
             <div key={k} className="bg-surface-2 px-6 py-5">
               <dt className="text-[13px] text-ink-faint">{k}</dt>
               <dd className="mt-1 text-[15px] text-ink">{v}</dd>

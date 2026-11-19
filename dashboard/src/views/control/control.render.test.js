@@ -15,7 +15,7 @@ import { configureAxe } from "vitest-axe";
 import * as matchers from "vitest-axe/matchers";
 import { createBundleStore } from "../../data/bundleStore.js";
 import { createFixtureFetch, createSynthV2 } from "../../data/fixtures/synthV2.js";
-import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataIsV1, publicDemoExists } from "../../lib/__tests__/testUtils.js";
+import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataExists, publicDemoExists, readJson } from "../../lib/__tests__/testUtils.js";
 import { DataProvider } from "../../state/DataContext.jsx";
 import { useSelectionStore } from "../../state/stores/selectionStore.js";
 import { useTimeStore } from "../../state/stores/timeStore.js";
@@ -155,6 +155,22 @@ function suite(label, makeStore, { v1 = false } = {}) {
       await act(async () => root.unmount());
     }, 60000);
 
+    it("after NOW the telemetry Δ is against the weather-normalised baseline, labelled so (R9)", async () => {
+      setWidth(1440);
+      const tl = store.getState().timeline;
+      if (!tl.projYears.length) return;
+      const { host, root } = await mount(store);
+      const deltaItem = () => [...host.querySelectorAll('[data-testid="telemetry-strip"] [data-status]')].find((el) => /^Δ vs/.test(el.textContent));
+      await actNow(() => useTimeStore.getState().setYear(tl.last));
+      await settle(40, 8);
+      expect(deltaItem().textContent).toMatch(new RegExp(`^Δ vs ${tl.now} baseline`));
+      expect(deltaItem().getAttribute("data-status")).toBe("exact");
+      await actNow(() => useTimeStore.getState().setYear(tl.now));
+      await settle(40, 8);
+      expect(deltaItem().textContent).not.toMatch(/baseline/);
+      await act(async () => root.unmount());
+    }, 60000);
+
     it("unavailable layers stay visible with their reason; the dock is one radio group", async () => {
       setWidth(1440);
       const { host, root } = await mount(store);
@@ -260,15 +276,20 @@ suite("Control on the synthetic v2 fixture", async () => {
   return store;
 });
 
-if (publicDataIsV1()) {
+/** schema_version of the real bundle in public/data ("" when absent). */
+const realSchema = () => (publicDataExists("manifest.json") ? String(readJson(PUBLIC_DATA_DIR, "manifest.json").schema_version ?? "") : "");
+
+// The user's REAL bundle (public/data): v1 or v2, whichever is checked in.
+if (realSchema()) {
+  const v1 = realSchema().startsWith("1");
   suite(
-    "Control on the REAL v1 bundle (public/data)",
+    `Control on the REAL ${v1 ? "v1" : "v2"} bundle (public/data)`,
     async () => {
       const store = createBundleStore({ fetchImpl: createFsFetch(PUBLIC_DATA_DIR) });
       await store.getState().load({ source: { id: "data", baseUrl: "/data", explicit: true, reason: "test" } });
       return store;
     },
-    { v1: true },
+    { v1 },
   );
 }
 

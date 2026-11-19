@@ -39,7 +39,14 @@ export function ZoneHeader({ summaries, k, silhouette, total, prevTotal, year, p
           accent={quality.tone === "amber" ? "amber" : quality.tone === "emerald" ? "emerald" : "cyan"}
           hint={`K-means on SHAP · ${quality.label} (−1 to 1)`}
         />
-        <StatTile size="sm" label="Zones (K)" value={isNum(k) ? String(k) : MISSING} icon={Boxes} accent="violet" hint="fixed canonical ids 0–3" />
+        <StatTile
+          size="sm"
+          label="Zones (K)"
+          value={isNum(k) ? String(k) : MISSING}
+          icon={Boxes}
+          accent="violet"
+          hint={isNum(k) && k >= 1 ? `fixed canonical ids 0–${k - 1}` : "fixed canonical ids"}
+        />
         <StatTile
           size="sm"
           label="Mapped area"

@@ -75,8 +75,9 @@ function ModeSwitch({ meta, compact }) {
       size={compact ? "sm" : "md"}
       accent={(v) => MODE_ACCENT[v]}
       onChange={(m) => {
-        runAction({ type: "mode", mode: m }, { stores: STORES, availableModes: meta.availableModes, announce, toast: showToast });
-        announce(m === "dtr" ? "Diurnal range" : m === "night" ? "Night" : "Day");
+        const switched = runAction({ type: "mode", mode: m }, { stores: STORES, availableModes: meta.availableModes, announce, toast: showToast });
+        // Unavailable modes speak through their toast; announce the switch only when it happened.
+        if (switched && meta.availableModes[m] !== false) announce(m === "dtr" ? "Diurnal range" : m === "night" ? "Night" : "Day");
       }}
     />
   );

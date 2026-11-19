@@ -59,6 +59,11 @@ export function ModelLab() {
   const ncr = seriesRes.status === "ready" ? scopeSeries(seriesRes.data, "ncr", mode) : null;
   const scenarioIds = timeline?.scenarioIds ?? [];
   const lastYear = timeline?.projYears?.at(-1) ?? 2050;
+  // Monte-Carlo sizes for the projection diagram, from the bundle (projection_meta / land_model).
+  const projMeta = Object.values(metrics?.projection_meta?.[mode] ?? {}).find((m) => m && typeof m === "object") ?? null;
+  const countOf = (v) => (Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : null);
+  const nMc = countOf(projMeta?.n_mc);
+  const nLand = countOf(metrics?.land_model?.n_realisations) ?? countOf(projMeta?.n_land_real);
 
   if (status === "loading" || metricsRes.status === "loading" || metricsRes.status === "idle") return <ScanSkeleton label="Loading model diagnostics" height={320} className="m-4" />;
   if (status !== "ready" || !manifest) return <Unavailable status={status} reason="The web bundle has not been loaded." className="m-4" />;
@@ -119,11 +124,11 @@ export function ModelLab() {
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-3">
-          <ProjectionMethod metrics={metrics} scenarios={timeline?.scenarios ?? []} available={scenarioIds.length > 0} />
+          <ProjectionMethod metrics={metrics} scenarios={timeline?.scenarios ?? []} nMc={nMc} nLand={nLand} available={scenarioIds.length > 0} />
           <UncertaintyBudget budget={ncr?.uncertaintyBudget ?? null} ssps={scenarioIds} year={lastYear} scopeLabel="NCR" rho={slice?.aoa?.resid_rho_block20 ?? null} mode={mode} reason={scenarioIds.length ? null : "No projections in this bundle — rerun notebook v2."} />
         </div>
         <div className="min-w-0 space-y-3">
-          <ModelCard manifest={manifest} schema={schema} modelRaw={model.status === "ready" ? model.data : null} mode={mode} skill={skill} timeline={timeline} />
+          <ModelCard manifest={manifest} schema={schema} modelRaw={model.status === "ready" ? model.data : null} mode={mode} skill={skill} timeline={timeline} metrics={metrics} />
           <HudFrame
             solid
             title={

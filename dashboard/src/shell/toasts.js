@@ -19,6 +19,8 @@ export const DEFAULT_TOAST_MS = 4000;
 const SESSION_KEY = "ncr-ops.toasts-shown";
 
 let counter = 0;
+/** Bumped on every raise, so a re-raised id restarts its timer (ToastHost). */
+let version = 0;
 
 function readShown() {
   try {
@@ -44,8 +46,10 @@ export const useToastStore = create((set) => ({
   toasts: [],
   push: (toast) =>
     set((state) => {
+      const prev = state.toasts.find((t) => t.id === toast.id);
       const rest = state.toasts.filter((t) => t.id !== toast.id);
-      return { toasts: [...rest, toast].slice(-MAX_TOASTS) };
+      // `repeat` flips on every re-raise of a visible id (ToastHost re-announces on the flip).
+      return { toasts: [...rest, { ...toast, repeat: prev ? !prev.repeat : false }].slice(-MAX_TOASTS) };
     }),
   dismiss: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
   clear: () => set({ toasts: [] }),
@@ -63,7 +67,8 @@ export function showToast({ id, title, body = "", tone = "info", duration = DEFA
     if (readShown().has(toastId)) return null;
     rememberShown(toastId);
   }
-  useToastStore.getState().push({ id: toastId, title: title ?? "", body, tone, duration, action, createdAt: Date.now() });
+  version += 1;
+  useToastStore.getState().push({ id: toastId, title: title ?? "", body, tone, duration, action, createdAt: Date.now(), version });
   return toastId;
 }
 

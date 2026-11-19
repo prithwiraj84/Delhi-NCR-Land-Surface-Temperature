@@ -132,16 +132,19 @@ export function CompareChips({ mobile = false, stageWidth = 0, className }) {
             ariaLabel="Compare view"
             layoutId="compare-mobile"
             size="touch"
-            value={variable === "delta" ? "d" : (compare.splitPx ?? 0) >= stageWidth - 1 ? "a" : "b"}
+            // The split shows A only (divider at the right edge), B only (left edge), or both halves
+            // (centred, the default): a centred split never reads as "B".
+            value={variable === "delta" ? "d" : compare.splitPx === null || compare.splitPx === undefined ? "s" : compare.splitPx >= stageWidth - 1 ? "a" : compare.splitPx <= 1 ? "b" : "s"}
             onChange={(v) => {
               if (v === "d") useViewStore.getState().setVariable("delta");
               else {
                 if (useViewStore.getState().variable === "delta") useViewStore.getState().setVariable(timeline.harmonised ? "abs" : "anom");
-                useTimeStore.getState().setCompare({ splitPx: v === "a" ? stageWidth : 0 });
+                useTimeStore.getState().setCompare({ splitPx: v === "a" ? stageWidth : v === "b" ? 0 : Math.round(stageWidth / 2) });
               }
             }}
             options={[
               { value: "a", label: "A" },
+              { value: "s", label: "A | B", title: "Both halves: A left, B right" },
               { value: "b", label: "B" },
               { value: "d", label: "B − A" },
             ]}

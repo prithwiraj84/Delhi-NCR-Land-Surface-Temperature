@@ -24,6 +24,9 @@ export const LAYER_ITEMS = Object.freeze([
 ]);
 
 const MODE_WORDS = Object.freeze({ day: "day", d: "day", night: "night", n: "night", dtr: "dtr", range: "dtr", diurnal: "dtr" });
+/** One-letter mode abbreviations only count next to a year or SSP ("2040 n"): a lone "d" or "n" is
+ *  the start of a district name ("Delhi", "Noida"), not a mode switch. */
+const MODE_ABBREVIATIONS = Object.freeze(new Set(["d", "n"]));
 
 /**
  * Parse a frame query: "2045 night ssp585", "1990", "2040 n 245", "night 2030 SSP2-4.5".
@@ -39,17 +42,19 @@ export function parseFrameQuery(query) {
   let year = null;
   let mode = null;
   let ssp = null;
+  let abbreviated = false;
   for (const tok of tokens) {
     if (/^(19|20)\d{2}$/.test(tok)) {
       const y = Number(tok);
       if (y >= 1990 && y <= 2050) year = y;
     } else if (MODE_WORDS[tok]) {
       mode = MODE_WORDS[tok];
+      abbreviated = MODE_ABBREVIATIONS.has(tok);
     } else if (/^(ssp)?(126|245|370|585)$/.test(tok)) {
       ssp = `ssp${tok.replace(/^ssp/, "")}`;
     }
   }
-  if (year === null && mode === null && ssp === null) return null;
+  if (year === null && ssp === null && (mode === null || abbreviated)) return null;
   return { year, mode, ssp };
 }
 

@@ -13,6 +13,8 @@ import { useMotionLevel } from "../design/useMotionLevel.js";
 import { cn } from "../lib/cn.js";
 import { useToastStore } from "./toasts.js";
 
+const ZWSP = String.fromCharCode(0x200b);
+
 const TONES = {
   info: { icon: Info, bar: "bg-signal", iconClass: "text-signal", label: "Information" },
   ok: { icon: CircleCheck, bar: "bg-ok", iconClass: "text-ok", label: "Success" },
@@ -27,6 +29,12 @@ function ToastItem({ toast, onDismiss, level }) {
   const tone = TONES[toast.tone] ?? TONES.info;
   const Icon = tone.icon;
 
+  // A re-raised toast (same id, new version) starts its full duration again. Declared before the
+  // timer effect: the old timer's cleanup runs first, then this reset, then the new timer.
+  useEffect(() => {
+    remaining.current = toast.duration;
+  }, [toast.version, toast.duration]);
+
   useEffect(() => {
     if (!toast.duration || toast.duration === Infinity || paused) return undefined;
     startedAt.current = Date.now();
@@ -35,7 +43,7 @@ function ToastItem({ toast, onDismiss, level }) {
       clearTimeout(timer);
       remaining.current = Math.max(500, remaining.current - (Date.now() - startedAt.current));
     };
-  }, [paused, toast.duration, toast.id, onDismiss]);
+  }, [paused, toast.duration, toast.id, toast.version, onDismiss]);
 
   useEffect(() => {
     const onVisibility = () => setPaused(document.visibilityState === "hidden");
@@ -70,6 +78,8 @@ function ToastItem({ toast, onDismiss, level }) {
         <p className="text-[13px] font-medium text-ink-strong">
           <span className="sr-only">{tone.label}: </span>
           {toast.title}
+          {/* A re-raised toast flips a zero-width suffix so the live region speaks it again. */}
+          {toast.repeat ? ZWSP : ""}
         </p>
         {toast.body && <p className="mt-0.5 text-xs leading-snug text-ink-muted">{toast.body}</p>}
         {toast.action && (

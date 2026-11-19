@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import zonesFixture from "../../lib/__tests__/fixtures/zones.json";
 import manifestFixture from "../../lib/__tests__/fixtures/manifest.json";
 import {
+  alluvialColumns,
   cellAreaKm2,
   defaultPair,
   diagnosticsRows,
@@ -114,6 +115,21 @@ describe("transitions", () => {
   it("rejects ragged matrices", () => {
     expect(transitionStats([[1, 2], [3]])).toBeNull();
     expect(transitionStats(null)).toBeNull();
+  });
+
+  it("ends the alluvial chain at a malformed matrix instead of misaligning later columns", () => {
+    const ok = [
+      [2, 1],
+      [0, 3],
+    ];
+    const data = alluvialColumns({ obs: { "2000->2005": ok, "2005->2010": [[1, 2], [3]], "2010->2015": ok } });
+    expect(data.columns.map((c) => c.year)).toEqual([2000, 2005]);
+    expect(data.flows.map((f) => [f.from, f.to])).toEqual([[2000, 2005]]);
+    // Every flow joins two adjacent columns.
+    data.flows.forEach((f, i) => {
+      expect(data.columns[i].year).toBe(f.from);
+      expect(data.columns[i + 1].year).toBe(f.to);
+    });
   });
 });
 

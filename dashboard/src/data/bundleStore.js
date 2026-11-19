@@ -148,8 +148,9 @@ export function createBundleStore({ fetchImpl = null, workerClient = null, fixtu
     }
 
     // ---- file access ---------------------------------------------------------------------------
+    /** URL of a bundle file, versioned with the manifest's generated_at (cache busting). */
     function fileUrl(name) {
-      return bundleFileUrl(ctx.baseUrl, name);
+      return bundleFileUrl(ctx.baseUrl, name, ctx.version);
     }
 
     async function getBytes(name, { label = name, progressId = null } = {}) {
@@ -402,7 +403,7 @@ export function createBundleStore({ fetchImpl = null, workerClient = null, fixtu
           result = entry("ready", data);
         } catch (error) {
           if (error instanceof Unavailable) result = unavailable(error.message);
-          else if (error?.status === "missing") result = unavailable(`file missing: ${error.url ?? key}`);
+          else if (error?.status === "missing") result = unavailable(`file missing: ${error.url ? String(error.url).split("?")[0] : key}`);
           else {
             console.warn(`[bundle] ${key} failed:`, error);
             result = entry("error", null, error?.message ?? String(error), { error: describeError(error) });
@@ -524,6 +525,8 @@ export function createBundleStore({ fetchImpl = null, workerClient = null, fixtu
           epochLru: createLru(EPOCH_LRU, (key) => dropResource(key)),
           adapted: null,
           fixture,
+          /** manifest.generated_at: appended as `?v=` to every bundle file URL (cache busting). */
+          version: null,
         };
         set({ source: { id: resolved.id, baseUrl: resolved.baseUrl, explicit: resolved.explicit, reason: resolved.reason } });
 
@@ -532,7 +535,7 @@ export function createBundleStore({ fetchImpl = null, workerClient = null, fixtu
         if (m) progress.done("ok");
         else {
           try {
-            const { bytes } = await fetchBytes(bundleFileUrl(ctx.baseUrl, "manifest.json"), { fetchImpl: ctx.fetchImpl, onProgress: progress.bytes });
+            const { bytes } = await fetchBytes(bundleFileUrl(ctx.baseUrl, "manifest.json"), { fetchImpl: ctx.fetchImpl, onProgress: progress.bytes, cache: "no-cache" });
             m = await parseJsonBytes(bytes, "manifest.json");
             progress.done("ok", { bytes: bytes.byteLength });
           } catch (error) {
@@ -545,8 +548,11 @@ export function createBundleStore({ fetchImpl = null, workerClient = null, fixtu
           }
         }
         if (get().generation !== gen) return get();
+        const generatedAt = m?.generated_at;
+        ctx.version = (typeof generatedAt === "string" && generatedAt.trim()) || (Number.isFinite(generatedAt) ? String(generatedAt) : null);
         const schema = detectSchema(m);
-        set({ schema, manifest: m });
+        // `source.version` lets other code build versioned links (bundleFileUrl(base, file, version)).
+        set((s) => ({ schema, manifest: m, source: s.source ? { ...s.source, version: ctx.version } : s.source }));
         if (schema === "v2") {
           const tl = buildTimeline(m, { schema: "v2" });
           set({ manifestV2: m, timeline: tl, groupsMeta: groupFeatureMetas(m) });

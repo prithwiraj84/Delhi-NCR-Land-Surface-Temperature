@@ -254,14 +254,16 @@ export function PolicyTable({ rows, zoneList, manifest, ciLabel = "95% CI" }) {
                   const sorted = header.column.getIsSorted();
                   const right = header.column.columnDef.meta?.align === "right";
                   const label = flexRender(header.column.columnDef.header, header.getContext());
+                  // aria-sort only on sortable columns (it claims a sort state otherwise).
+                  const canSort = header.column.getCanSort();
                   return (
                     <th
                       key={header.id}
                       scope="col"
-                      aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
+                      aria-sort={canSort ? (sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none") : undefined}
                       className={cn("whitespace-nowrap px-3 py-2 font-medium", right ? "text-right" : "text-left")}
                     >
-                      {header.column.getCanSort() ? (
+                      {canSort ? (
                         <button
                           type="button"
                           onClick={header.column.getToggleSortingHandler()}
@@ -324,8 +326,9 @@ export function PolicyTable({ rows, zoneList, manifest, ciLabel = "95% CI" }) {
         Model ΔLST is the mean change in the final model&apos;s prediction over the zone&apos;s cells when every cell moves by
         the shown step (current → target are zone medians; land-cover changes are rebalanced against the other covers and the
         coupled spectral indices follow). The interval re-evaluates the same change with every block-bootstrap replicate model.
-        These are model-based associations, not causal effects, and several actions are not additive - use the scenario
-        simulator in the threshold explorer to test a combination on the in-browser model.
+        These are model-based associations, not causal effects, and the rows are not additive: doing several actions
+        together is not the sum of their ΔLST. The what-if simulator in the AI drivers view re-runs the in-browser model
+        for one lever at a time in a region of your choice.
       </p>
     </div>
   );

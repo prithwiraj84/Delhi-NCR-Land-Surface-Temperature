@@ -58,7 +58,9 @@ export function requestedBundle(search) {
 export async function probeManifest(baseUrl, { fetchImpl = globalThis.fetch } = {}) {
   const url = `${trimSlash(baseUrl)}/manifest.json`;
   try {
-    const { bytes } = await fetchBytes(url, { fetchImpl });
+    // The manifest names the export (generated_at) every other file URL is versioned with, so it
+    // is always revalidated (bundle files keep their names across exports).
+    const { bytes } = await fetchBytes(url, { fetchImpl, cache: "no-cache" });
     const manifest = await parseJsonBytes(bytes, url);
     if (!isUsableManifest(manifest)) {
       throw new DataLoadError(`manifest.json at ${url} is malformed (missing "epochs"/"timeline.frames" or "files").`, { url });
@@ -89,18 +91,34 @@ export async function resolveBundleSource({ search = typeof location !== "undefi
   const configured = typeof e.VITE_DATA_BASE_URL === "string" ? e.VITE_DATA_BASE_URL.trim() : "";
   if (configured) return { id: "custom", baseUrl: trimSlash(configured), explicit: true, reason: "VITE_DATA_BASE_URL", manifest: null };
 
+  // Only a MISSING manifest (404 / SPA fallback page: the probe resolves null) falls through to the
+  // next source. Any other failure (network, server error, malformed manifest) selects that source,
+  // so the load fails visibly instead of silently showing synthetic data.
+  const probeSource = (base, id) =>
+    doProbe(base).then(
+      (manifest) => ({ manifest: manifest ?? null, error: null }),
+      (error) => {
+        if (error?.status === "missing") return { manifest: null, error: null };
+        console.warn(`[bundle] probing the ${id} bundle failed:`, error?.message ?? error);
+        return { manifest: null, error };
+      },
+    );
+  const failedSource = (id, baseUrl, error) => ({
+    id,
+    baseUrl,
+    explicit: false,
+    reason: `default: public/${id}/manifest.json could not be read (${error?.message ?? error}); not falling back to another bundle`,
+    manifest: null,
+  });
+
   const dataBase = env ? bundleBaseUrl("data", e) : getDefaultDataBaseUrl();
-  const dataManifest = await doProbe(dataBase).catch((error) => {
-    console.warn("[bundle] probing the data bundle failed:", error?.message ?? error);
-    return null;
-  });
-  if (dataManifest) return { id: "data", baseUrl: dataBase, explicit: false, reason: "default: public/data/manifest.json exists", manifest: dataManifest };
+  const data = await probeSource(dataBase, "data");
+  if (data.manifest) return { id: "data", baseUrl: dataBase, explicit: false, reason: "default: public/data/manifest.json exists", manifest: data.manifest };
+  if (data.error) return failedSource("data", dataBase, data.error);
   const demoBase = bundleBaseUrl("demo", e);
-  const demoManifest = await doProbe(demoBase).catch((error) => {
-    console.warn("[bundle] probing the demo bundle failed:", error?.message ?? error);
-    return null;
-  });
-  if (demoManifest) return { id: "demo", baseUrl: demoBase, explicit: false, reason: "default: no public/data bundle, using public/demo", manifest: demoManifest };
+  const demo = await probeSource(demoBase, "demo");
+  if (demo.manifest) return { id: "demo", baseUrl: demoBase, explicit: false, reason: "default: no public/data bundle, using public/demo", manifest: demo.manifest };
+  if (demo.error) return failedSource("demo", demoBase, demo.error);
   return {
     id: "fixture",
     baseUrl: null,
@@ -110,11 +128,16 @@ export async function resolveBundleSource({ search = typeof location !== "undefi
   };
 }
 
-/** Major schema version (1, 2, …) from a manifest; NaN when absent/unparseable. */
+/**
+ * Major schema version (1, 2, …) of a manifest. Without a parseable `schema_version` it is
+ * inferred from the shape: 2 for a v2 `timeline.frames` block, else 1 (legacy). lib/validate.js
+ * `manifestSchemaMajor` uses this function, so routing and validation always agree.
+ */
 export function schemaMajor(manifest) {
   const v = String(manifest?.schema_version ?? "").trim();
   const major = Number.parseInt(v.split(".")[0], 10);
-  return Number.isFinite(major) ? major : NaN;
+  if (Number.isFinite(major)) return major;
+  return Array.isArray(manifest?.timeline?.frames) ? 2 : 1;
 }
 
 /**
@@ -132,10 +155,16 @@ export function detectSchema(manifest) {
   throw new DataLoadError("manifest has neither a v2 timeline nor v1 epochs");
 }
 
-/** Join a bundle base URL and a manifest-relative file name. */
-export function bundleFileUrl(baseUrl, fileName) {
+/**
+ * Join a bundle base URL and a manifest-relative file name. With `version` (the manifest's
+ * `generated_at`) the URL gets `?v=<version>`: bundle files keep their names across exports, so
+ * the version keeps a redeploy from mixing cached files of an older export with the new manifest.
+ */
+export function bundleFileUrl(baseUrl, fileName, version = null) {
   const name = String(fileName).replace(/^\/+/, "");
-  return baseUrl ? `${trimSlash(baseUrl)}/${name}` : `/fixture/${name}`;
+  const url = baseUrl ? `${trimSlash(baseUrl)}/${name}` : `/fixture/${name}`;
+  const v = version === null || version === undefined ? "" : String(version).trim();
+  return v ? `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(v)}` : url;
 }
 
 /** Search string with `bundle` set (for the Settings menu's bundle switch links). */

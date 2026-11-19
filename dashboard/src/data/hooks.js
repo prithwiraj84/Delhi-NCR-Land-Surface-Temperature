@@ -297,8 +297,9 @@ export function useFrameStats(year, mode, ssp) {
 
 /**
  * Colour domain for mode × variable: fixed from the manifest (default); "shared" = union of the
- * day and night absolute domains (honest day-vs-night magnitude); "frame" = contrast-stretched
- * p2–p98 of the exact current frame (opt-in; `stretched: true` so the legend warns).
+ * day and night absolute domains (honest day-vs-night magnitude; DTR keeps its own
+ * `domains.dtr.abs`, a day−night difference is not on the day/night scale); "frame" =
+ * contrast-stretched p2–p98 of the exact current frame (opt-in; `stretched: true` so the legend warns).
  */
 export function useDomain(mode, variable) {
   const t = useTimeDefaults(undefined, mode, undefined);
@@ -315,7 +316,7 @@ export function useDomain(mode, variable) {
     if (!fixed) return result("unavailable", null, `no fixed ${v} domain for ${t.mode} in this bundle`);
     let domain = fixed;
     let stretched = false;
-    if (domainMode === "shared" && v === "abs") {
+    if (domainMode === "shared" && v === "abs" && t.mode !== "dtr") {
       const d = domainFor(tl.data, "day", "abs");
       const n = domainFor(tl.data, "night", "abs");
       if (d && n) domain = [Math.min(d[0], n[0]), Math.max(d[1], n[1])];

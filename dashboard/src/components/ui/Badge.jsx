@@ -3,7 +3,7 @@ import { cva } from "class-variance-authority";
 import { cn } from "../../lib/cn.js";
 
 /**
- * Compact status / label pill (JetBrains Mono, uppercase). Text stays in ink tokens (>= 4.5:1);
+ * Compact status / label pill (sans, sentence case). Text stays in ink tokens (>= 4.5:1);
  * the hue lives only in the border, the tint and the optional dot, so a badge never relies on
  * colour alone (UI_SPEC §4.1). v1 variant names are kept and mapped onto the v2 palette.
  */

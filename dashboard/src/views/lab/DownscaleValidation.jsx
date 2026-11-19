@@ -58,9 +58,12 @@ export function DownscaleValidation({ metrics }) {
         { key: "cls", label: "Land-cover class" },
         { key: "r2", label: "R²", align: "right", format: (v) => fmt(v, 2) },
         { key: "rmse", label: "RMSE °C", align: "right", format: (v) => fmt(v, 2) },
+        { key: "bilinear", label: "Bilinear RMSE °C", align: "right", format: (v) => fmt(v, 2) },
+        { key: "gain", label: "vs bilinear", align: "right", format: (v) => (v === null ? "—" : v >= 0 ? `${fmtPct(v, 0)} lower` : `${fmtPct(-v, 0)} higher`) },
+        { key: "n", label: "Cells", align: "right", format: (v) => (Number.isFinite(v) ? v.toLocaleString("en-US") : "—") },
       ]}
-      rows={d?.byLc ?? []}
-      caption="Night downscaling score by dominant land-cover class (scale-invariance test, held-out folds)."
+      rows={(d?.byLc ?? []).map((r) => ({ ...r, gain: skillGain(r.rmse, r.bilinear) }))}
+      caption="Night downscaling score by dominant land-cover class (scale-invariance test, held-out folds), with the bilinear baseline's RMSE for the same cells."
     >
       {d && (
         <div className="grid gap-2.5 md:grid-cols-2">

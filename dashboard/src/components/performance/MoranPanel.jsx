@@ -435,6 +435,9 @@ export function MoranScatter({ data, model }) {
 // Panel
 // ---------------------------------------------------------------------------------------
 
+/** Spatial-CV scheme names the Moran scatter can belong to (v1, then v2 headline). */
+const SCATTER_SCHEMES = Object.freeze(["spatial", "block20"]);
+
 /** Schemes that actually have residual Moran rows, in canonical order. */
 function moranSchemes(metrics) {
   const present = new Set((metrics?.moran ?? []).map((r) => r?.scheme).filter(Boolean));
@@ -462,8 +465,11 @@ export function MoranPanel({ metrics }) {
   const [modelChoice, setModelChoice] = useState("xgboost");
   const scatterModel = sModels.includes(modelChoice) ? modelChoice : (sModels[0] ?? null);
   const scatter = useMemo(() => (scatterModel ? moranScatterData(metrics, scatterModel) : null), [metrics, scatterModel]);
+  // The scatter sample is drawn from the spatial-CV residuals: v1 scheme "spatial", v2 "block20".
   const scatterRow = scatter
-    ? moranRows(metrics?.moran, "spatial", scatter.year, models).find((r) => r.model === scatterModel)
+    ? (SCATTER_SCHEMES.map((s) =>
+        moranRows(metrics?.moran, s, scatter.year, models).find((r) => r.model === scatterModel),
+      ).find(Boolean) ?? null)
     : null;
 
   return (

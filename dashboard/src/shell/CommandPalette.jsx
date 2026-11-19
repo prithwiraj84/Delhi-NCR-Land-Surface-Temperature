@@ -59,19 +59,28 @@ function PaletteDialog({ onClose }) {
   const run = (item) => {
     if (!item) return;
     onClose();
+    // The item label is announced only when the action said nothing itself (an announcement or a
+    // toast such as "Night unavailable"): one message, never overwritten by a second one.
+    let spoken = false;
     runAction(item.action, {
       stores: STORES,
       availableModes: meta.availableModes,
       years: meta.years,
-      announce,
-      toast: showToast,
+      announce: (...args) => {
+        spoken = true;
+        announce(...args);
+      },
+      toast: (...args) => {
+        spoken = true;
+        return showToast(...args);
+      },
       ui: {
         openPalette: () => useShellUi.getState().open("palette"),
         openShortcuts: () => useShellUi.getState().open("shortcuts"),
         closeOverlay: () => useShellUi.getState().close(),
       },
     });
-    announce(item.label.replace(/^Go to /, ""));
+    if (!spoken) announce(item.label.replace(/^Go to /, ""));
   };
 
   const onKeyDown = (event) => {

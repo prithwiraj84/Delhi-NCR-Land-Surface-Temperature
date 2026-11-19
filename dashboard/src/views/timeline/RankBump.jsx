@@ -22,7 +22,8 @@ export function RankBump({ series, mode, years, metric, ssp, now, selectedScope,
   const setHoverScope = useLinkStore((s) => s.setHoverScope);
   const [tip, setTip] = useState(null);
   const data = useMemo(() => (series ? rankBump(series, { mode, years, metric, ssp }) : { years: [], lines: [] }), [series, mode, years, metric, ssp]);
-  const n = data.lines.length;
+  // Axis length = the number of districts actually ranked (a district without data never takes a rank).
+  const n = data.years.reduce((m, _, k) => Math.max(m, data.lines.filter((l) => l.ranks[k] !== null).length), 0);
   const height = Math.max(160, n * 11 + M.top + M.bottom);
   const x = linearScale([years[0] ?? 1990, years[years.length - 1] ?? 2050], [M.left, Math.max(M.left + 80, width - M.right)]);
   const y = linearScale([1, Math.max(2, n)], [M.top, height - M.bottom]);

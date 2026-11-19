@@ -3,7 +3,7 @@
  * estimate, bootstrap support, multiple zero crossings and the interval label.
  */
 import { describe, expect, it } from "vitest";
-import { appliedChangeText, buildThresholdCards, emptyScenarioMessage, LOW_SUPPORT } from "./shapMath.js";
+import { appliedChangeText, buildThresholdCards, deltaSpec, emptyScenarioMessage, LOW_SUPPORT } from "./shapMath.js";
 
 const meta = { name: "elevation", label: "Elevation", display: "number", unit: "m", stats: { p01: 180, p99: 320 } };
 const byKey = (cards) => Object.fromEntries(cards.map((c) => [c.key, c]));
@@ -82,6 +82,14 @@ describe("scenario result messages (DASH-12, DASH-01)", () => {
     const inapplicable = { regionCount: 12, stats: { count: 0, applicableCount: 12 } };
     expect(emptyScenarioMessage({ result: inapplicable, featureLabel: "Tree cover" })).toMatch(/cannot be applied to any of the 12 cells/);
     expect(emptyScenarioMessage({ result: { regionCount: 3, stats: { count: 2 } }, featureLabel: "x" })).toBeNull();
+  });
+
+  it("names the reference statistic a native-unit delta is expressed against", () => {
+    const base = { name: "lm_ed", label: "Edge density", display: "number", unit: "m/ha" };
+    expect(deltaSpec({ ...base, stats: { median: 40, mean: 50 } }).describe(10)).toMatch(/of the NCR median \(40 m\/ha\)/);
+    expect(deltaSpec({ ...base, stats: { median: 0, mean: 50 } }).describe(10)).toMatch(/of the NCR mean \(50 m\/ha\)/);
+    expect(deltaSpec({ ...base, stats: { median: 0, mean: 0, std: 8 } }).describe(4)).toMatch(/of the NCR standard deviation/);
+    expect(deltaSpec({ ...base, stats: {} }).describe(0.5)).toMatch(/no NCR reference statistic/);
   });
 
   it("spells out requested vs applied change only when they differ", () => {

@@ -81,7 +81,7 @@ export const NAV = Object.freeze([
 
 /** Explorer sections (hash routes of /explore). */
 export const EXPLORER_SECTIONS = Object.freeze([
-  Object.freeze({ hash: "control", label: "Heat map", blurb: "Every 1 km cell from 1990 to 2050, day and night, in 3D." }),
+  Object.freeze({ hash: "control", label: "Heat map", blurb: "Every grid cell, observed and projected, day and night, in 3D." }),
   Object.freeze({ hash: "timeline", label: "Timeline", blurb: "Observed trends, scenario fans and district ledgers." }),
   Object.freeze({ hash: "drivers", label: "AI drivers", blurb: "What heats each place: SHAP importance and dependence curves." }),
   Object.freeze({ hash: "zones", label: "Heat zones", blurb: "Clusters of cells that heat up for the same reasons." }),

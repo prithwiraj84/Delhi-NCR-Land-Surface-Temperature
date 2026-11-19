@@ -52,11 +52,16 @@ class BasemapErrorBoundary extends Component {
 export default function Basemap({ mapStyle, viewState, style, onFailure, onReady }) {
   const loadedRef = useRef(false);
   const reportedRef = useRef(false);
+  // Latest onFailure, so the once-per-mount timeout never calls a stale callback.
+  const onFailureRef = useRef(onFailure);
+  useEffect(() => {
+    onFailureRef.current = onFailure;
+  }, [onFailure]);
 
   const report = (error) => {
     if (reportedRef.current) return;
     reportedRef.current = true;
-    onFailure?.(error);
+    onFailureRef.current?.(error);
   };
 
   useEffect(() => {
@@ -64,8 +69,7 @@ export default function Basemap({ mapStyle, viewState, style, onFailure, onReady
       if (!loadedRef.current) report(new Error("Basemap style did not load in time"));
     }, STYLE_TIMEOUT_MS);
     return () => clearTimeout(timer);
-    // `report` only closes over refs and the latest onFailure; run once per mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `report` only reads refs (incl. the latest onFailure); run once per mount.
   }, []);
 
   // The style counts as healthy as soon as it is parsed (first `styledata`): MapLibre's
@@ -91,6 +95,8 @@ export default function Basemap({ mapStyle, viewState, style, onFailure, onReady
         viewState={viewState}
         style={style}
         reuseMaps
+        // MapEngine.exportPng draws this canvas into the PNG; without a preserved buffer it reads back blank.
+        preserveDrawingBuffer
         interactive={false}
         attributionControl
         onStyleData={handleReady}

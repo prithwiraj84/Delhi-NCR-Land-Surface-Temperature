@@ -72,7 +72,7 @@ export function createLensLayers({ ring, label = "250 m · DOWNSCALED" }) {
       sizeUnits: "pixels",
       getPixelOffset: [0, -10],
       getColor: [...SIGNAL, 255],
-      fontFamily: "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace",
+      fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
       fontWeight: 500,
       fontSettings: { sdf: true },
       outlineWidth: 3,

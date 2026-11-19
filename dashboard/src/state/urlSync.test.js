@@ -125,7 +125,28 @@ describe("startUrlSync", () => {
     expect(stores.time.getState().ssp).toBe("ssp245"); // 585 not in this bundle
     expect(stores.time.getState().compare).toEqual({ kind: "y", a: 1990, b: 2040 });
     expect(stores.selection.getState().districtId).toBe(3);
-    expect(win.location.hash).toBe("#/timeline?y=2040&m=night&v=abs&r=auto&d=3&cmp=y:1990");
+    // An old single-value link: side B is the current year, and the normalised URL now names it.
+    expect(win.location.hash).toBe("#/timeline?y=2040&m=night&v=abs&r=auto&d=3&cmp=y:1990,2040");
+  });
+
+  it("carries both compare sides, the display switches, and validates selection values", () => {
+    vi.useFakeTimers();
+    const win = fakeWindow("#/control?y=2025&cmp=y:1990,2050&c=7&d=abc&z=9&dm=shared&fog=0&lens=1&h3=1");
+    const stores = makeStores();
+    stores.view.setState({ domainMode: "fixed", uncertaintyFog: true, lens: false, analyst: { h3: false } });
+    stop = startUrlSync(stores, { win, getCellCount: () => 5 });
+    expect(stores.time.getState().compare).toEqual({ kind: "y", a: 1990, b: 2050 });
+    expect(stores.selection.getState()).toMatchObject({ pinnedIndex: null, districtId: null, zoneId: null }); // 7 ≥ 5 cells, "abc", zone 9
+    expect(stores.view.getState()).toMatchObject({ domainMode: "shared", uncertaintyFog: false, lens: true, analyst: { h3: true } });
+    expect(win.location.hash).toBe("#/control?y=2025&v=abs&r=auto&dm=shared&fog=0&lens=1&h3=1&cmp=y:1990,2050");
+    // Back/forward onto an entry without them restores the defaults.
+    win.location.hash = "#/control?y=2025&cmp=s:126,585";
+    win.fire("popstate", { state: { ncrUrlSync: 1 } });
+    expect(stores.view.getState()).toMatchObject({ domainMode: "fixed", uncertaintyFog: true, lens: false, analyst: { h3: false } });
+    expect(stores.time.getState().compare).toEqual({ kind: "s", a: "ssp126", b: "ssp585" });
+    expect(parseCompare("y:1990,2050")).toEqual({ kind: "year", value: 1990, b: 2050 });
+    expect(parseCompare("y:1990,2100")).toBeNull();
+    expect(parseCompare("s:126,585,245")).toBeNull();
   });
 
   it("debounces param writes with replaceState and pushes route changes", () => {

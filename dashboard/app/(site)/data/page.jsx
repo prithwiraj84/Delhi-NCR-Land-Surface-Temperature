@@ -6,7 +6,7 @@ import { Download, ExternalLink } from "lucide-react";
 import { Reveal } from "../../_components/Reveal.jsx";
 import { PageIntro, Section } from "../../_components/ui.jsx";
 import { siteConfig, withBase } from "../../../lib/site/config.js";
-import { getFacts } from "../../../lib/site/facts.js";
+import { SSP_LABEL, getFacts } from "../../../lib/site/facts.js";
 import { pageMetadata } from "../../../lib/site/meta.js";
 
 export const metadata = pageMetadata({
@@ -18,16 +18,16 @@ export const metadata = pageMetadata({
 });
 
 const SOURCES = [
-  ["Landsat Collection 2, Level 2 (5, 7, 8, 9)", "USGS / NASA", "Daytime land surface temperature and spectral indices", "30 m"],
+  ["Landsat Collection 2, Level 2 (5, 7, 8, 9)", "USGS / NASA", "Daytime land surface temperature and spectral indices", "30 m grid (thermal 60–120 m)"],
   ["MODIS MYD11A2 / MOD11A2", "NASA LP DAAC", "Night-time LST (Aqua, Terra), daytime context", "1 km"],
-  ["VIIRS VNP21A1N", "NASA LP DAAC", "Night-time LST for 2025, calibrated to Aqua", "1 km"],
+  ["VIIRS VNP21A1N", "NASA LP DAAC", "Night-time LST, calibrated to Aqua", "1 km"],
   ["ERA5-Land", "ECMWF / Copernicus", "Air temperature, humidity, soil moisture, radiation, wind, rainfall", "~9 km"],
   ["GHSL P2023A (built-up, volume, population)", "European Commission JRC", "Built-up surface, building volume, population density", "100 m"],
   ["GLC_FCS30D", "Liu et al., via awesome-gee-community-catalog", "Land-cover fractions and landscape pattern", "30 m"],
   ["SRTM GL1", "NASA / USGS", "Elevation, slope, aspect, topographic position", "30 m"],
   ["Global Surface Water", "European Commission JRC", "Water occurrence and distance to water", "30 m"],
   ["geoBoundaries ADM2", "William & Mary geoLab", "District boundaries of the study area", "vector"],
-  ["NEX-GDDP-CMIP6", "NASA", "Climate-model air temperature for SSP1-2.6, SSP2-4.5, SSP5-8.5", "~25 km"],
+  ["NEX-GDDP-CMIP6", "NASA", "Climate-model air temperature for the SSP scenarios", "~25 km"],
   ["SSP urban land (Chen et al., 2020)", "Chen et al., Nature Communications", "District growth of urban land under each SSP", "1 km"],
   ["SSP population", "IIASA SSP database v3", "National urban-population trajectories", "national"],
 ];
@@ -41,7 +41,7 @@ function fmtBytes(n) {
 const FILE_ROLE = [
   [/^manifest\.json$/, "Index: study area, frames, features, sources, notes"],
   [/^metrics\.json$/, "Model accuracy, cross-validation, calibration, timings"],
-  [/^timeline_series/, "NCR, district and zone time series 1990–2050"],
+  [/^timeline_series/, "NCR, district and zone time series, observed and projected"],
   [/^cells\./, "Cell grid: id, row/column, longitude/latitude, district"],
   [/^cube_obs_/, "Observed LST per cell and frame"],
   [/^cube_ssp/, "Projected LST per cell, quantiles, AOA flags"],
@@ -61,10 +61,32 @@ const FILE_ROLE = [
 
 export default function DataPage() {
   const f = getFacts();
+  // Bundle files (listed for download) and the PNG rasters in raster/ (counted, not listed).
   const files = (f.files ?? []).filter((x) => !x.name.endsWith(".png"));
+  const rasters = (f.files ?? []).filter((x) => x.name.endsWith(".png"));
+  const previews = rasters.filter((x) => /_500m\.png$/.test(x.name)).length;
   const total = (f.files ?? []).reduce((a, x) => a + x.bytes, 0);
+  const rasterBytes = rasters.reduce((a, x) => a + x.bytes, 0);
+  const scaled = f.projection?.patternScaled ?? [];
+  const scaledIds = new Set(scaled.map((p) => p.id));
+  const viirsYears = (f.frameSensors?.night ?? []).filter((r) => r.sensor.startsWith("VIIRS")).map((r) => r.year);
+  const sources = SOURCES.map((row) =>
+    row[0] === "VIIRS VNP21A1N"
+      ? [row[0], row[1], `Night-time LST${viirsYears.length ? ` for ${viirsYears.join(", ")}` : ""}, calibrated to Aqua`, row[3]]
+      : row[0] === "NEX-GDDP-CMIP6" && f.scenarios.length
+      ? [
+          row[0],
+          row[1],
+          `Climate-model air temperature for ${f.scenarios.filter((s) => !scaledIds.has(s)).map((s) => SSP_LABEL[s] ?? s).join(" and ")}${scaled
+            .map((p) => `; ${SSP_LABEL[p.id] ?? p.id} pattern-scaled from ${SSP_LABEL[p.from] ?? p.from}`)
+            .join("")}`,
+          row[3],
+        ]
+      : row,
+  );
   const year = f.generatedAt ? new Date(f.generatedAt).getUTCFullYear() : new Date().getUTCFullYear();
-  const citation = `${siteConfig.author.name} (${year}). ${siteConfig.name}: land surface temperature of Delhi NCR, 1990–2050, explained with machine learning. ${siteConfig.url}`;
+  const all = f.years.all;
+  const citation = `${siteConfig.author.name} (${year}). ${siteConfig.name}: land surface temperature of Delhi NCR${all.length > 1 ? `, ${all[0]}–${all.at(-1)}` : ""}, explained with machine learning. ${siteConfig.url}`;
 
   return (
     <>
@@ -74,7 +96,14 @@ export default function DataPage() {
         lead="Everything in the atlas is built from public satellite, reanalysis and climate-model archives, and every result is published as a downloadable bundle."
       />
 
-      <Section id="sources" eyebrow="Inputs" title="Data sources" intro="All inputs were accessed and processed through Google Earth Engine, then reduced to the common 1 km grid (250 m for the detail layer).">
+      <Section
+        id="sources"
+        eyebrow="Inputs"
+        title="Data sources"
+        intro={`All inputs were accessed and processed through Google Earth Engine, then reduced to the common${f.area.gridM ? ` ${f.area.gridM / 1000} km` : ""} grid${
+          f.area.fineM ? ` (${f.area.fineM} m for the detail layer)` : ""
+        }.`}
+      >
         <Reveal className="card overflow-x-auto p-0">
           <table className="w-full min-w-[720px] text-left text-[14px]">
             <caption className="sr-only">Input datasets with provider, use and native resolution</caption>
@@ -87,7 +116,7 @@ export default function DataPage() {
               </tr>
             </thead>
             <tbody>
-              {SOURCES.map(([name, by, use, res]) => (
+              {sources.map(([name, by, use, res]) => (
                 <tr key={name} className="border-b border-hairline/60 align-top last:border-0">
                   <th scope="row" className="px-5 py-3 font-medium text-ink-strong">
                     {name}
@@ -107,7 +136,11 @@ export default function DataPage() {
         id="downloads"
         eyebrow="Outputs"
         title="Download the results"
-        intro={`The web bundle is ${fmtBytes(total)} of JSON and compact binary grids (LSTB, gzip). Plus ${(f.files ?? []).length - files.length} raster images at 250 m.`}
+        intro={`The web bundle is ${fmtBytes(total)} in all: the ${files.length} JSON and compact binary grid files (LSTB, gzip) listed below${
+          rasters.length
+            ? `, plus ${rasters.length} PNG raster images in raster/ (${fmtBytes(rasterBytes)}: ${rasters.length - previews} frames${f.area.fineM ? ` at ${f.area.fineM} m` : ""}${previews ? ` and ${previews} coarser previews` : ""})`
+            : ""
+        }.`}
       >
         <Reveal className="card overflow-hidden p-0">
           <ul className="divide-y divide-hairline/70">
@@ -136,7 +169,7 @@ export default function DataPage() {
           <Reveal className="card p-6 sm:p-7">
             <h3 className="text-[16px] font-semibold text-ink-strong">Source code and notebook</h3>
             <p className="mt-2 text-[14.5px] leading-relaxed text-ink-muted">
-              The pipeline is a single notebook of 13 sections that runs on Kaggle GPUs with a Google Earth Engine service account; a small launcher loads the code as a Kaggle dataset.
+              The pipeline is a single notebook of numbered sections that runs on Kaggle GPUs with a Google Earth Engine service account; a small launcher loads the code as a Kaggle dataset.
             </p>
             <a href={siteConfig.repo} rel="noopener noreferrer" target="_blank" className="btn btn-secondary mt-5 h-10 text-[14px]">
               View on GitHub

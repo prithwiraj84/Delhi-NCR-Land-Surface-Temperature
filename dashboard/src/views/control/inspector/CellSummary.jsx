@@ -207,6 +207,9 @@ export function CellSummary({ index, t, mode, ssp, timeline, manifest, districtN
     map: lst,
     pred: x?.pred?.[index],
   });
+  // The XAI frame's composition correction (°C; XAI obs = cube LST + correction), when exported.
+  const corr = x?.meta ? Number(x.meta.composition_correction) : NaN;
+  const corrNote = headline.label === "Obs" && Number.isFinite(corr) && Math.abs(corr) >= 0.005 ? `Obs includes this frame's composition correction (${fmtSigned(corr, 2)} °C); the map shows the cube value without it, so Obs − map ≈ ${fmtSigned(corr, 2)} °C.` : null;
 
   return (
     <section aria-label={`Cell ${cellId}`} className="space-y-2">
@@ -245,6 +248,11 @@ export function CellSummary({ index, t, mode, ssp, timeline, manifest, districtN
             <Readout label={headline.residLabel} value={finite(x?.resid?.[index]) ? fmtSigned(x.resid[index], 2) : "—"} />
           </dl>
           {headline.note && <p className="text-[11px] leading-snug text-ink-faint">{headline.note}</p>}
+          {corrNote && (
+            <p className="text-[11px] leading-snug text-ink-faint" data-testid="composition-correction">
+              {corrNote}
+            </p>
+          )}
         </>
       )}
 

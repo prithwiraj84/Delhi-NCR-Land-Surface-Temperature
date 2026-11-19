@@ -7,13 +7,18 @@ import { Reveal } from "../../_components/Reveal.jsx";
 import { PageIntro } from "../../_components/ui.jsx";
 import { JsonLd } from "../../../lib/site/JsonLd.jsx";
 import { absoluteUrl, siteConfig } from "../../../lib/site/config.js";
-import { SSP_LABEL, getFacts } from "../../../lib/site/facts.js";
+import { SSP_LABEL, getFacts, modelChoice, spell } from "../../../lib/site/facts.js";
 import { pageMetadata } from "../../../lib/site/meta.js";
+
+const META_FACTS = getFacts();
 
 export const metadata = pageMetadata({
   title: "Methodology: satellites, machine learning and SHAP",
-  description:
-    "How the Delhi NCR Heat Atlas was built: Landsat, MODIS and VIIRS land surface temperature, 47 explanatory features from Google Earth Engine, XGBoost with spatial cross-validation, TreeSHAP explanations, heat zones, 250 m downscaling and CMIP6 projections.",
+  description: `How the Delhi NCR Heat Atlas was built: Landsat, MODIS and VIIRS land surface temperature, ${
+    META_FACTS.features.count ? `${META_FACTS.features.count} ` : ""
+  }explanatory features from Google Earth Engine, XGBoost with spatial cross-validation, TreeSHAP explanations, heat zones, ${
+    META_FACTS.area.fineM ? `${META_FACTS.area.fineM} m ` : "fine-scale "
+  }downscaling and CMIP6 projections.`,
   path: "/methodology",
   type: "article",
 });
@@ -43,6 +48,8 @@ function Facts({ rows }) {
   );
 }
 
+const BENCHMARK_PROSE = { lightgbm: "LightGBM", random_forest: "a random forest", gnn: "a graph neural network", ridge: "a linear ridge regression" };
+
 const STEPS = [
   ["area", "Study area and grid"],
   ["lst", "Measuring surface heat from space"],
@@ -50,14 +57,33 @@ const STEPS = [
   ["model", "Machine-learning model and validation"],
   ["explain", "Explaining the model with SHAP"],
   ["zones", "Heat zones"],
-  ["downscale", "250 m detail"],
-  ["projections", "Projections to 2050"],
+  ["downscale", META_FACTS.area.fineM ? `${META_FACTS.area.fineM} m detail` : "Fine-scale detail"],
+  ["projections", META_FACTS.years.projected.length ? `Projections to ${META_FACTS.years.projected.at(-1)}` : "Projections"],
   ["compute", "Computation and reproducibility"],
 ];
 
 export default function MethodologyPage() {
   const f = getFacts();
   const acc = f.accuracy;
+  const title = Object.fromEntries(STEPS);
+  const gridKm = f.area.gridM ? f.area.gridM / 1000 : null;
+  const obsN = f.years.observed.at(-1);
+  const dayOverpass = f.modes.find((m) => m.id === "day")?.overpass;
+  const nightModelled = f.night?.tiers?.modelled ?? [];
+  const yearsText = (ys) => (ys.length > 1 ? `${ys.slice(0, -1).join(", ")} and ${ys.at(-1)}` : String(ys[0] ?? ""));
+  const nightBy = (prefix) => (f.frameSensors?.night ?? []).filter((r) => r.sensor.startsWith(prefix)).map((r) => r.year);
+  const otherSensors = [
+    nightBy("MODIS Terra").length ? `the ${yearsText(nightBy("MODIS Terra"))} frame comes from MODIS Terra` : null,
+    nightBy("VIIRS").length ? `the ${yearsText(nightBy("VIIRS"))} frame from VIIRS` : null,
+  ].filter(Boolean);
+  const nightOther = otherSensors.length
+    ? ` ${otherSensors.join(" and ").replace(/^t/, "T")}; ${otherSensors.length > 1 ? "both are" : "it is"} calibrated to Aqua on the years where the sensors overlap.`
+    : "";
+  const nOther = (acc.day?.benchmarks?.length ?? 0) - 1;
+  const choice = modelChoice(f, "day");
+  const scaled = f.projection?.patternScaled ?? [];
+  const scaledIds = new Set(scaled.map((p) => p.id));
+  const direct = f.scenarios.filter((s) => !scaledIds.has(s));
   const howTo = {
     "@context": "https://schema.org",
     "@type": "TechArticle",
@@ -97,17 +123,17 @@ export default function MethodologyPage() {
           <Step id="area" n={1} title="Study area and grid">
             <p>
               The atlas covers the Delhi National Capital Region: {f.area.km2?.toLocaleString("en-US")} km² across {f.area.districts} districts of Delhi, Haryana, Uttar Pradesh and Rajasthan, with district
-              boundaries from geoBoundaries (ADM2). The region is divided into a regular grid of {f.area.cells?.toLocaleString("en-US")} cells of 1 km × 1 km in UTM zone 43N, so every frame and every layer refers to exactly
-              the same places.
+              boundaries from geoBoundaries (ADM2). The region is divided into a regular grid of {f.area.cells?.toLocaleString("en-US")} cells{gridKm ? ` of ${gridKm} km × ${gridKm} km` : ""} in UTM zone 43N, so every frame and
+              every layer refers to exactly the same places.
             </p>
             <p>
-              All observations come from the <strong>pre-monsoon season, April to June</strong>, the hottest and driest part of the year, when surface heat matters most for health and energy demand and when clouds
-              rarely block the satellites.
+              All observations come from the <strong>pre-monsoon season{f.seasonLabel ? `, ${f.seasonLabel}` : ""}</strong>, the hottest and driest part of the year, when surface heat matters most for health and energy demand
+              and when clouds rarely block the satellites.
             </p>
             <Facts
               rows={[
                 ["Grid", `${f.area.gridM} m cells, EPSG:32643 (UTM 43N), detail layer at ${f.area.fineM} m`],
-                ["Season", "1 April – 30 June of each frame window"],
+                ["Season", f.seasonLabel ? `${f.seasonLabel} of each frame window` : "n/a"],
                 ["Frames", `${f.years.observed.join(", ")} observed; ${f.years.projected.join(", ")} projected`],
                 ["Districts", `${f.area.districts}, from geoBoundaries ADM2`],
               ]}
@@ -119,13 +145,14 @@ export default function MethodologyPage() {
               <strong>Land surface temperature (LST)</strong> is how hot the ground, roofs and roads are, not the air. Satellites infer it from the thermal infrared radiation that surfaces emit.
             </p>
             <p>
-              <strong>Daytime</strong> maps use Landsat Collection 2 surface temperature (Landsat 5, 7, 8 and 9, 30 m) around 10:30 local time. Clouds, cloud shadows and saturated pixels are removed, clear scenes are combined
-              per frame window, and the two Landsat paths that cover the region are aligned. Because the overpass time drifted over the decades, every frame is corrected to a common 10:45 IST using the morning heating rate from
+              <strong>Daytime</strong> maps use Landsat Collection 2 surface temperature from Landsat 5, 7, 8 and 9 around 10:30 local time. Their thermal bands measure at 120 m (Landsat 5), 60 m (Landsat 7) and 100 m
+              (Landsat 8 and 9); the product delivers them resampled to a 30 m grid. Clouds, cloud shadows and saturated pixels are removed, clear scenes are combined per frame window, and the two Landsat paths that cover
+              the region are aligned. Because the overpass time drifted over the decades, every frame is corrected to a common {dayOverpass ? `${dayOverpass} IST` : "reference time"} using the morning heating rate from
               ERA5-Land.
             </p>
             <p>
-              <strong>Night-time</strong> maps use MODIS Aqua (about 01:30–02:15 local time, 1 km). The 2000 frame uses MODIS Terra and the 2025 frame VIIRS; both are calibrated to Aqua on the years where the sensors overlap.
-              No night-time thermal satellite record exists for 1990 and 1995, so those nights are model hindcasts.
+              <strong>Night-time</strong> maps use MODIS Aqua (about 1 km, a little after midnight).{nightOther}
+              {nightModelled.length ? ` No night-time thermal satellite record exists for ${yearsText(nightModelled)}, so those nights are model hindcasts.` : ""}
             </p>
             <p>
               Every frame carries an <strong>evidence tier</strong>, observed, observed with few scenes, reconstructed, modelled or projected, which the site and the explorer show wherever the value appears.
@@ -153,13 +180,20 @@ export default function MethodologyPage() {
                 <strong>Weather</strong> from ERA5-Land: air temperature, vapour-pressure deficit, soil moisture, evaporation, solar radiation, wind and winter rainfall.
               </li>
             </ul>
-            <p>Neighbourhood averages over 3 km and 15 km let the model see the cooling or warming reach of surrounding land, not only the cell itself.</p>
+            <p>
+              Neighbourhood averages{gridKm && f.focalWindows.length ? ` over ${yearsText(f.focalWindows.map((w) => `${w * gridKm} km`))}` : ""} let the model see the cooling or warming reach of surrounding land, not only the
+              cell itself.
+            </p>
           </Step>
 
           <Step id="model" n={4} title="Machine-learning model and validation">
             <p>
               The main model is <strong>XGBoost</strong>, an ensemble of gradient-boosted decision trees trained on GPUs. It learns how temperature anomalies (each cell compared with the regional mean of its frame) depend on the
-              features. Four other models are trained on exactly the same data as benchmarks: LightGBM, a random forest, a graph neural network and a linear ridge regression.
+              features.
+              {nOther > 0
+                ? ` ${spell(nOther, true)} other models are trained on exactly the same data as benchmarks: ${yearsText(acc.day.benchmarks.filter((b) => b.id !== "xgboost").map((b) => BENCHMARK_PROSE[b.id] ?? b.label))}.`
+                : ""}
+              {choice ? ` ${choice}` : ""}
             </p>
             <p>
               Neighbouring cells are similar, so randomly held-out cells would make any model look better than it is. The headline score therefore comes from <strong>spatial block cross-validation</strong>: the region is cut
@@ -170,6 +204,8 @@ export default function MethodologyPage() {
                 ["Daytime, spatial blocks", acc.day?.spatial ? `R² ${acc.day.spatial.r2.toFixed(2)}, RMSE ${acc.day.spatial.rmse} °C` : "n/a"],
                 ["Night-time, spatial blocks", acc.night?.spatial ? `R² ${acc.night.spatial.r2.toFixed(2)}, RMSE ${acc.night.spatial.rmse} °C` : "n/a"],
                 ["Daytime, unseen years", acc.day?.temporal ? `R² ${acc.day.temporal.r2.toFixed(2)}, RMSE ${acc.day.temporal.rmse} °C` : "n/a"],
+                ["Night-time, unseen years", acc.night?.temporal ? `R² ${acc.night.temporal.r2.toFixed(2)}, RMSE ${acc.night.temporal.rmse} °C` : "n/a"],
+                ["Daytime, whole districts held out", acc.day?.district ? `R² ${acc.day.district.r2.toFixed(2)}, RMSE ${acc.day.district.rmse} °C` : "n/a"],
                 ["Training rows (day)", acc.day?.nTrain ? `${acc.day.nTrain.toLocaleString("en-US")} cell-frames` : "n/a"],
               ]}
             />
@@ -181,13 +217,13 @@ export default function MethodologyPage() {
 
           <Step id="explain" n={5} title="Explaining the model with SHAP">
             <p>
-              <strong>SHAP</strong> (SHapley Additive exPlanations) splits every prediction into contributions from each feature, measured in °C: for one cell it might say vegetation cools by 1.2 °C while bare soil warms by 2.0 °C.
-              TreeSHAP computes these values exactly for tree models.
+              <strong>SHAP</strong> (SHapley Additive exPlanations) splits every prediction into contributions from each feature, measured in °C: for one cell it might say how many degrees vegetation takes off and how many
+              bare soil adds. TreeSHAP computes these values exactly for tree models.
             </p>
             <p>
               Contributions are summed into the {f.features.groups} driver groups so related features (for example NDVI and its neighbourhood averages) are read together. To show how certain each importance is, it is
-              recomputed on {f.bootstrap?.n ?? 50} resamples of {f.bootstrap?.blockKm ?? 10} km spatial blocks, giving the 95 % intervals on the findings page. Dependence curves and thresholds show where a driver’s effect changes
-              sign or levels off.
+              recomputed on {f.bootstrap?.n ? `${f.bootstrap.n} ` : ""}resamples of {f.bootstrap?.blockKm ? `${f.bootstrap.blockKm} km ` : ""}spatial blocks, giving the 95 % intervals on the findings page. Dependence curves and
+              thresholds show where a driver’s effect changes sign or levels off.
             </p>
             <p>
               <strong>Important:</strong> SHAP explains the model, not the physical world. A strong SHAP value is a strong association that the model relies on, not proof of cause and effect.
@@ -197,7 +233,7 @@ export default function MethodologyPage() {
           <Step id="zones" n={6} title="Heat zones">
             <p>
               Cells are grouped by the <em>reasons</em> they are hot rather than by temperature alone: K-means clustering on the SHAP values separates places that heat up for different reasons, such as bare semi-arid land
-              versus dense urban fabric. The four day zones are:
+              versus dense urban fabric.{f.zones.day.length ? ` The ${spell(f.zones.day.length)} day zones are:` : ""}
             </p>
             <ul className="mt-4 space-y-2">
               {f.zones.day.map((z) => (
@@ -205,7 +241,6 @@ export default function MethodologyPage() {
                   <span aria-hidden="true" className="mt-2 size-2.5 shrink-0 rounded-full" style={{ background: z.color }} />
                   <span>
                     <strong>{z.name}</strong>
-                    {z.caveat ? <span className="text-ink-faint"> (label note: no cluster shows a river signature)</span> : null}
                   </span>
                 </li>
               ))}
@@ -213,37 +248,47 @@ export default function MethodologyPage() {
             <p>Zone-level what-if simulations then estimate how feasible land-cover changes, such as more tree cover or water, would shift each zone’s temperature, within the model’s area of applicability.</p>
           </Step>
 
-          <Step id="downscale" n={7} title="250 m detail">
+          <Step id="downscale" n={7} title={title.downscale}>
             <p>
-              <strong>Daytime</strong> detail at 250 m is observed directly: Landsat measures at 30 m, and the pixels are averaged to 250 m. <strong>Night-time</strong> satellites only see 1 km, so the night layer is
-              sharpened to 250 m with a model trained on fine-scale features, and every sharpened value is labelled as downscaled.
+              <strong>Daytime</strong> detail{f.area.fineM ? ` at ${f.area.fineM} m` : ""} is observed directly: Landsat’s thermal bands measure at 60–120 m (delivered on a 30 m grid), and the pixels are averaged
+              {f.area.fineM ? ` to ${f.area.fineM} m` : ""}. <strong>Night-time</strong> satellites only see about 1 km, so the night layer is sharpened with a model trained on fine-scale features, and every sharpened value is
+              labelled as downscaled.
             </p>
             {f.downscale ? (
               <p>
-                A scale-invariance test checks that idea honestly: sharpen 4 km data to 1 km and compare with the real 1 km observations. The sharpened map scores R² {f.downscale.r2.toFixed(2)}, while simple smooth
-                interpolation scores {f.downscale.bilinearR2.toFixed(2)}, so treat night-time patterns finer than 1 km as illustrative rather than measured.
+                A scale-invariance test checks that idea honestly: sharpen{f.downscale.coarseM && f.downscale.fineM ? ` ${f.downscale.coarseM / 1000} km data to ${f.downscale.fineM / 1000} km` : " coarse data to the grid"} and compare
+                with the real observations at that resolution. The sharpened map scores R² {f.downscale.r2.toFixed(2)}, while simple smooth interpolation scores {f.downscale.bilinearR2.toFixed(2)}
+                {f.downscale.r2 < f.downscale.bilinearR2 ? ", so treat night-time patterns finer than the satellite pixel as illustrative rather than measured." : "."}
               </p>
             ) : null}
           </Step>
 
-          <Step id="projections" n={8} title="Projections to 2050">
+          <Step id="projections" n={8} title={title.projections}>
             <p>
-              The projected frames combine two changes. <strong>Climate</strong>: April–June air-temperature changes from the NASA NEX-GDDP-CMIP6 climate-model ensemble under {f.scenarios.map((s) => SSP_LABEL[s]).join(", ")}, scaled by
-              how strongly the surface responds to air warming in the observed record (β ≈ {f.sensitivity.day?.beta} by day, {f.sensitivity.night?.beta} at night).
+              The projected frames combine two changes. <strong>Climate</strong>: {f.seasonLabel ? `${f.seasonLabel} ` : ""}air-temperature changes from the NASA NEX-GDDP-CMIP6 climate-model ensemble
+              {direct.length ? ` under ${direct.map((s) => SSP_LABEL[s] ?? s).join(" and ")}` : ""}, scaled by how strongly the surface responds to air warming in the observed record
+              {f.sensitivity.day ? ` (β ≈ ${f.sensitivity.day.beta} by day${f.sensitivity.night ? `, ${f.sensitivity.night.beta} at night` : ""})` : ""}.
+              {scaled.map((p) => (
+                <span key={p.id}>
+                  {" "}
+                  {SSP_LABEL[p.id] ?? p.id} is not in the NEX-GDDP-CMIP6 collection on Google Earth Engine, so its changes are pattern-scaled from {SSP_LABEL[p.from] ?? p.from} by the ratio of global-mean warming
+                  {p.ratio ? ` (×${p.ratio.first} in ${p.ratio.firstYear} to ×${p.ratio.last} in ${p.ratio.lastYear})` : ""}.
+                </span>
+              ))}
               <strong> Land use</strong>: a land-change model grows built-up land district by district, following the SSP urban-land and population trajectories, and the trained model re-predicts every cell with the new land
               cover.
             </p>
             <p>
-              {f.projection?.nMc ?? 500} Monte Carlo draws sample the climate model, the sensitivity β, {f.projection?.nLand ?? 20} land-use realisations and the model’s own error; the medians and 5–95 % ranges are what the site
-              reports. Changes are measured from a <strong>weather-normalised 2025</strong>, so one unusually hot or cool season does not shift every projection.
+              {f.projection?.nMc ? `${f.projection.nMc} ` : ""}Monte Carlo draws sample the climate model, the sensitivity β, {f.projection?.nLand ? `${f.projection.nLand} ` : "several "}land-use realisations and the model’s
+              own error; the medians and 5–95 % ranges are what the site reports. Changes are measured from a <strong>weather-normalised {obsN}</strong>, so one unusually hot or cool season does not shift every projection.
             </p>
             {f.projection?.omitted?.length > 0 && <p>Not included: {f.projection.omitted.join(", ")}. These are why the frames are scenarios, not forecasts.</p>}
           </Step>
 
           <Step id="compute" n={9} title="Computation and reproducibility">
             <p>
-              Data are extracted with Google Earth Engine and the models trained on Kaggle{f.hardware?.gpus?.length ? ` (${f.hardware.gpus.length}× ${f.hardware.gpus[0]} GPUs)` : ""} in a single notebook of 13 sections, with
-              cached stages so a run can resume. The pipeline writes a web bundle of compressed binary grids and JSON that this site and the explorer read directly; a validator checks the bundle against a written data
+              Data are extracted with Google Earth Engine and the models trained on Kaggle{f.hardware?.gpus?.length ? ` (${f.hardware.gpus.length}× ${f.hardware.gpus[0]} GPUs)` : ""} in a single notebook of numbered sections,
+              with cached stages so a run can resume. The pipeline writes a web bundle of compressed binary grids and JSON that this site and the explorer read directly; a validator checks the bundle against a written data
               contract before it is published.
             </p>
             <p>

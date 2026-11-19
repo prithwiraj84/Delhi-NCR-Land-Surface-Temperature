@@ -1,6 +1,7 @@
 /**
  * Landing page. Statically generated from the real web bundle (lib/site/facts.js): every number
- * below is read from public/data at build time.
+ * below is read from public/data at build time, and a sentence whose numbers are missing is left
+ * out rather than printed with a placeholder.
  *
  * Hero choreography (choreograph skill, first-visit marketing moment):
  *   | Element      | Role       | Starts | Duration | Motion                              |
@@ -24,40 +25,52 @@ import { Eyebrow, Section } from "../_components/ui.jsx";
 import { JsonLd } from "../../lib/site/JsonLd.jsx";
 import { pageMetadata } from "../../lib/site/meta.js";
 import { EXPLORER_SECTIONS, siteConfig, withBase } from "../../lib/site/config.js";
-import { SSP_LABEL, SSP_STORY, getFacts, signed } from "../../lib/site/facts.js";
+import { SSP_LABEL, SSP_STORY, getFacts, rangeText, signed, spell } from "../../lib/site/facts.js";
 import { ramps, ssp as SSP_STYLE } from "../../src/design/tokens.js";
 
 export const metadata = pageMetadata({ description: siteConfig.description, path: "/" });
 
 const SECTION_ICON = { control: MapIcon, timeline: LineChart, drivers: BrainCircuit, zones: Hexagon, lab: FlaskConical, sources: Database };
 
+const yearSpan = (years) => (years.length ? (years.length > 1 ? `${years[0]}–${years.at(-1)}` : String(years[0])) : null);
+
 function datasetLd(f) {
-  const [w, s, e, n] = f.area.bbox ?? [75.47, 26.7, 78.46, 29.99];
-  return {
+  const obs = f.years.observed;
+  const proj = f.years.projected;
+  const overpass = (id) => f.modes.find((m) => m.id === id)?.overpass;
+  const describe = [
+    `Gridded land surface temperature for the Delhi National Capital Region`,
+    f.area.gridM ? ` at ${f.area.gridM / 1000} km${f.area.fineM ? ` (${f.area.fineM} m detail)` : ""}` : "",
+    obs.length ? `: ${spell(obs.length)} observed ${f.seasonLabel ? `${f.seasonLabel} ` : ""}frames ${yearSpan(obs)} from Landsat, MODIS and VIIRS` : "",
+    ", a SHAP-explained XGBoost model of its drivers, heat zones",
+    proj.length && f.scenarios.length ? `, and CMIP6 SSP projections for ${yearSpan(proj)}` : "",
+    ".",
+  ].join("");
+  const dataset = {
     "@context": "https://schema.org",
     "@type": "Dataset",
-    name: "Delhi NCR land surface temperature, 1990–2050 (day and night, 1 km)",
-    description:
-      "Gridded land surface temperature for the Delhi National Capital Region at 1 km (250 m detail): eight observed pre-monsoon frames 1990–2025 from Landsat, MODIS and VIIRS, a SHAP-explained XGBoost model of its drivers, heat zones, and CMIP6 SSP projections for 2030–2050.",
+    name: `Delhi NCR land surface temperature${f.years.all.length ? `, ${yearSpan(f.years.all)}` : ""} (day and night${f.area.gridM ? `, ${f.area.gridM / 1000} km` : ""})`,
+    description: describe,
     url: siteConfig.url,
     keywords: [...siteConfig.keywords],
     creator: { "@type": "Person", name: siteConfig.author.name, url: siteConfig.author.url },
     isAccessibleForFree: true,
-    temporalCoverage: `${f.years.all[0] ?? 1990}/${f.years.all.at(-1) ?? 2050}`,
-    spatialCoverage: {
-      "@type": "Place",
-      name: "Delhi National Capital Region, India",
-      geo: { "@type": "GeoShape", box: `${s} ${w} ${n} ${e}` },
-    },
+    // No `license` yet: the repository has no LICENSE file. Add `license: "<licence URL>"` once one is chosen.
     variableMeasured: [
-      { "@type": "PropertyValue", name: "Land surface temperature (day, ~10:45 IST)", unitText: "°C" },
-      { "@type": "PropertyValue", name: "Land surface temperature (night, ~01:30 IST)", unitText: "°C" },
+      { "@type": "PropertyValue", name: `Land surface temperature (day${overpass("day") ? `, ~${overpass("day")} IST` : ""})`, unitText: "°C" },
+      { "@type": "PropertyValue", name: `Land surface temperature (night${overpass("night") ? `, ~${overpass("night")} IST` : ""})`, unitText: "°C" },
       { "@type": "PropertyValue", name: "SHAP driver attribution", unitText: "°C" },
     ],
     measurementTechnique: ["Satellite thermal remote sensing (Landsat, MODIS, VIIRS)", "Gradient-boosted trees (XGBoost)", "SHAP (TreeSHAP)", "CMIP6 pattern scaling"],
     dateModified: f.generatedAt ?? undefined,
     distribution: [{ "@type": "DataDownload", encodingFormat: "application/json", contentUrl: `${siteConfig.url}/data/manifest.json` }],
   };
+  if (f.years.all.length > 1) dataset.temporalCoverage = `${f.years.all[0]}/${f.years.all.at(-1)}`;
+  if (Array.isArray(f.area.bbox) && f.area.bbox.length === 4) {
+    const [w, s, e, n] = f.area.bbox;
+    dataset.spatialCoverage = { "@type": "Place", name: "Delhi National Capital Region, India", geo: { "@type": "GeoShape", box: `${s} ${w} ${n} ${e}` } };
+  }
+  return dataset;
 }
 
 export default function HomePage() {
@@ -65,14 +78,32 @@ export default function HomePage() {
   const day = f.day;
   const night = f.night;
   const acc = f.accuracy.day?.spatial;
-  const hero = f.media?.rasters?.find((r) => r.mode === "day" && r.year === 2025);
-  const first = f.media?.rasters?.find((r) => r.mode === "day" && r.year === 1990);
+  const obs0 = f.years.observed[0];
+  const obsN = f.years.observed.at(-1);
+  const projN = f.years.projected.at(-1);
+  const obsSpan = Number.isFinite(obs0) && Number.isFinite(obsN) ? obsN - obs0 : null;
+  const nScen = f.scenarios.length;
+  const gridKm = f.area.gridM ? f.area.gridM / 1000 : null;
+  const dayOverpass = f.modes.find((m) => m.id === "day")?.overpass ?? null;
+  // The time-lapse frames of the day mode: the first and last observed frames are compared.
+  const dayRasters = (f.media?.rasters ?? []).filter((r) => r.mode === "day").sort((a, b) => a.year - b.year);
+  const hero = dayRasters.at(-1);
+  const first = dayRasters.length > 1 ? dayRasters[0] : null;
   const hottest = f.districts[0];
   const dDay = f.drivers.day.slice(0, 6);
   const dNight = f.drivers.night.slice(0, 6);
-  const ratio = dDay.length > 1 ? dDay[0].value / dDay[1].value : null;
+  const ratio = dDay.length > 1 && dDay[0].id === "ndbi" && dDay[1].id === "ndvi" ? dDay[0].value / dDay[1].value : null;
   const solarGradient = `linear-gradient(90deg, ${ramps.solar.join(", ")})`;
   const scrubFrames = (f.media?.rasters ?? []).map((r) => ({ mode: r.mode, year: r.year, tier: r.tier, file: r.file, width: r.width, height: r.height }));
+  const trend = day?.trend;
+  const trendRange = rangeText(trend?.ci);
+  const nOther = (f.accuracy.day?.benchmarks?.length ?? 0) - 1;
+  const p245 = day?.projections?.ssp245;
+  const beta = f.sensitivity.day;
+  // Is the surface sensitivity the largest share of the 2050 SSP2-4.5 variance (uncertainty budget)?
+  const b245 = day?.budget?.ssp245?.["2050"];
+  const betaLeads = b245 ? Object.entries(b245).filter(([k, v]) => k !== "draw_sd_c" && Number.isFinite(v)).sort((a, b) => b[1] - a[1])[0]?.[0] === "sensitivity" : false;
+  const domain = f.media?.domains?.day;
 
   return (
     <>
@@ -86,16 +117,19 @@ export default function HomePage() {
 
         <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 pb-16 pt-14 sm:px-8 sm:pt-20 lg:grid-cols-[1.05fr_1fr] lg:gap-10 lg:pb-24">
           <div>
-            <p className="pill hero-fade">
-              <span aria-hidden="true" className="size-1.5 animate-live-pulse rounded-full bg-ok" />
-              Real satellite data · {f.years.all[0]} → {f.years.all.at(-1)}
-            </p>
+            {obsSpan !== null && (
+              <p className="pill hero-fade">
+                <span aria-hidden="true" className="size-1.5 animate-live-pulse rounded-full bg-ok" />
+                Satellite record {obs0}–{obsN}
+                {Number.isFinite(projN) && nScen > 0 ? ` · scenarios to ${projN}` : ""}
+              </p>
+            )}
             <h1 className="hero-rise mt-6 font-display text-[44px] font-semibold leading-[1.02] tracking-[-0.04em] text-ink-strong sm:text-[64px]" style={{ "--rise": "16px" }}>
               How hot is Delhi NCR getting, <span className="text-gradient">and why?</span>
             </h1>
             <p className="hero-rise mt-6 max-w-xl text-[17px] leading-relaxed text-ink-muted sm:text-[19px]" style={{ "--d": "100ms", "--rise": "10px" }}>
-              An atlas of land surface temperature across {f.area.km2?.toLocaleString("en-US")} km², built from {(f.years.observed.at(-1) ?? 2025) - (f.years.observed[0] ?? 1990)} years of satellite
-              observations, explained by an AI model you can question, and projected to 2050 under three climate scenarios.
+              An atlas of land surface temperature{f.area.km2 ? ` across ${f.area.km2.toLocaleString("en-US")} km²` : ""}, built from {obsSpan !== null ? `${obsSpan} years of ` : ""}satellite
+              observations, explained by an AI model you can question{Number.isFinite(projN) && nScen > 0 ? `, and projected to ${projN} under ${spell(nScen)} climate scenarios` : ""}.
             </p>
             <div className="hero-in mt-9 flex flex-wrap items-center gap-3" style={{ "--d": "180ms", "--rise": "8px" }}>
               <Link href="/explore" className="btn btn-primary">
@@ -108,21 +142,25 @@ export default function HomePage() {
               </Link>
             </div>
             <ul className="hero-in mt-9 flex flex-wrap gap-x-6 gap-y-2 text-[13.5px] text-ink-faint" style={{ "--d": "180ms", "--rise": "8px" }}>
-              <li>{f.area.gridM / 1000} km grid · {f.area.fineM} m detail</li>
+              {gridKm && (
+                <li>
+                  {gridKm} km grid{f.area.fineM ? ` · ${f.area.fineM} m detail` : ""}
+                </li>
+              )}
               <li>Day and night</li>
-              <li>{f.area.districts} districts</li>
-              <li>{f.scenarios.length} SSP scenarios</li>
+              {f.area.districts > 0 && <li>{f.area.districts} districts</li>}
+              {nScen > 0 && <li>{nScen} SSP scenarios</li>}
             </ul>
           </div>
 
-          {/* hero visual: the REAL 2025 daytime map develops like a satellite swath */}
+          {/* hero visual: the REAL latest daytime map develops like a satellite swath */}
           <div className="relative">
             <div className="card relative overflow-hidden p-3 sm:p-4">
               <div className="relative overflow-hidden rounded-[14px] bg-void" style={{ aspectRatio: hero ? `${hero.width} / ${hero.height}` : "960 / 1043" }}>
                 {hero && (
                   <img
                     src={withBase(`/media/${hero.file}`)}
-                    alt={`Daytime land surface temperature of Delhi NCR in the ${hero.year} frame, from Landsat 8 and 9 at 250 m: hotter semi-arid south-west, cooler irrigated north-east.`}
+                    alt={`Daytime land surface temperature of Delhi NCR in the ${hero.year} frame, from Landsat${f.area.fineM ? ` at ${f.area.fineM} m` : ""}: hotter semi-arid south-west, cooler irrigated north-east.`}
                     width={hero.width}
                     height={hero.height}
                     fetchPriority="high"
@@ -137,15 +175,17 @@ export default function HomePage() {
                   <span className="absolute inset-x-0 top-0 h-px bg-brand-c shadow-[0_0_14px_2px_rgba(69,224,255,0.7)]" />
                 </span>
               </div>
-              <div className="hero-fade mt-3 flex items-center gap-3 px-1" style={{ "--d": "900ms" }}>
-                <span className="text-[12px] font-medium text-ink-muted tnum">{f.media?.domains?.day?.[0] ?? 30}°</span>
-                <span aria-hidden="true" className="h-2 flex-1 rounded-full" style={{ background: solarGradient }} />
-                <span className="text-[12px] font-medium text-ink-muted tnum">{f.media?.domains?.day?.[1] ?? 58}°C</span>
-              </div>
+              {Array.isArray(domain) && domain.length === 2 && (
+                <div className="hero-fade mt-3 flex items-center gap-3 px-1" style={{ "--d": "900ms" }}>
+                  <span className="text-[12px] font-medium text-ink-muted tnum">{domain[0]}°</span>
+                  <span aria-hidden="true" className="h-2 flex-1 rounded-full" style={{ background: solarGradient }} />
+                  <span className="text-[12px] font-medium text-ink-muted tnum">{domain[1]}°C</span>
+                </div>
+              )}
             </div>
-            {hottest && (
+            {hottest && Number.isFinite(obsN) && (
               <div className="hero-fade glass absolute -left-4 bottom-[4.5rem] hidden rounded-2xl px-4 py-3 sm:block" style={{ "--d": "1000ms" }}>
-                <p className="text-[12px] text-ink-faint">Hottest district, 2025 (day)</p>
+                <p className="text-[12px] text-ink-faint">Hottest district, {obsN} (day)</p>
                 <p className="mt-0.5 text-[15px] font-semibold text-ink-strong">
                   {hottest.name} <span className="font-mono text-solar tnum">{hottest.day2025.toFixed(1)} °C</span>
                 </p>
@@ -165,10 +205,19 @@ export default function HomePage() {
       <section aria-label="Key numbers" className="mx-auto max-w-6xl px-5 sm:px-8">
         <Reveal className="grid grid-cols-2 gap-px overflow-hidden rounded-[20px] border border-hairline bg-hairline lg:grid-cols-4">
           {[
-            { value: day?.change, format: { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: "exceptZero" }, suffix: " °C", label: `Daytime surface warming, NCR mean ${day?.first?.year}–${day?.last?.year}` },
-            { value: acc?.r2, format: { minimumFractionDigits: 2, maximumFractionDigits: 2 }, label: "Model R² on districts it never saw (20 km spatial blocks)" },
-            { value: f.area.km2, format: { maximumFractionDigits: 0 }, suffix: " km²", label: "Mapped cell by cell at 1 km, with 250 m detail" },
-            { value: f.years.all.length, format: { maximumFractionDigits: 0 }, label: `Time frames, ${f.years.all[0]}–${f.years.all.at(-1)}: ${f.years.observed.length} observed, ${f.years.projected.length} projected` },
+            {
+              value: trend?.perDecade,
+              format: { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" },
+              suffix: " °C",
+              label: `Daytime surface warming per decade, NCR mean${trend?.period ? ` ${trend.period[0]}–${trend.period[1]}` : ""}${trend?.n ? ` (trend over ${trend.n} frames)` : ""}`,
+            },
+            { value: acc?.r2, format: { minimumFractionDigits: 2, maximumFractionDigits: 2 }, label: "Model R² on 20 km blocks held out from training (spatial cross-validation)" },
+            { value: f.area.km2, format: { maximumFractionDigits: 0 }, suffix: " km²", label: `Mapped cell by cell${gridKm ? ` at ${gridKm} km` : ""}${f.area.fineM ? `, with ${f.area.fineM} m detail` : ""}` },
+            {
+              value: f.years.all.length || null,
+              format: { maximumFractionDigits: 0 },
+              label: `Time frames, ${yearSpan(f.years.all)}: ${f.years.observed.length} observed, ${f.years.projected.length} projected`,
+            },
           ]
             .filter((s) => Number.isFinite(s.value))
             .map((s) => (
@@ -191,10 +240,30 @@ export default function HomePage() {
       >
         <ol className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[
-            { icon: Satellite, step: "Observe", title: "Satellites measure surface heat", body: `Landsat by day (30 m) and MODIS / VIIRS by night (1 km), composited over the pre-monsoon season (April–June) for ${f.years.observed.length} frames from ${f.years.observed[0]} to ${f.years.observed.at(-1)}.` },
-            { icon: Orbit, step: "Learn", title: "A model learns what makes places hot", body: `Gradient-boosted trees (XGBoost) relate temperature to ${f.features.count} features: vegetation, built-up land, water, terrain, soil moisture and weather, benchmarked against four other models.` },
-            { icon: Sparkles, step: "Explain", title: "SHAP shows why, cell by cell", body: `TreeSHAP splits every prediction into the contribution of each driver, with confidence intervals from ${f.bootstrap?.n ?? 50} spatial bootstrap resamples. Clusters of similar explanations become heat zones.` },
-            { icon: CloudSun, step: "Project", title: "Climate scenarios to 2050", body: `CMIP6 temperature changes for ${f.scenarios.map((s) => SSP_LABEL[s]).join(", ")}, scaled by the observed surface sensitivity and combined with simulated urban growth in ${f.projection?.nMc ?? 500} Monte Carlo draws.` },
+            {
+              icon: Satellite,
+              step: "Observe",
+              title: "Satellites measure surface heat",
+              body: `Landsat by day (thermal bands of 60–120 m, delivered on a 30 m grid) and MODIS / VIIRS by night (1 km), composited over the pre-monsoon season${f.seasonLabel ? ` (${f.seasonLabel})` : ""}${obsSpan !== null ? ` for ${f.years.observed.length} frames from ${obs0} to ${obsN}` : ""}.`,
+            },
+            {
+              icon: Orbit,
+              step: "Learn",
+              title: "A model learns what makes places hot",
+              body: `Gradient-boosted trees (XGBoost) relate temperature to ${f.features.count ? `${f.features.count} ` : ""}features: vegetation, built-up land, water, terrain, soil moisture and weather${nOther > 0 ? `, benchmarked against ${spell(nOther)} other models` : ""}.`,
+            },
+            {
+              icon: Sparkles,
+              step: "Explain",
+              title: "SHAP shows why, cell by cell",
+              body: `TreeSHAP splits every prediction into the contribution of each driver, with confidence intervals from ${f.bootstrap?.n ? `${f.bootstrap.n} ` : ""}spatial bootstrap resamples. Clusters of similar explanations become heat zones.`,
+            },
+            {
+              icon: CloudSun,
+              step: "Project",
+              title: `Climate scenarios to ${Number.isFinite(projN) ? projN : "the future"}`,
+              body: `CMIP6 temperature changes for ${f.scenarios.map((s) => SSP_LABEL[s] ?? s).join(", ")}, scaled by the observed surface sensitivity and combined with simulated urban growth in ${f.projection?.nMc ? `${f.projection.nMc} ` : ""}Monte Carlo draws.`,
+            },
           ].map((s, i) => (
             <Reveal as="li" key={s.step} delay={i * 70} className="card p-6">
               <div className="flex items-center justify-between">
@@ -216,8 +285,14 @@ export default function HomePage() {
         <Section
           id="compare"
           eyebrow="Then and now"
-          title={`${f.years.observed[0]} vs ${f.years.observed.at(-1)}: drag to compare`}
-          intro={`Daytime surface temperature on the same colour scale. The NCR mean rose from ${day.first.mean.toFixed(1)} °C to ${day.last.mean.toFixed(1)} °C, about ${signed(day.trend?.perDecade, 2, " °C")} per decade, while cities grew into farmland.`}
+          title={`${first.year} vs ${hero.year}: drag to compare`}
+          intro={`Daytime surface temperature on the same colour scale, in two pre-monsoon composites.${
+            trend && trendRange
+              ? ` Across all ${trend.n ?? f.years.observed.length} observed frames the NCR mean warmed by about ${signed(trend.perDecade, 2)} per decade (Theil–Sen trend, 95 % range ${trendRange})${
+                  day?.low && day.low.year !== first.year && day.low.year !== hero.year ? `, though not steadily: the record is lowest in ${day.low.year}` : ""
+                }.`
+              : ""
+          }`}
         >
           <Reveal className="mx-auto max-w-3xl">
             <CompareSlider
@@ -228,7 +303,12 @@ export default function HomePage() {
               width={hero.width}
               height={hero.height}
               alt={`Comparison of daytime land surface temperature in ${first.year} and ${hero.year}.`}
-              caption={`The ${first.year} frame comes from Landsat 5 alone and has fewer clear scenes (tier "observed, sparse"); both frames are corrected to a common 10:45 IST overpass.`}
+              caption={[
+                first.tier === "observed-sparse" ? `The ${first.year} frame rests on few clear Landsat scenes (tier "observed, sparse"), so it is noisier.` : "",
+                dayOverpass ? `Both frames are corrected to a common ${dayOverpass} IST overpass.` : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
             />
           </Reveal>
         </Section>
@@ -239,7 +319,7 @@ export default function HomePage() {
         <Section
           id="timelapse"
           eyebrow="Time-lapse"
-          title="Watch three decades of heat"
+          title={obsSpan !== null ? `Watch ${obsSpan} years of heat` : "Watch the heat change"}
           intro="Step through every observed frame, by day and by night. Night-time heat is where cities show up: built-up land releases the heat it stored during the day."
         >
           <Reveal className="mx-auto max-w-3xl">
@@ -277,12 +357,12 @@ export default function HomePage() {
       )}
 
       {/* ---------------------------------------------------------------- futures */}
-      {f.scenarios.length > 0 && (
+      {nScen > 0 && Number.isFinite(projN) && (
         <Section
           id="futures"
           eyebrow="Projections"
-          title="Three futures for 2050"
-          intro="Median change of the NCR mean surface temperature by 2050, relative to 2025 with that year's weather removed. These are scenarios, not forecasts."
+          title={`${spell(nScen, true)} futures for ${projN}`}
+          intro={`Median change of the NCR mean surface temperature by ${projN}, relative to ${obsN} with that year's weather removed. These are scenarios, not forecasts.`}
         >
           <div className="grid gap-4 md:grid-cols-3">
             {f.scenarios.map((s, i) => {
@@ -292,9 +372,9 @@ export default function HomePage() {
                 <Reveal key={s} delay={i * 70} className="card overflow-hidden p-6">
                   <span aria-hidden="true" className="absolute inset-x-0 top-0 h-px" style={{ background: `linear-gradient(90deg, transparent, ${SSP_STYLE[s]?.color}, transparent)` }} />
                   <p className="text-[13px] font-semibold" style={{ color: SSP_STYLE[s]?.color }}>
-                    {SSP_LABEL[s]}
+                    {SSP_LABEL[s] ?? s}
                   </p>
-                  <p className="mt-1 text-[14px] text-ink-muted">{SSP_STORY[s]}</p>
+                  {SSP_STORY[s] && <p className="mt-1 text-[14px] text-ink-muted">{SSP_STORY[s]}</p>}
                   <dl className="mt-6 grid grid-cols-2 gap-4">
                     <div>
                       <dt className="text-[12.5px] text-ink-faint">Day</dt>
@@ -311,14 +391,19 @@ export default function HomePage() {
               );
             })}
           </div>
-          <Reveal className="card mt-4 grid gap-6 p-6 sm:p-7 md:grid-cols-[auto_1fr] md:items-center">
-            <Eyebrow>Why so modest?</Eyebrow>
-            <p className="text-[15px] leading-relaxed text-ink-muted">
-              Climate alone adds {signed(day?.projections?.ssp245?.climate, 1)} by day under SSP2-4.5, but new built-up land replaces hot, bare farmland and takes off about{" "}
-              {Number.isFinite(day?.projections?.ssp245?.land) ? Math.abs(day.projections.ssp245.land).toFixed(1) : "0.4"} °C. And in this record the surface warms only {f.sensitivity.day?.beta ?? "~0.7"} °C per °C of air temperature by day ({f.sensitivity.night?.beta ?? "~0.3"} °C at night), an
-              uncertain estimate that dominates the projection ranges.
-            </p>
-          </Reveal>
+          {Number.isFinite(p245?.climate) && Number.isFinite(p245?.land) && Number.isFinite(beta?.beta) && (
+            <Reveal className="card mt-4 grid gap-6 p-6 sm:p-7 md:grid-cols-[auto_1fr] md:items-center">
+              <Eyebrow>Why so modest?</Eyebrow>
+              <p className="text-[15px] leading-relaxed text-ink-muted">
+                Climate alone adds {signed(p245.climate, 1)} by day under {SSP_LABEL.ssp245},{" "}
+                {p245.land < 0 ? `but new built-up land replaces hot, bare farmland and takes off about ${Math.abs(p245.land).toFixed(1)} °C` : `and land-use change adds ${signed(p245.land, 1)}`}. And in this record the
+                surface warms {beta.beta < 1 ? "only " : ""}
+                {beta.beta} °C per °C of air temperature by day{Number.isFinite(f.sensitivity.night?.beta) ? ` (${f.sensitivity.night.beta} °C at night)` : ""}, an uncertain estimate
+                {rangeText(beta.ci, 2, "", true) ? ` (95 % range ${rangeText(beta.ci, 2, "", true)})` : ""}
+                {betaLeads ? " that dominates the projection ranges." : " that widens the projection ranges."}
+              </p>
+            </Reveal>
+          )}
         </Section>
       )}
 
@@ -353,7 +438,7 @@ export default function HomePage() {
             Ask the map your own questions
           </h2>
           <p className="relative mx-auto mt-4 max-w-xl text-[16px] leading-relaxed text-ink-muted">
-            Pick any 1 km cell, see why it is hot, and simulate what more trees or water would change.
+            Pick any {gridKm ? `${gridKm} km ` : ""}cell, see why it is hot, and simulate what more trees or water would change.
           </p>
           <div className="relative mt-8 flex flex-wrap justify-center gap-3">
             <Link href="/explore" className="btn btn-primary">

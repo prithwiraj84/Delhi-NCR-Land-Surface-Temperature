@@ -105,7 +105,8 @@ export function createLabelLayer(labels) {
     getSize: 12,
     sizeUnits: "pixels",
     getColor: [...INK, 235],
-    fontFamily: "'Inter Variable', Inter, system-ui, sans-serif",
+    // The self-hosted family app/layout.jsx loads (@fontsource-variable/geist, tokens.font.sans).
+    fontFamily: "'Geist Variable', Geist, system-ui, sans-serif",
     fontWeight: 600,
     fontSettings: { sdf: true },
     outlineWidth: 3,

@@ -42,7 +42,13 @@ export function AoaPanel({ slice, mode }) {
   }, [cube, frame, mode, series]);
   const items = useMemo(() => (item ? [item] : []), [item]);
   const status = summary ? { status: "ready" } : { status: "unavailable", reason: "The area of applicability is a v2 export (metrics.json aoa) — rerun notebook v2." };
-  const decilePts = (summary?.deciles ?? []).map((d) => ({ x: d.decile, y: d.rmse }));
+  const scored = (summary?.deciles ?? []).filter((d) => Number.isFinite(d.rmse));
+  const decilePts = scored.map((d) => ({ x: d.decile, y: d.rmse }));
+  // DI range of a decile when the bundle exports it ({di_lo, di_hi}), e.g. "DI < 0.07" / "DI ≥ 0.20".
+  const diText = (d) => (d && Number.isFinite(d.diHi) && d.decile === 1 ? `DI < ${fmt(d.diHi, 2)}` : d && Number.isFinite(d.diLo) ? (Number.isFinite(d.diHi) ? `DI ${fmt(d.diLo, 2)}–${fmt(d.diHi, 2)}` : `DI ≥ ${fmt(d.diLo, 2)}`) : null);
+  const firstDec = scored[0] ?? null;
+  const lastDec = scored.at(-1) ?? null;
+  const decText = (d) => `${fmt(d?.rmse, 2)} °C${diText(d) ? ` (${diText(d)}${Number.isFinite(d.n) ? `, n = ${d.n.toLocaleString("en-US")}` : ""})` : ""}`;
 
   return (
     <ChartTable
@@ -75,9 +81,11 @@ export function AoaPanel({ slice, mode }) {
               ))}
             </ul>
             {decilePts.length > 1 && (
-              <div className="flex items-center gap-2 text-[11px] text-ink-muted">
+              <div className="flex items-center gap-2 text-[11px] text-ink-muted" data-testid="aoa-deciles">
                 <Sparkline points={decilePts} width={120} height={28} color={CHART.ink} label={`RMSE by DI decile from ${fmt(decilePts[0].y, 2)} to ${fmt(decilePts.at(-1).y, 2)} °C`} />
-                RMSE by DI decile: {fmt(decilePts[0].y, 2)} → {fmt(decilePts.at(-1).y, 2)} °C
+                <span>
+                  RMSE by DI decile: {decText(firstDec)} → {decText(lastDec)}
+                </span>
               </div>
             )}
           </div>

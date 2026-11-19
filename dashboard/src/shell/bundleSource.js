@@ -56,7 +56,9 @@ export function switchBundleSource(source, data) {
     // Keep the choice in the URL so a reload (or a shared link) opens the same bundle.
     try {
       const url = bundleSourceUrl(source);
-      if (url) window.history.replaceState(null, "", url);
+      // Keep history.state (urlSync's {ncrUrlSync: 1} marker, Next.js router keys): a later Back
+      // onto this entry must still be recognised as an app entry (as in actions.scrollToAnchor).
+      if (url) window.history.replaceState(window.history.state, "", url);
     } catch {
       // history writes can be blocked (sandboxed frames); the in-memory switch still happens
     }

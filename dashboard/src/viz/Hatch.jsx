@@ -8,6 +8,8 @@
  * `hatchUrl(prefix, kind)` from chartTheme.js.
  * @param {{prefix: string}} props
  */
+import { useId } from "react";
+
 export function HatchDefs({ prefix }) {
   return (
     <defs>
@@ -31,7 +33,8 @@ export function HatchDefs({ prefix }) {
  * @param {{kind?: "recon"|"aoa"|"fog", label: string}} props
  */
 export function HatchSwatch({ kind = "recon", label }) {
-  const id = `swatch-${kind}`;
+  // Unique per instance: several legends may show the same swatch (no duplicate DOM ids).
+  const id = `swatch-${kind}-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   return (
     <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-muted">
       <svg width="14" height="10" aria-hidden="true" className="shrink-0 rounded-sm">

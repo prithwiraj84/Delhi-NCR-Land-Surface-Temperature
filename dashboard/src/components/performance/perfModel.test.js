@@ -115,5 +115,10 @@ describe("hardware and formatting", () => {
     expect(formatDuration(8.25)).toBe("8.3 s");
     expect(formatDuration(245)).toBe("4 m 05 s");
     expect(formatDuration(3720)).toBe("1 h 02 m");
+    // Rounding carries into the next unit.
+    expect(formatDuration(59.7)).toBe("1 m 00 s");
+    expect(formatDuration(119.6)).toBe("2 m 00 s");
+    expect(formatDuration(3599.6)).toBe("1 h 00 m");
+    expect(formatDuration(7170)).toBe("2 h 00 m");
   });
 });

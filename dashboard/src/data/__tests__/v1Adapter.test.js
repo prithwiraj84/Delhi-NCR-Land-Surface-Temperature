@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { prepareEpoch } from "../../lib/data.js";
 import { validateBundle } from "../../lib/validate.js";
-import { createFsFetch, fixture, PUBLIC_DATA_DIR, publicDataExists, readJson } from "../../lib/__tests__/testUtils.js";
+import { createFsFetch, fixture, FIXTURE_DIR, PUBLIC_DATA_DIR, publicDataSchemaMajor, readJson } from "../../lib/__tests__/testUtils.js";
 import { createBundleStore } from "../bundleStore.js";
 import { copyStats, renderGuardedCopy } from "../copy.js";
 import { cellValues, decodeCubeFrame } from "../cubes.js";
@@ -44,6 +44,41 @@ describe("v1 adapter on the small v1 test fixture", () => {
   });
 });
 
+// The real v1 suite below skips now that public/data is a v2 bundle; the small v1 fixture bundle
+// keeps the BundleStore's v1 path (bootV1 -> adapter -> facade resources) covered.
+describe("v1 bundle through the BundleStore (lib test fixture files)", () => {
+  it("boots schema 1.x and serves the adapted v2 resources with v1 reasons for what is absent", async () => {
+    const manifest = fixture("manifest.json");
+    const store = createBundleStore({ fetchImpl: createFsFetch(FIXTURE_DIR) });
+    await store.getState().load({ source: { id: "data", baseUrl: "/data", explicit: true, reason: "test" } });
+    const s = store.getState();
+    expect(s.status, s.error?.message).toBe("ready");
+    expect(s.schema).toBe("v1");
+    expect(s.timeline.years).toEqual(manifest.epochs);
+    expect(s.progress.filter((p) => p.id.startsWith("epoch:")).every((p) => p.status === "ok")).toBe(true);
+    const cube = await store.getState().ensure("cube:day:obs");
+    expect(cube.status).toBe("ready");
+    expect(cube.data.years).toEqual(manifest.epochs);
+    const night = await store.getState().ensure("cube:night:obs");
+    expect(night.status).toBe("unavailable");
+    expect(night.reason).toMatch(/rerun notebook v2/);
+    expect((await store.getState().ensure("cube:day:ssp245")).status).toBe("unavailable");
+    expect((await store.getState().ensure("rasterIndex")).reason).toMatch(/rerun notebook v2/);
+    const xai = await store.getState().ensure("xai:2025:day");
+    expect(xai.status).toBe("ready");
+    expect(xai.data.groups).toEqual(manifest.features.map((f) => f.name));
+    expect(xai.data.meta).toMatchObject({ year: 2025, mode: "day", tier: "observed" });
+    expect(xai.data.meta.composition_correction).toBeUndefined();
+    const sg = await store.getState().ensure("asset:shapGlobal");
+    expect(sg.data.modes.day.groups).toEqual(manifest.features.map((f) => f.name));
+    expect((await store.getState().ensure("model:day")).status).toBe("ready");
+    expect((await store.getState().ensure("model:night")).status).toBe("unavailable");
+    expect((await store.getState().ensure("districts")).data.type).toBe("FeatureCollection");
+    expect((await store.getState().ensure("epoch:2020:day")).data.year).toBe(2020);
+    store.getState().dispose();
+  });
+});
+
 describe("frameScopeStats", () => {
   it("computes mean, p90, hot-core area and signed UHI (urban ≥ 0.5 vs rural ≤ 0.05 & water < 0.2)", () => {
     const values = Float32Array.from([40, 41, 42, 45, 46, NaN]);
@@ -57,7 +92,7 @@ describe("frameScopeStats", () => {
   });
 });
 
-const realBundle = publicDataExists("manifest.json") && readJson(PUBLIC_DATA_DIR, "manifest.json").schema_version?.startsWith("1");
+const realBundle = publicDataSchemaMajor() === 1;
 
 describe.skipIf(!realBundle)("v1 adapter on the REAL bundle in public/data (read-only)", () => {
   let manifest;

@@ -50,17 +50,19 @@ async function readStream(response, onProgress, total) {
  * Fetch a URL as bytes.
  * @param {string} url
  * @param {{fetchImpl?: Function, onProgress?: ({loaded:number,total:number|null}) => void,
- *          signal?: AbortSignal, binary?: boolean}} [options]
- *   `binary` only changes the Accept header.
+ *          signal?: AbortSignal, binary?: boolean, cache?: RequestCache}} [options]
+ *   `binary` only changes the Accept header; `cache` is passed to fetch (the manifest uses
+ *   "no-cache" so a redeployed export is always picked up).
  * @returns {Promise<{bytes: Uint8Array, contentType: string, httpStatus: number, compressedBytes: number}>}
  * @throws {DataLoadError} status "missing" (404 / HTML fallback) or "error"
  */
-export async function fetchBytes(url, { fetchImpl = globalThis.fetch, onProgress = null, signal = undefined, binary = false } = {}) {
+export async function fetchBytes(url, { fetchImpl = globalThis.fetch, onProgress = null, signal = undefined, binary = false, cache = undefined } = {}) {
   if (typeof fetchImpl !== "function") throw new DataLoadError("fetch() is unavailable in this environment", { url });
   let response;
   try {
     response = await fetchImpl(url, {
       signal,
+      ...(cache ? { cache } : {}),
       headers: { Accept: binary ? "application/octet-stream, application/gzip, */*;q=0.8" : "application/json, application/gzip;q=0.9, */*;q=0.8" },
     });
   } catch (cause) {

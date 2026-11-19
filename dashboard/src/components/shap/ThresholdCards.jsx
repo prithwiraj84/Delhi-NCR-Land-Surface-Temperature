@@ -38,9 +38,12 @@ function ThresholdCard({ card, index }) {
       </header>
       <div className="flex items-baseline gap-1.5">
         {Icon ? <Icon aria-hidden="true" className="h-4 w-4 shrink-0 self-center text-ink-muted" /> : null}
+        {/* Only words are capitalised ("Cooling", "Not detected"); a value with a unit keeps
+            its case ("215 m", "3.2 km", "kPa"). */}
         <span
           className={cn(
-            "font-display text-xl font-semibold capitalize leading-tight",
+            "font-display text-xl font-semibold leading-tight",
+            (missing || card.key === "direction") && "capitalize",
             missing ? "text-ink-faint" : "text-ink-strong",
           )}
         >

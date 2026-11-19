@@ -243,14 +243,18 @@ function ScenarioResults({ result, additive, featureLabel, formatChange, regionK
           style={{ backgroundColor: tone.color, opacity: 0.18 }}
         />
         <div className="text-[10px] text-ink-muted">Mean ΔLST · changed cells</div>
-        <div className="mt-1 flex items-baseline gap-2" aria-live="polite">
-          <span className="font-sans text-5xl font-semibold tracking-tight text-ink-strong">
+        <div className="mt-1 flex items-baseline gap-2">
+          {/* The tween is visual only; assistive technology hears the settled value once. */}
+          <span aria-hidden="true" className="font-sans text-5xl font-semibold tracking-tight text-ink-strong">
             <AnimatedNumber
               value={stats.mean}
               format={(v) => (isNum(v) ? `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmt(Math.abs(v), 2)}` : "—")}
             />
           </span>
-          <span className="text-lg text-ink-muted">°C</span>
+          <span aria-hidden="true" className="text-lg text-ink-muted">°C</span>
+          <span className="sr-only" aria-live="polite">
+            Mean ΔLST over changed cells: {fmtDeltaC(stats.mean, 2)}
+          </span>
         </div>
         <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-panel-border bg-slate-900/60 px-2 py-0.5 text-[11px] text-ink">
           <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tone.color }} />

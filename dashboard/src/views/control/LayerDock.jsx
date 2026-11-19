@@ -9,8 +9,8 @@
  * with their reason (title + aria-describedby). `L` focuses the dock (the shell looks for
  * `[data-focus-target="layer-dock"]`). Tablet: an icon column with tooltips.
  */
-import { useId, useRef } from "react";
-import { Activity, Boxes, Crosshair, Flame, FlaskConical, GitCompareArrows, Layers3, ShieldCheck, Sigma, Waves } from "lucide-react";
+import { useId, useRef, useState } from "react";
+import { Activity, Boxes, Crosshair, Flame, FlaskConical, GitCompareArrows, Layers3, ShieldCheck, Sigma, SlidersHorizontal, Waves } from "lucide-react";
 import { Segmented } from "../../components/ui/Segmented.jsx";
 import { HudFrame } from "../../components/ui/HudFrame.jsx";
 import { domainFor, frameAt } from "../../data/timeline.js";
@@ -29,6 +29,7 @@ const ICONS = { lst: Flame, pred: Sigma, resid: Crosshair, shap: Layers3, driver
 export function LayerDock({ compact = false, className }) {
   const listId = useId().replace(/:/g, "");
   const refs = useRef([]);
+  const [moreOpen, setMoreOpen] = useState(false);
   const timeline = useTimelineData();
   const year = useTimeStore((s) => s.year);
   const mode = useTimeStore((s) => s.mode ?? "day");
@@ -92,6 +93,50 @@ export function LayerDock({ compact = false, className }) {
   const projectedNow = frameAt(timeline, year)?.kind === "projected";
   const suhiNote = variableEnabled && variable === "suhi" && projectedNow ? "Surface UHI is not exported for projected frames (no projected land-cover reference)." : null;
 
+  const shapSelect = (
+    <>
+      <label htmlFor={`${listId}-shap`} className="sr-only">
+        SHAP driver
+      </label>
+      <select
+        id={`${listId}-shap`}
+        value={shapFeature ?? shapOptions[0]?.id ?? ""}
+        onChange={(e) => useViewStore.getState().setShapFeature(e.target.value)}
+        className="focus-ring h-7 w-full cursor-pointer rounded-md border border-control bg-surface-3 px-1.5 text-[12px] text-ink"
+      >
+        {shapOptions.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </>
+  );
+  const valueBlock = (
+    <div className={cn(!compact && "mt-2 border-t border-hairline pt-2", !variableEnabled && "opacity-50")}>
+      <p className="micro-label mb-1 flex items-center gap-1 px-1">
+        <GitCompareArrows aria-hidden="true" className="size-3" strokeWidth={1.5} /> Value
+      </p>
+      <Segmented
+        ariaLabel="Value shown by the LST layer"
+        layoutId={`${listId}-variable`}
+        value={variable}
+        size="sm"
+        options={variables.map((v) => ({ ...v, disabled: v.disabled || !variableEnabled, reason: !variableEnabled ? "Applies to the LST layer (Predicted is always absolute °C)" : v.reason }))}
+        onChange={(v) => {
+          useViewStore.getState().setVariable(v);
+          announce(`Value: ${variables.find((x) => x.value === v)?.title ?? v}`);
+        }}
+        className="w-full justify-between"
+      />
+      {suhiNote && (
+        <p role="status" className="mt-1 px-1 text-[11px] leading-snug text-ink-faint">
+          {suhiNote}
+        </p>
+      )}
+    </div>
+  );
+
   return (
     <HudFrame as="nav" aria-label="Map layers" padding={compact ? "none" : "sm"} className={cn("pointer-events-auto", compact ? "w-12 py-1.5" : "w-[208px]", className)} data-focus-target="layer-dock" data-testid="layer-dock">
       {!compact && <h2 className="micro-label mb-1.5 px-1">Layers</h2>}
@@ -137,51 +182,55 @@ export function LayerDock({ compact = false, className }) {
                   {it.reason}
                 </span>
               )}
-              {!compact && it.id === "shap" && layer === "shap" && (
-                <div className="ml-6 mt-0.5 pr-1">
-                  <label htmlFor={`${listId}-shap`} className="sr-only">
-                    SHAP driver
-                  </label>
-                  <select
-                    id={`${listId}-shap`}
-                    value={shapFeature ?? shapOptions[0]?.id ?? ""}
-                    onChange={(e) => useViewStore.getState().setShapFeature(e.target.value)}
-                    className="focus-ring h-7 w-full cursor-pointer rounded-md border border-control bg-surface-3 px-1.5 text-[12px] text-ink"
-                  >
-                    {shapOptions.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {!compact && it.id === "shap" && layer === "shap" && <div className="ml-6 mt-0.5 pr-1">{shapSelect}</div>}
             </div>
           );
         })}
       </div>
-      {!compact && (
-        <div className={cn("mt-2 border-t border-hairline pt-2", !variableEnabled && "opacity-50")}>
-          <p className="micro-label mb-1 flex items-center gap-1 px-1">
-            <GitCompareArrows aria-hidden="true" className="size-3" strokeWidth={1.5} /> Value
-          </p>
-          <Segmented
-            ariaLabel="Value shown by the LST layer"
-            layoutId={`${listId}-variable`}
-            value={variable}
-            size="sm"
-            options={variables.map((v) => ({ ...v, disabled: v.disabled || !variableEnabled, reason: !variableEnabled ? "Applies to the LST layer (Predicted is always absolute °C)" : v.reason }))}
-            onChange={(v) => {
-              useViewStore.getState().setVariable(v);
-              announce(`Value: ${variables.find((x) => x.value === v)?.title ?? v}`);
+      {!compact && valueBlock}
+      {/* Tablet / mobile: the icon column keeps the Value and SHAP-driver selectors in an overflow. */}
+      {compact && (
+        <div className="mt-1 flex justify-center border-t border-hairline pt-1">
+          <button
+            type="button"
+            aria-label="Layer options: value and SHAP driver"
+            aria-expanded={moreOpen}
+            aria-controls={moreOpen ? `${listId}-more` : undefined}
+            title="Value and SHAP driver"
+            onClick={() => setMoreOpen((v) => !v)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && moreOpen) {
+                e.stopPropagation();
+                setMoreOpen(false);
+              }
             }}
-            className="w-full justify-between"
-          />
-          {suhiNote && (
-            <p role="status" className="mt-1 px-1 text-[11px] leading-snug text-ink-faint">
-              {suhiNote}
-            </p>
+            className={cn("focus-ring grid size-9 place-items-center rounded-md text-ink-muted hover:bg-surface-3 hover:text-ink", moreOpen && "bg-surface-3 text-ink")}
+            data-testid="layer-dock-more"
+          >
+            <SlidersHorizontal aria-hidden="true" className="size-4" strokeWidth={1.5} />
+          </button>
+        </div>
+      )}
+      {compact && moreOpen && (
+        <div
+          id={`${listId}-more`}
+          role="group"
+          aria-label="Layer options"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setMoreOpen(false);
+            }
+          }}
+          className="glass-strong hud absolute left-full top-0 z-overlay ml-2 w-[208px] rounded-panel p-2"
+        >
+          {layer === "shap" && (
+            <div className="mb-2">
+              <p className="micro-label mb-1 px-1">SHAP driver</p>
+              {shapSelect}
+            </div>
           )}
+          {valueBlock}
         </div>
       )}
     </HudFrame>

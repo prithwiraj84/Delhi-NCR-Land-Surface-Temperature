@@ -4,7 +4,8 @@ import { decodeCubeFrame } from "../cubes.js";
 import { createFixtureFetch, createSynthV2, FEATURES, GROUPS } from "../fixtures/synthV2.js";
 import { scopeSeries, seriesValueAt } from "../series.js";
 import { validateV2 } from "../validateV2.js";
-import { waterfallCheck } from "../xai.js";
+import { encodeLstb, parseLstb } from "../lstb.js";
+import { waterfallCheck, xaiFromLstb } from "../xai.js";
 
 const synth = createSynthV2();
 
@@ -81,6 +82,27 @@ describe("synthetic v2 fixture (in-memory bundle)", () => {
       expect(wf.violations, key).toBe(0);
       expect(wf.worst, key).toBeLessThan(0.02);
     }
+  });
+
+  it("passes the XAI header meta through unchanged (composition_correction for the inspector)", () => {
+    const x = loaded.entries["xai:2000:night"].data;
+    expect(x.meta).toMatchObject({ year: 2000, mode: "night", tier: "reconstructed", groups: GROUPS.map((g) => g.id) });
+    expect(x.meta.base_value_c).toBe(x.baseValueC);
+    const meta = { year: 2000, mode: "night", tier: "reconstructed", base_value_c: 27.1, level: 27, shap_base: 0.1, composition_correction: -0.26, groups: ["g"] };
+    const file = parseLstb(
+      encodeLstb({
+        kind: "xai",
+        n: 2,
+        meta,
+        columns: [
+          { name: "g", dtype: "int16", scale: 0.001, nodata: -32768, values: [0.1, -0.2] },
+          { name: "pred", dtype: "int16", scale: 0.01, nodata: -32768, values: [27.2, 26.9] },
+        ],
+      }),
+    );
+    const decoded = xaiFromLstb({ shapFile: file });
+    expect(decoded.meta).toEqual(meta);
+    expect(decoded.meta.composition_correction).toBe(-0.26);
   });
 
   it("plants realistic ranges: negative day surface UHI, positive night UHI, day hotter than night", () => {

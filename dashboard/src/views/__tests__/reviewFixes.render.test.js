@@ -18,18 +18,26 @@ import { DataProvider, useData } from "../../state/DataContext.jsx";
 import { useSelectionStore } from "../../state/stores/selectionStore.js";
 import { useTimeStore } from "../../state/stores/timeStore.js";
 import { useViewStore } from "../../state/stores/viewStore.js";
-import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataIsV1, publicDemoExists } from "../../lib/__tests__/testUtils.js";
+import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataExists, publicDemoExists, readJson } from "../../lib/__tests__/testUtils.js";
 import { CellSummary } from "../control/inspector/CellSummary.jsx";
+import { InspectorPanel } from "../control/inspector/InspectorPanel.jsx";
+import { CompareChips } from "../control/CompareChips.jsx";
 import { FrameCard } from "../control/FrameCard.jsx";
 import { ThermalLegend } from "../control/ThermalLegend.jsx";
 import { legendFromEngine, legendSpec } from "../control/layerModel.js";
 import { KeyFigures } from "../timeline/KeyFigures.jsx";
 import { DistrictLedger } from "../timeline/DistrictLedger.jsx";
-import { ledgerRows, projectionAoa } from "../timeline/timelineModel.js";
+import { emptyDistrictNote, ledgerRows, projectionAoa, rankBump } from "../timeline/timelineModel.js";
 import { HonestSkill } from "../lab/HonestSkill.jsx";
 import { HindcastPanel } from "../lab/HindcastPanel.jsx";
+import { ErrorDistance } from "../lab/ErrorDistance.jsx";
+import { ModelCard } from "../lab/ModelCard.jsx";
 import { UncertaintyBudget } from "../lab/UncertaintyBudget.jsx";
+import { aoaSummary, downscalingSummary } from "../lab/labModel.js";
 import { ZonesView } from "../zones/ZonesView.jsx";
+
+/** schema_version of the real bundle in public/data ("" when absent): picks the v1 or v2 suite. */
+const realSchema = () => (publicDataExists("manifest.json") ? String(readJson(PUBLIC_DATA_DIR, "manifest.json").schema_version ?? "") : "");
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let synCache = null;
@@ -325,7 +333,122 @@ describe("zone display names and caveats (T-F4-18)", () => {
   });
 });
 
-describe.skipIf(!publicDataIsV1())("real v1 bundle (public/data, read-only)", () => {
+describe("inspector: a pinned cell's own district wins over an earlier pick (R3)", () => {
+  it("the district summary names the cell's district, not the previously selected one", async () => {
+    const { store } = await fixtureStore();
+    const tl = store.getState().timeline;
+    useTimeStore.getState().configure(tl);
+    useTimeStore.getState().setYear(tl.now);
+    const cells = (await store.getState().ensure("cells")).data;
+    const manifest = store.getState().manifest;
+    const i = 0;
+    const own = Number(cells.district[i]);
+    const ownName = manifest.districts.find((d) => Number(d.id) === own).name;
+    const other = manifest.districts.find((d) => Number(d.id) !== own);
+    useSelectionStore.getState().setDistrict(Number(other.id));
+    useSelectionStore.getState().pin(i);
+    const { host } = await mount(h(DataProvider, { store, autoLoad: false }, h(InspectorPanel, { variant: "panel" })));
+    await settle(40, 8);
+    const heading = host.querySelector("section[aria-label^='District'] h3").textContent;
+    expect(heading).toContain(ownName);
+    expect(heading).not.toContain(other.name);
+    useSelectionStore.getState().clear();
+  });
+});
+
+describe("compare chips on mobile (R16)", () => {
+  it("a centred split reads 'A | B', never 'B'; an edge split reads A or B", async () => {
+    const { store } = await fixtureStore();
+    const tl = store.getState().timeline;
+    useTimeStore.getState().configure(tl);
+    useTimeStore.getState().setCompare({ kind: "y", a: tl.first, b: tl.last, splitPx: null });
+    const { host } = await mount(h(DataProvider, { store, autoLoad: false }, h(CompareChips, { mobile: true, stageWidth: 400 })));
+    const checked = () => host.querySelector('[role=radiogroup][aria-label="Compare view"] [aria-checked=true]')?.textContent;
+    expect(checked()).toBe("A | B");
+    await act(async () => useTimeStore.getState().setCompare({ splitPx: 400 }));
+    expect(checked()).toBe("A");
+    await act(async () => useTimeStore.getState().setCompare({ splitPx: 0 }));
+    expect(checked()).toBe("B");
+    await act(async () => useTimeStore.getState().setCompare(null));
+  });
+});
+
+describe.skipIf(!realSchema().startsWith("2"))("real v2 bundle (public/data, read-only)", () => {
+  let store;
+  let tl;
+  let series;
+  let metrics;
+  beforeAll(async () => {
+    store = createBundleStore({ fetchImpl: createFsFetch(PUBLIC_DATA_DIR) });
+    await store.getState().load({ source: { id: "data", baseUrl: "/data", explicit: true, reason: "test" } });
+    tl = store.getState().timeline;
+    series = (await store.getState().ensure("series")).data;
+    metrics = (await store.getState().ensure("asset:metrics")).data;
+  }, 300000);
+
+  it("AOA deciles are read from the real {decile, di_lo, di_hi, rmse, n} export (regression R1)", () => {
+    for (const mode of ["day", "night"]) {
+      const a = aoaSummary(metrics.modes[mode]);
+      expect(a.deciles).toHaveLength(10);
+      expect(a.deciles.every((d) => Number.isFinite(d.rmse))).toBe(true);
+      expect(a.deciles[0]).toMatchObject({ decile: 1, diLo: 0 });
+      expect(a.pct.every((r) => r.year <= tl.now)).toBe(true);
+    }
+  });
+
+  it("model card: night training frames come from metrics.json; hyperparameters are labelled defaults (R2 / R15)", async () => {
+    const manifest = store.getState().manifest;
+    const { host } = await mount(h(ModelCard, { manifest, schema: "v2", modelRaw: null, mode: "night", skill: null, timeline: tl, metrics }));
+    expect(host.querySelector("[data-testid=training-frames]").textContent).toBe(metrics.modes.night.frames.join(", "));
+    expect(host.textContent).not.toMatch(/cool north-east/);
+    expect(host.textContent).toMatch(/notebook defaults, not exported in this bundle/);
+    expect(host.textContent).toMatch(/monotone constraints \(warming: /);
+  });
+
+  it("a district without cells is a note, not a ledger row or a rank; the rank axis counts ranked districts (R8)", async () => {
+    const note = emptyDistrictNote(series);
+    const rows = ledgerRows(series, { now: tl.now, ssp: "ssp245", lastYear: tl.last, nightAvailable: true, harmonised: tl.harmonised });
+    const empty = series.scopes.filter((s) => s.kind === "district").length - rows.length;
+    if (empty > 0) expect(note).toMatch(/no cells \(merged in the boundary layer\)/);
+    expect(rows.every((r) => Number.isFinite(r.dayNow))).toBe(true);
+    const rb = rankBump(series, { mode: "day", years: tl.years, ssp: "ssp245" });
+    expect(rb.lines).toHaveLength(rows.length);
+    expect(Math.max(...rb.lines.flatMap((l) => l.ranks.filter((r) => r !== null)))).toBeLessThanOrEqual(rows.length);
+    const { host } = await mount(h(DistrictLedger, { rows, now: tl.now, first: tl.first, last: tl.last, ssp: "ssp245", nightAvailable: true, harmonised: tl.harmonised, projections: true, selectedScope: "ncr", onSelect: () => {}, emptyNote: note }));
+    if (note) expect(host.querySelector("[data-testid=ledger-empty-note]").textContent).toBe(note);
+    expect(host.textContent).toMatch(/p50/);
+  });
+
+  it("night lab panels: λ = ∞ without persistence, small distance bins flagged, land-cover labels (R12–R14)", async () => {
+    const night = metrics.modes.night;
+    if (night.persistent_residual?.lambda_is_inf === true) {
+      const a = await mount(h(HindcastPanel, { slice: night, metrics, mode: "night" }));
+      expect(a.host.textContent).toMatch(/λ = ∞ \(no persistence/);
+      document.body.innerHTML = "";
+    }
+    const b = await mount(h(ErrorDistance, { slice: night, mode: "night" }));
+    const label = b.host.querySelector("svg[role=img]").getAttribute("aria-label");
+    expect(label).toMatch(/RMSE (rises|falls|stays)/);
+    if (night.error_vs_distance.some((r) => Number.isFinite(r.rmse) && r.n < 30)) expect(label).toMatch(/fewer than 30 cells/);
+    const d = downscalingSummary(metrics);
+    expect(d.byLc.length).toBeGreaterThan(0);
+    expect(d.byLc.every((r) => typeof r.cls === "string" && Number.isFinite(r.bilinear))).toBe(true);
+  });
+
+  it("Key Figures: the night projection carries its p5–p95 range like the day line (R10)", async () => {
+    const day = scopeSeries(series, "ncr", "day");
+    const night = scopeSeries(series, "ncr", "night");
+    const { host } = await mount(h(KeyFigures, { day, night, now: tl.now, last: tl.last, ssps: ["ssp245"], selectedSsp: "ssp245", scopeLabel: "Delhi NCR", projections: true, harmonised: tl.harmonised }));
+    expect(host.textContent).toMatch(/night [+−±]?\d+\.\d \[[+−±]?\d+\.\d, [+−±]?\d+\.\d\]/);
+  });
+
+  it("HonestSkill states the exported v1 → v2 story with the ablation", async () => {
+    const { host } = await mount(h(HonestSkill, { metrics, schema: "v2", dataMode: metrics.data_mode }));
+    expect(host.querySelector("[data-testid=v1v2-story]").textContent).toMatch(/Same metric \(5×5 blocks, mean of folds\)/);
+  });
+});
+
+describe.skipIf(!realSchema().startsWith("1"))("real v1 bundle (public/data, read-only)", () => {
   it("ledger: header from the first frame, no p50 column, Δ columns n/a (levels not harmonised)", async () => {
     const store = createBundleStore({ fetchImpl: createFsFetch(PUBLIC_DATA_DIR) });
     await store.getState().load({ source: { id: "data", baseUrl: "/data", explicit: true, reason: "test" } });

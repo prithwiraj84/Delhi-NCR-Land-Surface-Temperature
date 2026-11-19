@@ -4,14 +4,15 @@
  * Cinematic (Full motion, first load per session): graticule draws, a Landsat-like swath
  * band sweeps NE -> SW and the thermal grid "develops" behind it, while the log shows REAL
  * loader events (file, status, bytes, ms) from the data layer's progress. It finishes at
- * BOOT_MIN_MS..BOOT_MAX_MS once data is ready, loops while data is still loading, and any
- * key or click skips it.
+ * BOOT_MIN_MS..BOOT_MAX_MS once data is ready; while data is still loading it loops for at
+ * most BOOT_MAX_MS, then gives way to the static checklist. Any key or click skips it.
  * Static (Reduced/Off motion, or a repeat visit): a still checklist shown only while loading.
  *
- * States: sweeping | waiting | done | skipped. The card is a labelled dialog with a
- * progressbar; the overlay never traps focus permanently (skip with any key).
+ * States: sweeping | waiting | done | skipped. The card is a labelled modal dialog with a
+ * progressbar (AppShell makes the shell behind it inert); any key skips the cinematic.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useFocusTrap } from "./useFocusTrap.js";
 import { motion } from "framer-motion";
 import { BrandGlyph } from "../design/glyphs.jsx";
 import { ramps } from "../design/tokens.js";
@@ -152,8 +153,11 @@ export function BootSequence({ status, progress, meta, onDone }) {
   const level = useMotionLevel();
   const [cinematic] = useState(() => shouldPlayCinematic(level));
   const [skipped, setSkipped] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
   const startedAt = useRef(typeof performance !== "undefined" ? performance.now() : 0);
   const doneRef = useRef(false);
+  const cardRef = useRef(null);
+  useFocusTrap(cardRef, true);
   const lines = useMemo(() => {
     const normalized = normalizeProgress(progress);
     return normalized.length ? normalized : fallbackLines(status);
@@ -161,7 +165,15 @@ export function BootSequence({ status, progress, meta, onDone }) {
   const fraction = overallFraction(lines);
   const ready = status === "ready";
   const settled = status === "empty" || status === "error";
-  const playing = cinematic && !skipped;
+  const playing = cinematic && !skipped && !timedOut;
+
+  // BOOT_MAX_MS caps the cinematic: a slow load continues on the static checklist.
+  useEffect(() => {
+    if (!playing || ready || settled) return undefined;
+    const elapsed = performance.now() - startedAt.current;
+    const timer = setTimeout(() => setTimedOut(true), Math.max(0, BOOT_MAX_MS - elapsed));
+    return () => clearTimeout(timer);
+  }, [playing, ready, settled]);
 
   // Finish: cinematic waits for data AND the minimum sweep (capped); static finishes on data.
   useEffect(() => {
@@ -210,11 +222,13 @@ export function BootSequence({ status, progress, meta, onDone }) {
       data-boot-state={stateLabel}
     >
       <div
+        ref={cardRef}
         role="dialog"
-        aria-modal="false"
+        aria-modal="true"
         aria-labelledby="boot-title"
         aria-describedby="boot-status"
-        className={cn("card w-full p-5 sm:p-6", playing ? "max-w-3xl" : "max-w-lg")}
+        tabIndex={-1}
+        className={cn("card w-full p-5 outline-none sm:p-6", playing ? "max-w-3xl" : "max-w-lg")}
       >
         <div className="mb-3 flex items-center justify-between gap-3">
           <h1 id="boot-title" className="flex items-center gap-2.5 font-display text-[15px] font-semibold text-ink-strong">

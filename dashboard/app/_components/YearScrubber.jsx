@@ -62,13 +62,13 @@ export function YearScrubber({ frames, basePath = "" }) {
               }}
               className={`focus-ring h-8 rounded-full px-4 text-[13px] font-medium transition-colors duration-200 ${mode === m ? "bg-white/[0.1] text-ink-strong" : "text-ink-muted hover:text-ink"}`}
             >
-              {m === "day" ? "Day · 10:45" : "Night · 01:30"}
+              {m === "day" ? "Day" : "Night"}
             </button>
           ))}
         </div>
         <button type="button" onClick={() => (playing ? setPlaying(false) : start())} className="btn btn-secondary h-9 px-4 text-[13px]" aria-pressed={playing}>
           {playing ? <Pause aria-hidden="true" className="size-4" /> : <Play aria-hidden="true" className="size-4" />}
-          {playing ? "Pause" : "Play 1990 → 2025"}
+          {playing ? "Pause" : years.length > 1 ? `Play ${years[0]} → ${years.at(-1)}` : "Play"}
         </button>
       </div>
 
@@ -115,7 +115,7 @@ export function YearScrubber({ frames, basePath = "" }) {
       </div>
       <p className="px-5 pb-4 text-[12.5px] text-ink-faint">
         <span aria-hidden="true" className="mr-1.5 inline-block size-1.5 translate-y-[-1px] rounded-full bg-warn/80" />
-        Marked years rest on fewer observations (sparse Landsat 5 scenes, calibrated Terra nights or a model hindcast).
+        Marked years are not fully observed: few clear Landsat scenes, a night reconstructed from another satellite, or a model hindcast where no satellite record exists.
       </p>
     </div>
   );

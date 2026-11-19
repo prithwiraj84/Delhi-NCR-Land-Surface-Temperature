@@ -101,6 +101,10 @@ describe("frame resolver on the synthetic v2 bundle", () => {
     const shared = src.channel({ ...base, domainMode: "shared" }, null);
     expect(shared.lo).toBeLessThanOrEqual(tl.domains.night.abs[0]);
     expect(shared.hi).toBeGreaterThanOrEqual(tl.domains.day.abs[1]);
+    // DTR keeps its own domain (and amplitude ramp) under the Day+Night shared scale.
+    const dtrShared = src.channel({ ...base, mode: "dtr", domainMode: "shared" }, null);
+    expect([dtrShared.lo, dtrShared.hi]).toEqual(tl.domains.dtr.abs);
+    expect(dtrShared.ramp).toBe("amplitude");
   });
 
   it("XAI layers exist for XAI frames only, with a reason elsewhere", async () => {

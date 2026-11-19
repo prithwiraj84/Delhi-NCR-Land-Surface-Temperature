@@ -19,6 +19,7 @@ beforeAll(async () => {
     metrics: await get("asset:metrics"),
     dayObs: await get("cube:day:obs"),
     day245: await get("cube:day:ssp245"),
+    dtr245: await get("cube:dtr:ssp245"),
   };
   ctx.cellAreaKm2 = (ctx.cells.grid.res / 1000) ** 2;
 }, 60000);
@@ -64,6 +65,15 @@ describe("computeFrameStats (useFrameStats)", () => {
     expect(s.p95).toBeGreaterThan(s.mean);
     expect(s.hotCoreKm2).toBeGreaterThan(stats(2025, "day").hotCoreKm2 * 0.5);
     expect(stats(2040, "day", "ssp245").hotCoreKm2).toBeNull();
+  });
+
+  it("gives DTR no hot-core area (a day/night LST threshold is meaningless for day − night)", () => {
+    expect(ctx.dtr245.mode).toBe("dtr");
+    for (const s of [stats(2025, "dtr"), stats(2040, "dtr", "ssp245", { A: ctx.dtr245 }), stats(2037, "dtr", "ssp245", { A: ctx.dtr245, B: ctx.dtr245 })]) {
+      expect(s.hotCoreKm2).toBeNull();
+      expect(s.hotCorePct).toBeNull();
+    }
+    expect(stats(2040, "dtr", "ssp245", { A: ctx.dtr245 }).mean).not.toBeNull();
   });
 
   it("interpolates between frames, flags it and keeps the weaker tier", () => {

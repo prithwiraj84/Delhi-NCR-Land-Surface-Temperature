@@ -40,6 +40,19 @@ export function createThumbRenderer() {
   const pending = new Map();
   const sentGrids = new Set();
   const cache = new Map();
+  // Grids are identified by the caller's key AND the grid object: after a bundle switch the same
+  // key ("atlas") names another grid, which must be re-sent and never matched to old bitmaps.
+  const gridIds = new WeakMap();
+  let nextGridId = 1;
+  const wireKeyOf = (job) => {
+    let gid = gridIds.get(job.grid);
+    if (!gid) {
+      gid = nextGridId;
+      nextGridId += 1;
+      gridIds.set(job.grid, gid);
+    }
+    return `${job.gridKey}#${gid}`;
+  };
 
   const ensureWorker = () => {
     if (worker || failed || !canUseWorker()) return worker;
@@ -49,7 +62,8 @@ export function createThumbRenderer() {
         const p = pending.get(event.data?.id);
         if (!p) return;
         pending.delete(event.data.id);
-        if (event.data.error) p.reject(new Error(event.data.error));
+        if (event.data.missingGrid) p.resend();
+        else if (event.data.error) p.reject(new Error(event.data.error));
         else p.resolve(event.data.bitmap);
       };
       worker.onerror = (event) => {
@@ -84,28 +98,46 @@ export function createThumbRenderer() {
    *          lo: number, hi: number, mask?: Uint8Array|null}} job
    * @returns {Promise<ImageBitmap|HTMLCanvasElement|null>}
    */
-  function render(key, job) {
-    if (cache.has(key)) {
-      const hit = cache.get(key);
-      cache.delete(key);
-      cache.set(key, hit);
-      return Promise.resolve(hit);
-    }
-    const main = () => renderMain(job.grid, rasterizeCells({ ...job.grid, values: job.values, lut: job.lut, lo: job.lo, hi: job.hi, mask: job.mask ?? null })).then((b) => remember(key, b));
-    const w = ensureWorker();
-    if (!w) return main();
-    if (!sentGrids.has(job.gridKey)) {
-      w.postMessage({ type: "grid", key: job.gridKey, width: job.grid.width, height: job.grid.height, pixel: job.grid.pixel });
-      sentGrids.add(job.gridKey);
+  /** Post one render to the worker (sending its grid first when the worker lacks it). */
+  function postRender(w, wireKey, job, main, attempt = 0) {
+    if (!sentGrids.has(wireKey)) {
+      w.postMessage({ type: "grid", key: wireKey, width: job.grid.width, height: job.grid.height, pixel: job.grid.pixel });
+      sentGrids.add(wireKey);
     }
     const id = nextId;
     nextId += 1;
     return new Promise((resolve, reject) => {
-      pending.set(id, { resolve, reject, retry: () => main().then(resolve, reject) });
+      pending.set(id, {
+        resolve,
+        reject,
+        retry: () => main().then(resolve, reject),
+        // The worker keeps only a few grids and reports an evicted one: re-send it and try again
+        // (once; then the main-thread path).
+        resend: () => {
+          sentGrids.delete(wireKey);
+          const again = attempt < 1 && worker ? postRender(worker, wireKey, job, main, attempt + 1) : main();
+          again.then(resolve, reject);
+        },
+      });
       // Copy the values so the cube's decoded frame stays usable on the main thread.
       const values = Float32Array.from(job.values);
-      w.postMessage({ type: "render", id, gridKey: job.gridKey, values, lut: job.lut, lo: job.lo, hi: job.hi, mask: job.mask ?? null }, [values.buffer]);
-    }).then((bitmap) => remember(key, bitmap));
+      w.postMessage({ type: "render", id, gridKey: wireKey, values, lut: job.lut, lo: job.lo, hi: job.hi, mask: job.mask ?? null }, [values.buffer]);
+    });
+  }
+
+  function render(key, job) {
+    const wireKey = wireKeyOf(job);
+    const cacheKey = `${wireKey}|${key}`;
+    if (cache.has(cacheKey)) {
+      const hit = cache.get(cacheKey);
+      cache.delete(cacheKey);
+      cache.set(cacheKey, hit);
+      return Promise.resolve(hit);
+    }
+    const main = () => renderMain(job.grid, rasterizeCells({ ...job.grid, values: job.values, lut: job.lut, lo: job.lo, hi: job.hi, mask: job.mask ?? null })).then((b) => remember(cacheKey, b));
+    const w = ensureWorker();
+    if (!w) return main();
+    return postRender(w, wireKey, job, main).then((bitmap) => remember(cacheKey, bitmap));
   }
 
   function dispose() {

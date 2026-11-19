@@ -199,12 +199,19 @@ export function DataProvider({ children, store = defaultBundleStore, autoLoad = 
   const v1Manifest = useMemo(() => v1ManifestView(manifest, { schema, mode, timeline, groupFeatures: features }), [manifest, schema, mode, timeline, features]);
   const zonesMeta = useMemo(() => v1Manifest?.zones ?? [], [v1Manifest]);
 
-  // Default SHAP feature/group once the global importance is known.
+  // Default SHAP feature/group once the global importance is known. Before `asset:shapGlobal`
+  // has loaded (it is prefetched on idle) the default is provisional (the first group); it is
+  // replaced by the importance argmax when the asset lands, unless the user / URL chose a group.
+  const autoShapRef = useRef(null); // {value, final}: the group this effect chose itself
   useEffect(() => {
     if (status !== "ready" || !features.length) return;
     const current = useViewStore.getState().shapFeature;
-    if (current && featureIndex[current] !== undefined) return;
-    useViewStore.getState().setShapFeature(defaultShapFeature(features, shapGlobal));
+    const auto = autoShapRef.current;
+    const provisional = Boolean(auto && !auto.final && auto.value === current);
+    if (current && featureIndex[current] !== undefined && !provisional) return;
+    const best = defaultShapFeature(features, shapGlobal);
+    autoShapRef.current = { value: best, final: Boolean(shapGlobal) };
+    if (best !== current) useViewStore.getState().setShapFeature(best);
   }, [status, features, featureIndex, shapGlobal]);
 
   // ---- epochs (facade) ------------------------------------------------------------------------

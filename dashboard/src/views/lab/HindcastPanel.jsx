@@ -88,7 +88,8 @@ export function HindcastPanel({ slice, metrics, mode }) {
         )}
         {pr && (
           <Stat label="Persistent residual (time transfer only)" note="Shrunk memory of each cell's LOEO residual; it improves temporal transfer and is never used in spatial-CV scores.">
-            λ = <span className="font-mono">{fmt(num(pr.lambda), 1)}</span> · LOEO RMSE {fmt(num(pr.loeo_rmse_without), 2)} → <span className="font-mono text-ink">{fmt(num(pr.loeo_rmse_with), 2)} °C</span>
+            λ = <span className="font-mono">{pr.lambda_is_inf === true ? "∞" : fmt(num(pr.lambda), 1)}</span>
+            {pr.lambda_is_inf === true && <span className="text-ink-muted"> (no persistence: the residual memory is shrunk to zero)</span>} · LOEO RMSE {fmt(num(pr.loeo_rmse_without), 2)} → <span className="font-mono text-ink">{fmt(num(pr.loeo_rmse_with), 2)} °C</span>
           </Stat>
         )}
         {land && (

@@ -40,12 +40,16 @@ export function DependenceBrush({ values, meta, feature, year }) {
       return undefined;
     }
     timer.current = setTimeout(() => {
-      const { mask, count: c } = brushMask(values, sel);
+      // A thumb at the end of the robust p2–p98 track is open-ended: the cells beyond it stay lit.
+      const tol = range ? (range[1] - range[0]) / 400 : 0;
+      const a = range && sel[0] <= range[0] + tol ? -Infinity : sel[0];
+      const b = range && sel[1] >= range[1] - tol ? Infinity : sel[1];
+      const { mask, count: c } = brushMask(values, [a, b]);
       useSelectionStore.getState().setBrushMask?.(mask);
       setCount(c);
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer.current);
-  }, [on, sel, values]);
+  }, [on, sel, values, range]);
 
   useEffect(() => () => useSelectionStore.getState().setBrushMask?.(null), []);
 
@@ -56,6 +60,10 @@ export function DependenceBrush({ values, meta, feature, year }) {
   const [lo, hi] = sel ?? range;
   const fmtV = (v) => fmtFeatureValue(meta, v);
   const finite = values.reduce((n, v) => n + (Number.isFinite(v) ? 1 : 0), 0);
+  const atMin = lo <= range[0] + step / 2;
+  const atMax = hi >= range[1] - step / 2;
+  const loText = `${fmtV(lo)}${atMin ? " and below" : ""}`;
+  const hiText = `${fmtV(hi)}${atMax ? " and above" : ""}`;
 
   return (
     <div className="space-y-2 rounded-md border border-hairline bg-surface-3/30 p-2.5">
@@ -68,7 +76,7 @@ export function DependenceBrush({ values, meta, feature, year }) {
             aria-pressed={on}
             onClick={() => {
               setOn(!on);
-              announce(on ? "Map brushing off" : `Map brushing on: ${label} between ${fmtV(lo)} and ${fmtV(hi)}`);
+              announce(on ? "Map brushing off" : `Map brushing on: ${label} from ${loText} to ${hiText}`);
             }}
           >
             <Paintbrush aria-hidden="true" />
@@ -84,11 +92,11 @@ export function DependenceBrush({ values, meta, feature, year }) {
       </div>
       <div className="grid gap-1.5 sm:grid-cols-2">
         <label className="flex flex-col gap-0.5 text-[11px] text-ink-muted">
-          From {fmtV(lo)}
+          From {loText}
           <input type="range" min={range[0]} max={range[1]} step={step} value={lo} disabled={!on} onChange={(e) => setSel([Math.min(Number(e.target.value), hi), hi])} className="accent-[var(--signal)]" />
         </label>
         <label className="flex flex-col gap-0.5 text-[11px] text-ink-muted">
-          To {fmtV(hi)}
+          To {hiText}
           <input type="range" min={range[0]} max={range[1]} step={step} value={hi} disabled={!on} onChange={(e) => setSel([lo, Math.max(Number(e.target.value), lo)])} className="accent-[var(--signal)]" />
         </label>
       </div>

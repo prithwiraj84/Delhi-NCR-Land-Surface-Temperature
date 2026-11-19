@@ -40,7 +40,7 @@ import { RankBump } from "./RankBump.jsx";
 import { ScopePicker } from "./ScopePicker.jsx";
 import { ThresholdYearTable } from "./ThresholdYearTable.jsx";
 import { ZoneShareArea } from "./ZoneShareArea.jsx";
-import { barcodeDomain, barcodeRows, districtList, LEVELS_NOT_HARMONISED, ledgerRows, projectionAoa, snapshotYear } from "./timelineModel.js";
+import { barcodeDomain, barcodeRows, districtList, emptyDistrictNote, LEVELS_NOT_HARMONISED, ledgerRows, projectionAoa, snapshotYear } from "./timelineModel.js";
 
 const SORTS = [
   { value: "name", label: "Name" },
@@ -245,7 +245,11 @@ export function TimelineView() {
           }
           className="lg:col-span-2 2xl:col-span-1"
         >
-          <ThermalBarcode rows={barcode} years={timeline.years} xDomain={[timeline.first, timeline.last]} domain={bDomain} ramp="polar" now={timeline.now} selectedId={scope} onSelectRow={setScope} valueLabel="Anomaly" ariaLabel="Thermal barcode of district anomalies" />
+          {/* 24 px rows: ~25 districts would make a ~620 px panel, so the barcode scrolls inside a
+              keyboard-reachable region instead of stretching the row of charts. */}
+          <div tabIndex={0} role="region" aria-label="Thermal barcode (scrollable)" className="scrollbar-thin focus-ring max-h-[420px] overflow-y-auto rounded-md" data-testid="barcode-scroll">
+            <ThermalBarcode rows={barcode} years={timeline.years} xDomain={[timeline.first, timeline.last]} domain={bDomain} ramp="polar" now={timeline.now} selectedId={scope} onSelectRow={setScope} valueLabel="Anomaly" ariaLabel="Thermal barcode of district anomalies" />
+          </div>
           <div className="mt-1 flex items-center gap-2 text-[11px] text-ink-faint">
             <span className="font-mono">{fmtSigned(bDomain[0], 1)}</span>
             <span aria-hidden="true" className="h-2 w-28 rounded-sm" style={{ backgroundImage: "var(--ramp-polar)" }} />
@@ -258,7 +262,7 @@ export function TimelineView() {
       </div>
 
       {series ? (
-        <DistrictLedger rows={ledger} now={timeline.now} first={timeline.first} last={timeline.last} ssp={ssp} nightAvailable={nightOk} harmonised={harmonised} projections={hasProjections} selectedScope={scope} onSelect={setScope} />
+        <DistrictLedger rows={ledger} now={timeline.now} first={timeline.first} last={timeline.last} ssp={ssp} nightAvailable={nightOk} harmonised={harmonised} projections={hasProjections} selectedScope={scope} onSelect={setScope} emptyNote={emptyDistrictNote(series)} />
       ) : (
         <Unavailable status={seriesRes.status} reason={seriesRes.reason} />
       )}

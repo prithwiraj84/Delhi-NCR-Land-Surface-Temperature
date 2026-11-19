@@ -31,7 +31,9 @@ export function sampleRows(n, max = WATERFALL_SAMPLE) {
  * Decode an XAI frame from its LSTB files.
  * @param {{shapFile: object, featuresFile?: object|null, groups?: string[]|null, year?: number, mode?: string}} input
  * @returns {Xai} {year, mode, n, tier, level, baseValueC, groups, shap{}, pred, oof, obs, resid,
- *                 features{}, featureNames, source: "v2"}
+ *                 features{}, featureNames, meta, source: "v2"}
+ *   `meta` is the LSTB header meta passed through unchanged (base_value_c, level, tier, shap_base,
+ *   optional composition_correction: obs = cube lst + composition_correction, SPEC §5.2).
  */
 export function xaiFromLstb({ shapFile, featuresFile = null, groups = null, year = null, mode = null }) {
   if (shapFile?.kind !== "xai") throw new LstbError(`expected an LSTB "xai" file, got kind ${JSON.stringify(shapFile?.kind)}`, "kind");
@@ -58,6 +60,7 @@ export function xaiFromLstb({ shapFile, featuresFile = null, groups = null, year
     resid: shapFile.columns.resid ? take("resid") : new Float32Array(n).fill(NaN),
     features: {},
     featureNames: [],
+    meta,
   };
   if (featuresFile) {
     if (featuresFile.kind !== "features") throw new LstbError(`expected an LSTB "features" file, got kind ${JSON.stringify(featuresFile.kind)}`, "kind");
@@ -136,6 +139,8 @@ export function xaiFromV1Epoch(epoch, manifest) {
     resid: epoch.resid_oof,
     features: Object.fromEntries(names.map((f) => [f, epoch.features[f]])),
     featureNames: names,
+    // Same shape as the v2 header meta (v1 epochs carry no composition_correction).
+    meta: { year: epoch.year, mode: "day", tier: "observed", base_value_c: epoch.base_value_c, level: epoch.epoch_mean },
   };
 }
 

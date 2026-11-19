@@ -38,9 +38,11 @@ const nanLast = (a, b, id) => {
 
 /**
  * @param {{rows: object[], now: number, first?: number, last: number, ssp: string|null, nightAvailable: boolean,
- *          harmonised?: boolean, projections?: boolean, selectedScope: string, onSelect: (scopeId: string) => void}} props
+ *          harmonised?: boolean, projections?: boolean, selectedScope: string, onSelect: (scopeId: string) => void,
+ *          emptyNote?: string|null}} props
+ *   `emptyNote` names districts without cells (left out of the rows and ranks).
  */
-export function DistrictLedger({ rows, now, first = 1990, last, ssp, nightAvailable, harmonised = true, projections = true, selectedScope, onSelect }) {
+export function DistrictLedger({ rows, now, first = 1990, last, ssp, nightAvailable, harmonised = true, projections = true, selectedScope, onSelect, emptyNote = null }) {
   const [sorting, setSorting] = useState([{ id: "rank", desc: false }]);
   const hoverScope = useLinkStore((s) => s.hoverScope);
   const setHoverScope = useLinkStore((s) => s.setHoverScope);
@@ -170,6 +172,11 @@ export function DistrictLedger({ rows, now, first = 1990, last, ssp, nightAvaila
           </tbody>
         </table>
       </div>
+      {emptyNote && (
+        <p className="mt-1.5 text-[11px] text-ink-faint" data-testid="ledger-empty-note">
+          {emptyNote}
+        </p>
+      )}
     </HudFrame>
   );
 }

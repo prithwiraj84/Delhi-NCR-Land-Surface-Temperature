@@ -104,20 +104,12 @@ export function ThermalLegend({ spec, mode, heightMode = "anom", vsup = false, a
                     <span key={i}>{spec.signed && t > 0 ? `+${fmt(t, dp)}` : fmt(t, dp)}</span>
                   ))}
                 </motion.div>
-                <p className="mt-0.5 flex justify-between text-[11px] text-ink-faint">
-                  {spec.signed ? (
-                    <>
-                      <span>cooler</span>
-                      <span>{spec.unit}</span>
-                      <span>warmer</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>cooler</span>
-                      <span>{spec.unit}</span>
-                      <span>hotter</span>
-                    </>
-                  )}
+                {/* Arm labels: temperature scales read cooler / warmer (hotter); scales that are not a
+                    temperature (uncertainty spread, diurnal range) carry their own arms (spec.arms). */}
+                <p className="mt-0.5 flex justify-between text-[11px] text-ink-faint" data-testid="legend-arms">
+                  <span>{Array.isArray(spec.arms) ? spec.arms[0] : "cooler"}</span>
+                  <span>{spec.unit}</span>
+                  <span>{Array.isArray(spec.arms) ? spec.arms[1] : spec.signed ? "warmer" : "hotter"}</span>
                 </p>
                 <p className="sr-only">{`Colour scale ${fmt(spec.domain[0], 1)} to ${fmt(spec.domain[1], 1)} ${spec.unit}${spec.stretched ? ", contrast-stretched to this frame" : spec.fixed ? ", fixed across all frames" : ""}.`}</p>
               </>
@@ -211,6 +203,9 @@ export function ThermalLegendLive({ compact = false, className }) {
   const spec = useMemo(() => legendFromEngine(baseSpec, engineLegend, { layer, mode, variable }), [baseSpec, engineLegend, layer, mode, variable]);
   const projected = info?.tier === "projected" || info?.kind === "projected";
   const fogLayer = projected && layer === "lst";
+  // The engine hatches outside-AOA cells wherever the frame carries AOA flags (observed frames too):
+  // its legend slice says so (`hatch`); projected frames and the AOA layer keep the key as before.
+  const engineHatch = engineLegend?.hatch === true && engineLegend.layer === layer && engineLegend.mode === mode;
   return (
     <ThermalLegend
       spec={spec}
@@ -219,7 +214,7 @@ export function ThermalLegendLive({ compact = false, className }) {
       vsup={projected || layer === "unc"}
       fog={!fogLayer || fog}
       onFogChange={fogLayer ? setFog : undefined}
-      aoa={timeline?.schema !== "v1" && (layer === "aoa" || projected)}
+      aoa={timeline?.schema !== "v1" && (engineHatch || layer === "aoa" || projected)}
       compact={compact}
       className={className}
     />

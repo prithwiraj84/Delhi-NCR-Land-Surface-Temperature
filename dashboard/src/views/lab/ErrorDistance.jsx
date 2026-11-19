@@ -13,11 +13,27 @@ import { useSize } from "../../viz/useSize.js";
 import { blockSizeRows, errorDistanceRows } from "./labModel.js";
 
 const M = { top: 10, right: 8, bottom: 30, left: 38 };
+/** Bins with fewer cells than this are flagged (faint, "*"): their RMSE is not reliable. */
+const MIN_BIN_N = 30;
+const smallBin = (r) => Number.isFinite(r.n) && r.n < MIN_BIN_N;
+
+/** Accessible summary of the actual trend over the reliable bins (never assumes "rises"). */
+function errorDistanceSummary(rows) {
+  const ok = rows.filter((r) => !smallBin(r));
+  const flagged = rows.length - ok.length;
+  const tail = flagged ? ` ${flagged} bin${flagged === 1 ? "" : "s"} with fewer than ${MIN_BIN_N} cells ${flagged === 1 ? "is" : "are"} flagged as unreliable.` : "";
+  if (!ok.length) return `No bin has at least ${MIN_BIN_N} cells.${tail}`;
+  const a = ok[0].rmse;
+  const b = ok[ok.length - 1].rmse;
+  const trend = ok.length < 2 ? `RMSE is ${fmt(a, 2)} °C (one reliable bin)` : b - a > 0.05 ? `RMSE rises from ${fmt(a, 2)} to ${fmt(b, 2)} °C with distance to training` : a - b > 0.05 ? `RMSE falls from ${fmt(a, 2)} to ${fmt(b, 2)} °C with distance to training` : `RMSE stays near ${fmt(a, 2)} °C with distance to training`;
+  return `${trend}.${tail}`;
+}
 
 export function ErrorDistance({ slice, mode }) {
   const boxRef = useRef(null);
   const { width } = useSize(boxRef, { width: 360, height: 180 });
-  const rows = errorDistanceRows(slice);
+  const rows = errorDistanceRows(slice).map((r) => ({ ...r, note: smallBin(r) ? `n < ${MIN_BIN_N}: unreliable` : "" }));
+  const anySmall = rows.some(smallBin);
   const curve = blockSizeRows(slice);
   const height = 170;
   const y = linearScale(niceDomain(rows.map((r) => r.rmse), { includeZero: true, minSpan: 0.5 }), [height - M.bottom, M.top]);
@@ -31,12 +47,13 @@ export function ErrorDistance({ slice, mode }) {
         { key: "label", label: "Distance" },
         { key: "rmse", label: "RMSE °C", align: "right", format: (v) => fmt(v, 2) },
         { key: "n", label: "Cells", align: "right", format: (v) => fmtInt(v) },
+        { key: "note", label: "Note" },
       ]}
       rows={rows}
       caption="RMSE of block-20 out-of-fold predictions by distance from the test cell to the nearest training cell of the same frame."
     >
       <div ref={boxRef}>
-        <svg width={width} height={height} role="img" aria-label={`RMSE rises from ${fmt(rows[0]?.rmse, 2)} to ${fmt(rows[rows.length - 1]?.rmse, 2)} °C with distance to training. Use the table view for values.`}>
+        <svg width={width} height={height} role="img" aria-label={`${errorDistanceSummary(rows)} Use the table view for values.`}>
           {linearTicks(y.domain, 4).map((t) => (
             <g key={t}>
               <line x1={M.left} x2={width - M.right} y1={y(t)} y2={y(t)} stroke={CHART.grid} />
@@ -47,11 +64,23 @@ export function ErrorDistance({ slice, mode }) {
           ))}
           {rows.map((r, i) => (
             <g key={r.id}>
-              <rect x={M.left + i * bw + 2} y={y(r.rmse)} width={Math.max(2, bw - 4)} height={Math.max(0, y(0) - y(r.rmse))} rx={3} fill={CHART.inkMuted}>
-                <title>{`${r.label}: RMSE ${fmt(r.rmse, 2)} °C, ${fmtInt(r.n)} cells`}</title>
+              <rect
+                x={M.left + i * bw + 2}
+                y={y(r.rmse)}
+                width={Math.max(2, bw - 4)}
+                height={Math.max(0, y(0) - y(r.rmse))}
+                rx={3}
+                fill={smallBin(r) ? CHART.inkFaint : CHART.inkMuted}
+                fillOpacity={smallBin(r) ? 0.45 : 1}
+                stroke={smallBin(r) ? CHART.inkFaint : "none"}
+                strokeDasharray={smallBin(r) ? "2 2" : undefined}
+                data-small={smallBin(r) || undefined}
+              >
+                <title>{`${r.label}: RMSE ${fmt(r.rmse, 2)} °C, ${fmtInt(r.n)} cells${smallBin(r) ? ` (fewer than ${MIN_BIN_N}: unreliable)` : ""}`}</title>
               </rect>
               <text x={M.left + i * bw + bw / 2} y={height - 16} textAnchor="middle" fill={CHART.axis} fontSize={10} fontFamily={CHART.font}>
                 {r.label}
+                {smallBin(r) ? "*" : ""}
               </text>
             </g>
           ))}
@@ -59,6 +88,7 @@ export function ErrorDistance({ slice, mode }) {
             km to the nearest training cell · RMSE °C
           </text>
         </svg>
+        {anySmall && <p className="mt-1 text-[11px] text-ink-faint">* faint bins hold fewer than {MIN_BIN_N} cells: their RMSE is not reliable.</p>}
         {curve.length > 0 && (
           <p className="mt-1 text-[11px] text-ink-muted">
             Block-size curve (pooled R²):{" "}

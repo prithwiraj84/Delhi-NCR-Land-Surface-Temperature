@@ -21,7 +21,7 @@ import { DataProvider } from "../../state/DataContext.jsx";
 import { useSelectionStore } from "../../state/stores/selectionStore.js";
 import { useTimeStore } from "../../state/stores/timeStore.js";
 import { useViewStore } from "../../state/stores/viewStore.js";
-import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataIsV1, publicDemoExists } from "../../lib/__tests__/testUtils.js";
+import { createFsFetch, PUBLIC_DATA_DIR, PUBLIC_DEMO_DIR, publicDataExists, publicDemoExists, readJson } from "../../lib/__tests__/testUtils.js";
 import { TimelineView } from "../timeline/TimelineView.jsx";
 import { DriversView } from "../drivers/DriversView.jsx";
 import { ZonesView } from "../zones/ZonesView.jsx";
@@ -77,7 +77,7 @@ async function renderView(store, Component, route) {
   return { host, root };
 }
 
-function suite(label, makeStore, { v1 = false } = {}) {
+function suite(label, makeStore, { v1 = false, real = false } = {}) {
   describe(label, () => {
     let store;
     beforeAll(async () => {
@@ -103,6 +103,17 @@ function suite(label, makeStore, { v1 = false } = {}) {
         expect(errors).toEqual([]);
         // Zones and Sources are fully backed by a v1 bundle (day zones, data_sources lanes).
         if (v1 && route !== "sources" && route !== "zones") expect(host.textContent).toMatch(/rerun notebook v2|v1 bundle|v1 metric|Unavailable/i);
+        if (real && !v1 && route === "lab") {
+          // Regression: the real export's {decile, di_lo, di_hi, rmse, n} deciles are read (no "— → —").
+          const dec = host.querySelector("[data-testid=aoa-deciles]");
+          expect(dec?.textContent ?? "").toMatch(/RMSE by DI decile: \d+\.\d\d °C \(DI < \d/);
+          expect(dec.textContent).not.toMatch(/—/);
+        }
+        if (real && !v1 && route === "timeline") {
+          // A district with no cells is named in a note, not shown as an empty row.
+          const note = host.querySelector("[data-testid=ledger-empty-note]");
+          if (note) expect(note.textContent).toMatch(/no cells \(merged in the boundary layer\)/);
+        }
         await act(async () => root.unmount());
       }, 60000);
     }
@@ -116,15 +127,20 @@ suite("synthetic v2 fixture", async () => {
   return store;
 });
 
-if (publicDataIsV1()) {
+/** schema_version of the real bundle in public/data ("" when absent). */
+const realSchema = () => (publicDataExists("manifest.json") ? String(readJson(PUBLIC_DATA_DIR, "manifest.json").schema_version ?? "") : "");
+
+// The user's REAL bundle (public/data): v1 or v2, whichever is checked in.
+if (realSchema()) {
+  const v1 = realSchema().startsWith("1");
   suite(
-    "real v1 bundle (public/data)",
+    `real ${v1 ? "v1" : "v2"} bundle (public/data)`,
     async () => {
       const store = createBundleStore({ fetchImpl: createFsFetch(PUBLIC_DATA_DIR) });
       await store.getState().load({ source: { id: "data", baseUrl: "/data", explicit: true, reason: "test" } });
       return store;
     },
-    { v1: true },
+    { v1, real: true },
   );
 }
 

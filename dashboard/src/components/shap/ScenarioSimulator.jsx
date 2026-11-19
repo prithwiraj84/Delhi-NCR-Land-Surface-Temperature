@@ -10,7 +10,7 @@
  * Delta conventions (stored value → shown value):
  *   fractions   −0.50..+0.50 (fraction)   → "−50%..+50%" (percentage points of cell area)
  *   indices     −0.30..+0.30              → "−0.30..+0.30"
- *   landscape   ±50 % of the NCR median   → native units (e.g. m/ha)
+ *   landscape   ±50 % of the NCR median (else mean / std) → native units (e.g. m/ha)
  */
 import { memo, useCallback, useEffect, useMemo } from "react";
 import { FlaskConical, Map as MapIcon, RotateCcw, Sparkles } from "lucide-react";
@@ -33,6 +33,18 @@ const REGION_TYPES = [
   { value: "district", label: "District" },
   { value: "zone", label: "Zone" },
 ];
+
+/** Display names of the spectral indices a coupling table can move. */
+const INDEX_LABELS = { ndvi: "NDVI", ndvi_spring: "spring NDVI", ndbi: "NDBI", mndwi: "MNDWI", ndwi: "NDWI", albedo: "albedo" };
+/** v2 coupled indices (scenario_coupling.json `coupled_indices`), used when the table does not list them. */
+const DEFAULT_COUPLED = ["ndvi", "ndvi_spring", "ndbi", "mndwi", "albedo"];
+
+/** "NDVI, spring NDVI, NDBI, MNDWI and albedo" from the coupling table's index list. */
+function coupledIndexList(coupling) {
+  const names = Array.isArray(coupling?.coupled_indices) && coupling.coupled_indices.length ? coupling.coupled_indices : DEFAULT_COUPLED;
+  const labels = names.map((n) => INDEX_LABELS[n] ?? n);
+  return labels.length > 1 ? `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}` : labels.join("");
+}
 
 /** True when two scenario objects describe the same run (used to highlight the active preset). */
 function sameScenario(a, b) {
@@ -217,6 +229,7 @@ function ScenarioSimulator({ metaByName, dependenceKeyFor = (f) => f }) {
     });
   }, [epoch, scenario, scenarioResult, curve, current.feature, current.region, current.delta, meta]);
 
+  const coupledList = coupledIndexList(coupling);
   const fidelity = modelRaw?.fidelity ?? null;
   const featureOptions = actionable.map((m) => ({ value: m.name, label: m.label ?? m.name }));
   const regionZone = current.region?.type === "zone" ? current.region.ids?.[0] : null;
@@ -304,7 +317,7 @@ function ScenarioSimulator({ metaByName, dependenceKeyFor = (f) => f }) {
             description={
               isFraction
                 ? coupling
-                  ? "Spectral indices (NDVI, NDWI/MNDWI, NDBI, albedo) follow the land-cover change via OLS partial slopes."
+                  ? `Spectral indices (${coupledList}) follow the land-cover change via OLS partial slopes.`
                   : "Coupling table not exported – toggling has no effect."
                 : "Applies to land-cover fractions only."
             }
@@ -317,10 +330,12 @@ function ScenarioSimulator({ metaByName, dependenceKeyFor = (f) => f }) {
                 Land-cover fractions are compositional: adding Δ to one fraction removes Δ from the other land covers,
                 including the implicit other-vegetation share (grass, shrub, wetland), in proportion to their current
                 share, so every cell still sums to 100%; a cell can only give up the land it has. With coupling on,
-                NDVI / NDWI / NDBI also shift by Σ slope × Δfraction (partial slopes from an OLS of each index on the
-                five fractions, <span className="font-mono">scenario_coupling.json</span>), clamped to [−1, 1]. Off
-                isolates the land-cover effect alone. NDWI and NDBI are spectral diagnostics: they are not offered as
-                levers and move only through this coupling. Landscape metrics stay fixed.
+                {` ${coupledList} `}also shift by Σ slope × Δfraction (partial slopes from an OLS of each index on the
+                five fractions, other vegetation being the reference class;{" "}
+                <span className="font-mono">scenario_coupling.json</span>), clamped to each index&apos;s physical range
+                (normalised indices [−1, 1], albedo [0, 1]). Off isolates the land-cover effect alone. Apart from NDVI,
+                these indices are spectral diagnostics: they are not offered as levers and move only through this
+                coupling. Landscape metrics stay fixed.
               </span>
             }
           />

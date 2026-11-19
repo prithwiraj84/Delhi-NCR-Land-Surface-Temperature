@@ -12,6 +12,7 @@
 import { compileModel, checkModelAgainstPython, MODEL_FORMAT } from "./model.js";
 import { intervalContains, normalizeInterval } from "./uncertainty.js";
 import { validateV2 } from "../data/validateV2.js";
+import { schemaMajor } from "../data/bundle.js";
 
 export const CANONICAL_FEATURES = Object.freeze([
   "ndvi",
@@ -535,10 +536,13 @@ export function validateEpochs({ manifest, epochs } = {}) {
 // v2 routing (SPEC §5.8: the dashboard loads schema 1.x and 2.0 bundles)
 // ---------------------------------------------------------------------------------------
 
-/** Major schema version of a manifest (1 for missing/legacy manifests). */
+/**
+ * Major schema version of a manifest: the bundle router's `schemaMajor` (data/bundle.js), so
+ * validation and loading agree. Without a schema_version: 2 for a v2 `timeline.frames` block,
+ * else 1 (legacy).
+ */
 export function manifestSchemaMajor(manifest) {
-  const major = Number.parseInt(String(manifest?.schema_version ?? "1").split(".")[0], 10);
-  return Number.isFinite(major) ? major : 1;
+  return schemaMajor(manifest);
 }
 
 /**

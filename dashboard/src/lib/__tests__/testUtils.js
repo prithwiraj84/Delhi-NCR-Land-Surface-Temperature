@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
+import { schemaMajor } from "../../data/bundle.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const FIXTURE_DIR = path.join(here, "fixtures");
@@ -68,6 +69,21 @@ export function publicDataIsV1() {
 }
 
 /**
+ * Schema major of the bundle in public/data (LST_BUNDLE_DIR): 1 | 2, or null when there is no
+ * readable manifest (or an unknown major). Uses the dashboard's own router (`schemaMajor`), so a
+ * suite gated on it runs exactly when the app would treat the bundle as that schema.
+ */
+export function publicDataSchemaMajor() {
+  if (!publicDataExists("manifest.json")) return null;
+  try {
+    const major = schemaMajor(readJson(PUBLIC_DATA_DIR, "manifest.json"));
+    return major === 1 || major === 2 ? major : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+/**
  * File name of a manifest-declared bundle file that exists on disk in `dir`, accepting both
  * the declared name and its plain/.gz sibling (so a test works before and after D3).
  */
@@ -102,7 +118,8 @@ export function createFsFetch(dir, overrides = {}) {
   const calls = [];
   const fetchImpl = async (url) => {
     calls.push(url);
-    const name = decodeURIComponent(String(url).replace(/^.*?\/(?:data|demo)\//, ""));
+    // The query string (the `?v=<generated_at>` cache-busting version) is not part of the file name.
+    const name = decodeURIComponent(String(url).split("?")[0].replace(/^.*?\/(?:data|demo)\//, ""));
     const override = overrides[name];
     if (override instanceof Error) throw override;
     if (override) return response(override.status, override.body ?? "", override.contentType);

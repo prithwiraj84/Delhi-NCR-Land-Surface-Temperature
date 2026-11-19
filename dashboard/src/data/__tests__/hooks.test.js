@@ -189,6 +189,9 @@ describe("hook state machines", () => {
     act(() => useViewStore.getState().setDomainMode("shared"));
     const night = store.getState().timeline.domains.night.abs;
     expect(d.current.data.domain).toEqual([Math.min(fixed[0], night[0]), Math.max(fixed[1], night[1])]);
+    // DTR (day − night) keeps its own domain in "shared" mode, never the day ∪ night LST range.
+    const dtr = renderHook(() => useDomain("dtr", "abs"));
+    expect(dtr.current.data.domain).toEqual(store.getState().timeline.domains.dtr.abs);
     act(() => {
       useViewStore.getState().setDomainMode("frame");
       useTimeStore.getState().setYear(2025);

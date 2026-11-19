@@ -1,6 +1,6 @@
 /**
  * Playback controls (UI_SPEC_v2 §3.3 left column, §5.2 B, §12):
- *   ►/❚❚ play (aria-pressed)  |◄ ►| previous / next frame  speed 0.5× · 1× · 2×  ⟲ loop
+ *   ►/❚❚ play (label Play / Pause)  |◄ ►| previous / next frame  speed 0.5× · 1× · 2×  ⟲ loop
  *
  * Playback never autostarts (WCAG 2.2.2). The buffering state ("next frame not loaded") is
  * shown on the play button with a text alternative. In Off motion playback still works but
@@ -54,22 +54,21 @@ export function PlaybackControls({ size = "md", showSpeed = true, showLoop = tru
 
   return (
     <div className={cn("flex items-center gap-0.5", className)} role="group" aria-label="Playback">
+      {/* The label carries the state (Play / Pause), so the button is not also aria-pressed. */}
       <IconButton
         label={playing ? "Pause" : "Play"}
         shortcut="Space"
-        pressed={playing}
         disabled={!hasFrames}
         touch={touch}
         onClick={() => useTimeStore.getState().togglePlay?.()}
-        className={cn(playing && "bg-surface-3", buffering && "animate-live-pulse")}
+        className={cn(playing && "bg-surface-3 text-ink-strong", buffering && "animate-live-pulse")}
       >
         {playing ? <Pause aria-hidden="true" className={icon} strokeWidth={1.75} /> : <Play aria-hidden="true" className={icon} strokeWidth={1.75} />}
       </IconButton>
-      {buffering && (
-        <span className="sr-only" role="status">
-          {`Loading ${bufferingYear ?? "the next frame"}`}
-        </span>
-      )}
+      {/* Always mounted: a live region only announces changes to a region that already exists. */}
+      <span className="sr-only" role="status">
+        {buffering ? `Loading ${bufferingYear ?? "the next frame"}` : ""}
+      </span>
       {showSteps && (
         <>
           <IconButton label="Previous frame" shortcut="ArrowLeft" disabled={!hasFrames} touch={touch} onClick={() => useTimeStore.getState().step?.(-1)}>

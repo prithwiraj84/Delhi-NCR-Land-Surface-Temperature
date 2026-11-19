@@ -140,8 +140,8 @@ export function SettingsMenu() {
               {source === "data" && "Your bundle (public/data). "}
               {source === "demo" && "Synthetic v2 demo bundle (public/demo): simulated values. "}
               {source === "fixture" && "In-memory synthetic fixture: simulated values, for testing the UI. "}
-              {source === "custom" && "Bundle from VITE_DATA_BASE_URL. "}
-              {customBase && source !== "custom" ? "An explicit choice overrides VITE_DATA_BASE_URL. " : ""}
+              {source === "custom" && "Bundle from NEXT_PUBLIC_DATA_BASE_URL. "}
+              {customBase && source !== "custom" ? "An explicit choice overrides NEXT_PUBLIC_DATA_BASE_URL. " : ""}
               Switching reloads the bundle.
             </p>
           </fieldset>

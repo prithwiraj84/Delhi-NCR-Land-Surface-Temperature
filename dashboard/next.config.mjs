@@ -15,14 +15,20 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
-  // The web bundle is pre-compressed (.gz) binary data the dashboard decodes itself: never let
-  // the server transform it, and let browsers cache it (file names change with each export).
+  // Caching of the web bundles (real /data, synthetic /demo). Their file names are FIXED across
+  // exports, so freshness comes from the explorer: it fetches manifest.json with cache "no-cache"
+  // and every other bundle file with ?v=<manifest generated_at>, so a new export gets new URLs.
+  // manifest.json itself must therefore always revalidate. `:path+` needs at least one segment,
+  // so the /data HTML page is not matched; Next.js prefixes every source with the basePath.
+  // Later entries override earlier ones for the same header key.
   async headers() {
+    const bundleFile = { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" };
+    const manifest = { key: "Cache-Control", value: "no-cache, must-revalidate" };
     return [
-      {
-        source: "/data/:path*",
-        headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
-      },
+      { source: "/data/:path+", headers: [bundleFile] },
+      { source: "/demo/:path+", headers: [bundleFile] },
+      { source: "/data/manifest.json", headers: [manifest] },
+      { source: "/demo/manifest.json", headers: [manifest] },
       {
         source: "/:path*",
         headers: [

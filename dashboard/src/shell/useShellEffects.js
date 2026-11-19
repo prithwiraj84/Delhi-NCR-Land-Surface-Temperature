@@ -11,6 +11,7 @@
  * Store subscriptions use zustand `subscribe` (no React re-render on every scrub tick).
  */
 import { useEffect, useRef } from "react";
+import { bundleStore } from "../data/bundleStore.js";
 import { MOTION_PREFS, MOTION_STORAGE_KEY, resolveMotionLevel } from "../design/motion.js";
 import { startUrlSync } from "../state/urlSync.js";
 import { runAction } from "./actions.js";
@@ -121,7 +122,15 @@ export function usePauseWhenHidden() {
 export function useUrlSyncEffect(availableSsps) {
   const sspRef = useRef(availableSsps);
   sspRef.current = availableSsps;
-  useEffect(() => startUrlSync(STORES, { getAvailableSsps: () => (sspRef.current?.length ? sspRef.current : null) }), []);
+  useEffect(
+    () =>
+      startUrlSync(STORES, {
+        getAvailableSsps: () => (sspRef.current?.length ? sspRef.current : null),
+        // Bounds the pinned cell `c` from a URL (out-of-range ids are dropped); null while unknown.
+        getCellCount: () => bundleStore.getState().resources?.cells?.data?.n ?? null,
+      }),
+    [],
+  );
 }
 
 /**

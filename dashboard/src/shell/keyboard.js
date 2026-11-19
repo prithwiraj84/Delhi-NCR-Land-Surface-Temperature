@@ -34,6 +34,20 @@ export function isSliderTarget(el) {
 
 const SLIDER_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
+/** Native controls whose own activation key is Space (range inputs, like the ribbon slider, are not). */
+const SPACE_TAGS = new Set(["BUTTON", "A", "SUMMARY", "INPUT", "SELECT", "TEXTAREA", "OPTION"]);
+/** ARIA widgets that Space activates or toggles. */
+const SPACE_ROLES = new Set(["button", "checkbox", "radio", "switch", "link", "menuitem", "menuitemcheckbox", "menuitemradio", "option", "tab", "treeitem"]);
+
+/** True when Space belongs to the focused element (activate / toggle), so it must not play. */
+export function ownsSpace(el) {
+  if (!el || typeof el !== "object") return false;
+  const tag = String(el.tagName ?? "").toUpperCase();
+  if (SPACE_TAGS.has(tag)) return !(tag === "INPUT" && String(el.type ?? "").toLowerCase() === "range");
+  const role = typeof el.getAttribute === "function" ? el.getAttribute("role") : null;
+  return SPACE_ROLES.has(role);
+}
+
 /**
  * Shortcut table (also rendered by ShortcutSheet). `keys` are display labels; `group` orders
  * the sheet.
@@ -48,7 +62,7 @@ export const SHORTCUTS = Object.freeze([
   { group: "Time", keys: [",", "."], label: "−1 / +1 year (interpolated)" },
   { group: "Time", keys: ["Shift", "←/→"], label: "Jump to tier boundary (first observed, NOW, 2050)" },
   { group: "Time", keys: ["PgUp", "PgDn"], label: "+10 / −10 years" },
-  { group: "Time", keys: ["Home", "End"], label: "1990 / 2050" },
+  { group: "Time", keys: ["Home", "End"], label: "First / last frame" },
   { group: "Mode", keys: ["D"], label: "Day" },
   { group: "Mode", keys: ["N"], label: "Night" },
   { group: "Mode", keys: ["T"], label: "Toggle Day / Night" },
@@ -106,8 +120,8 @@ export function resolveShortcut(event, { routeCount = 6, overlayOpen = false, re
   switch (key) {
     case " ":
     case "Spacebar":
-      // Space on a focused button/link activates it natively - don't hijack.
-      if (target && ["BUTTON", "A", "SUMMARY"].includes(String(target.tagName ?? "").toUpperCase())) return null;
+      // Space on a focused button, link, checkbox, radio, switch… activates it natively - don't hijack.
+      if (ownsSpace(target)) return null;
       return event.repeat ? null : { type: "togglePlay" };
     case "ArrowLeft":
       return shiftKey ? { type: "jumpTier", dir: -1 } : { type: "stepFrame", dir: -1 };
@@ -126,10 +140,11 @@ export function resolveShortcut(event, { routeCount = 6, overlayOpen = false, re
       return { type: "stepYear", delta: 10 };
     case "PageDown":
       return { type: "stepYear", delta: -10 };
+    // First / last frame of the bundle's timeline (resolved by runAction from the time store).
     case "Home":
-      return { type: "setYear", year: 1990 };
+      return { type: "setYear", edge: "first" };
     case "End":
-      return { type: "setYear", year: 2050 };
+      return { type: "setYear", edge: "last" };
     default:
       break;
   }

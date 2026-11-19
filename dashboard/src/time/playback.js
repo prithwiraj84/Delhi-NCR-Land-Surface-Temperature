@@ -176,6 +176,19 @@ export function createPlaybackScheduler({ store, getLevel = () => "full", isFram
     enter("hold", nowMs, { holdUntil: nowMs + hold, at: year });
   }
 
+  /**
+   * A tween moves the playhead with `scrubTo` (which marks the store `dragging`): when the run
+   * stops mid-tween, commit the nearest frame so the map is never left parked between frames
+   * with `dragging: true`.
+   */
+  function settle() {
+    if (run?.phase !== "tween") return;
+    const s = state();
+    const t = s.scrubT;
+    const target = [run.from, run.to].reduce((best, y) => (Math.abs(y - t) < Math.abs(best - t) ? y : best), run.to);
+    s.setYear(isFrame(target) ? target : run.to);
+  }
+
   function finish(type, year) {
     stopRun();
     status.setState({ stopAt: null });
@@ -193,11 +206,12 @@ export function createPlaybackScheduler({ store, getLevel = () => "full", isFram
       return;
     }
     if (!isFrameReady(to, s.mode, s.ssp)) {
-      if (!run || run.phase !== "buffering" || run.to !== to) {
+      // (Re-)target when the frame, mode or scenario changed: the cube to wait for is another one.
+      if (!run || run.phase !== "buffering" || run.to !== to || run.mode !== s.mode || run.ssp !== s.ssp) {
         prefetch(to, s.mode, s.ssp);
         onEvent({ type: "buffering", year: to });
-        enter("buffering", nowMs, { from: t, to });
-      }
+        enter("buffering", nowMs, { from: t, to, mode: s.mode, ssp: s.ssp });
+      } else run.from = t;
       return;
     }
     if (run?.phase === "buffering") onEvent({ type: "buffered", year: to });
@@ -223,12 +237,7 @@ export function createPlaybackScheduler({ store, getLevel = () => "full", isFram
       if (run) {
         // Paused externally mid-tween: settle on the nearest frame (never leave the map
         // parked between frames because of a pause).
-        if (run.phase === "tween") {
-          const t = s.scrubT;
-          const target = [run.from, run.to].reduce((best, y) => (Math.abs(y - t) < Math.abs(best - t) ? y : best), run.to);
-          const nearest = isFrame(target) ? target : run.to;
-          s.setYear(nearest);
-        }
+        settle();
         stopRun();
       }
       return false;
@@ -264,7 +273,10 @@ export function createPlaybackScheduler({ store, getLevel = () => "full", isFram
         if (nowMs >= run.holdUntil) advanceFrom(run.at, nowMs);
         break;
       case "buffering":
-        if (isFrameReady(run.to, s.mode, s.ssp)) advanceFrom(run.from, nowMs);
+        // An external jump (keyboard step, tick click) while waiting restarts from there; a mode
+        // or SSP change re-targets the wait (and its prefetch) to the new cube.
+        if (finite(s.scrubT) && Math.abs(s.scrubT - run.from) > 1e-3) advanceFrom(s.scrubT, nowMs);
+        else if (s.mode !== run.mode || s.ssp !== run.ssp || isFrameReady(run.to, s.mode, s.ssp)) advanceFrom(run.from, nowMs);
         break;
       case "loop-fade":
         if (nowMs >= run.holdUntil) {
@@ -288,7 +300,9 @@ export function createPlaybackScheduler({ store, getLevel = () => "full", isFram
     get phase() {
       return run?.phase ?? "idle";
     },
+    /** Stop the run; a mid-tween playhead settles on the nearest frame first. */
     reset() {
+      settle();
       stopRun();
       crossedThisPass = false;
     },
@@ -346,6 +360,12 @@ export function startPlaybackLoop(options) {
     if (holder.frame) caf(holder.frame);
     holder.frame = 0;
     scheduler.reset();
+    // Without a loop nothing advances the playhead: never leave the store "playing".
+    const s = options.store.getState();
+    if (s.playing) {
+      if (typeof s.pause === "function") s.pause();
+      else options.store.setState({ playing: false });
+    }
   };
   active = holder;
   return () => releaseLoop();

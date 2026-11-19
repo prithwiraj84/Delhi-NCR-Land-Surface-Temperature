@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { validateBundle, validateEpochs, CANONICAL_FEATURES } from "../validate.js";
+import { validateAnyBundle, validateBundle, validateEpochs, CANONICAL_FEATURES } from "../validate.js";
 import { prepareEpoch } from "../data.js";
-import { existingBundleFile, fixture, publicDataIsV1, readJson, PUBLIC_DATA_DIR } from "./testUtils.js";
+import { createBundleStore } from "../../data/bundleStore.js";
+import { validateV2 } from "../../data/validateV2.js";
+import { createFsFetch, existingBundleFile, fixture, publicDataIsV1, publicDataSchemaMajor, readJson, PUBLIC_DATA_DIR } from "./testUtils.js";
 
 /** Fresh deep copy of the whole fixture bundle (tests mutate it freely). */
 function fixtureBundle() {
@@ -191,4 +193,53 @@ describe.skipIf(!publicDataIsV1())("real bundle: public/data", () => {
     if (result.warnings.length) console.warn(`[real bundle] warnings:\n${result.warnings.join("\n")}`);
     expect(result.errors).toEqual([]);
   }, 120000);
+});
+
+// Since the Kaggle v2 runs replaced public/data, the served bundle is schema 2.x: decode it through
+// the dashboard's own BundleStore (fs fetch) and hold every part to the SPEC §5 contract.
+describe.skipIf(publicDataSchemaMajor() !== 2)("real v2 bundle: public/data (validateAnyBundle -> validateV2)", () => {
+  it("satisfies the SPEC §5 contract on every decoded part", async () => {
+    const store = createBundleStore({ fetchImpl: createFsFetch(PUBLIC_DATA_DIR) });
+    await store.getState().load({ source: { id: "data", baseUrl: "/data", explicit: true, reason: "test" } });
+    const { status, schema, error, manifest, timeline } = store.getState();
+    expect(status, error?.message).toBe("ready");
+    expect(schema).toBe("v2");
+    const ready = async (key) => {
+      const e = await store.getState().ensure(key);
+      expect(e.status, `${key}: ${e.reason}`).toBe("ready");
+      return e.data;
+    };
+    const cubes = {};
+    const zones = {};
+    for (const mode of timeline.modeIds) {
+      for (const series of ["obs", ...timeline.scenarioIds]) cubes[`${mode}:${series}`] = await ready(`cube:${mode}:${series}`);
+      zones[mode] = await ready(`zones:${mode}`);
+    }
+    const assets = {};
+    for (const name of ["shapGlobal", "dependence", "zones", "metrics", "interactions", "provenance"]) {
+      const e = await store.getState().ensure(`asset:${name}`);
+      if (e.status === "ready") assets[name] = e.data;
+    }
+    const cells = await ready("cells");
+    const result = validateAnyBundle({ manifest, timeline, cells, cubes, zones, series: await ready("series"), rasterIndex: await ready("rasterIndex"), assets });
+    expect(result.schema).toBe("v2");
+    const errors = [...result.errors];
+    const warnings = [...result.warnings];
+    // XAI frames one at a time (each decodes 18 SHAP + 33 feature columns), then released.
+    let xaiChecked = 0;
+    for (const mode of timeline.modeIds) {
+      for (const frame of timeline.frames.filter((f) => f.xai[mode])) {
+        const key = `xai:${frame.year}:${mode}`;
+        const r = validateV2({ manifest, timeline, cells, xai: { [`${frame.year}:${mode}`]: await ready(key) } });
+        errors.push(...r.errors.filter((m) => m.startsWith("xai ")));
+        warnings.push(...r.warnings.filter((m) => m.startsWith("xai ")));
+        xaiChecked += r.checked.filter((c) => c.startsWith("xai ")).length;
+        store.getState().release(key);
+      }
+    }
+    expect(xaiChecked).toBeGreaterThan(0);
+    if (warnings.length) console.warn(`[real v2 bundle] warnings:\n${warnings.join("\n")}`);
+    expect(errors).toEqual([]);
+    store.getState().dispose();
+  }, 300000);
 });

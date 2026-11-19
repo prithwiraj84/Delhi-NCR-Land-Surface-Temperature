@@ -27,6 +27,8 @@ export function DayNightDumbbell({ series, year, nightReason, onSelect }) {
   const domain = niceDomain(rows.flatMap((r) => [r.day, r.night]), { pad: 0.04, minSpan: 2 });
   const x = linearScale(domain, [M.left, Math.max(M.left + 60, width - M.right)]);
   const status = nightReason ? { status: "unavailable", reason: nightReason } : series ? { status: "ready" } : { status: "loading" };
+  // Which side of the DTR is a modelled hindcast at this frame (e.g. night 1990/1995): never silent.
+  const modelled = ["day", "night"].filter((m) => rows.some((r) => r[`${m}Tier`] === "modelled"));
 
   return (
     <ChartTable
@@ -39,8 +41,13 @@ export function DayNightDumbbell({ series, year, nightReason, onSelect }) {
         { key: "dtr", label: "DTR °C", align: "right", format: (v) => fmt(v, 1) },
       ]}
       rows={rows}
-      caption={`District mean LST by day and at night in the ${year} frame, sorted by the diurnal range (day − night).`}
+      caption={`District mean LST by day and at night in the ${year} frame, sorted by the diurnal range (day − night).${modelled.length ? ` The ${modelled.join(" and ")} values of this frame are modelled, not observed.` : ""}`}
     >
+      {modelled.length > 0 && (
+        <p className="mb-1 text-[11px] leading-snug text-warn" data-testid="dumbbell-modelled">
+          {year}: the {modelled.join(" and ")} {modelled.length > 1 ? "means are" : "mean is"} modelled (a hindcast, not an observation), so this DTR is not an observed day–night range.
+        </p>
+      )}
       <div ref={boxRef} className="relative">
         <svg width={width} height={height} role="img" aria-label={`Day and night district means in ${year}, sorted by diurnal range. Use the table view for values.`}>
           {linearTicks(domain, 4).map((t) => (

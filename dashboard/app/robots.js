@@ -3,7 +3,7 @@ import { absoluteUrl, siteConfig } from "../lib/site/config.js";
 /** robots.txt: everything is public; the raw bundle and demo data are not pages. */
 export default function robots() {
   return {
-    rules: [{ userAgent: "*", allow: "/", disallow: ["/demo/"] }],
+    rules: [{ userAgent: "*", allow: `${siteConfig.basePath}/`, disallow: [`${siteConfig.basePath}/demo/`] }],
     sitemap: absoluteUrl("/sitemap.xml"),
     host: siteConfig.url,
   };

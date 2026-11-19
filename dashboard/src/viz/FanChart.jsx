@@ -59,11 +59,16 @@ export function FanChart({ series, status = "ready", reason = null, mode = "day"
   const hoverYear = useLinkStore((s) => s.hoverYear);
   const setHoverYear = useLinkStore((s) => s.setHoverYear);
   const [hoverPx, setHoverPx] = useState(null);
+  // True while the hover year comes from the arrow keys: the year's values are then spoken.
+  const [viaKeys, setViaKeys] = useState(false);
   const model = useMemo(() => buildFanModel({ series, metric, ssps, now, showAnnual }), [series, metric, ssps, now, showAnnual]);
   const accent = MODE_STYLE[mode]?.accent ?? CHART.ink;
   const innerW = Math.max(120, width - M.left - M.right);
   const innerH = Math.max(60, height - M.top - M.bottom);
-  const x = useMemo(() => linearScale([xDomain[0] - 1, xDomain[1] + 1], [M.left, M.left + innerW]), [xDomain, innerW]);
+  // Keyed on the domain's values (callers pass an inline array): a stable scale, so the playhead
+  // cursor does not re-subscribe on every render.
+  const [xd0, xd1] = xDomain;
+  const x = useMemo(() => linearScale([xd0 - 1, xd1 + 1], [M.left, M.left + innerW]), [xd0, xd1, innerW]);
   const y = useMemo(() => linearScale(model.yDomain, [M.top + innerH, M.top]), [model.yDomain, innerH]);
   useYearCursor(cursor, x);
 
@@ -116,10 +121,12 @@ export function FanChart({ series, status = "ready", reason = null, mode = "day"
     const snap = nearestYear(model.years, t, 1.25);
     setHoverYear(snap ?? Math.round(t * 10) / 10);
     setHoverPx({ x: px, y: event.clientY - rect.top });
+    setViaKeys(false);
   };
   const onLeave = () => {
     setHoverYear(null);
     setHoverPx(null);
+    setViaKeys(false);
   };
   const onKey = (event) => {
     const yrs = model.years;
@@ -143,9 +150,20 @@ export function FanChart({ series, status = "ready", reason = null, mode = "day"
     event.stopPropagation();
     setHoverYear(next);
     setHoverPx({ x: x(next), y: M.top + 10 });
+    setViaKeys(true);
   };
 
   const summary = `${label ?? "Fan chart"}: ${obsPts.length} observed frames${ssps.length ? `, projections for ${ssps.map((s) => sspStyle(s).label).join(", ")}` : ""}. Use the table view for exact values.`;
+  // Spoken readout of the keyboard-selected year (the glass tooltip is visual only).
+  const spoken = (() => {
+    if (!viaKeys || !hoverData) return "";
+    if (hoverData.between) return `between ${hoverData.between[0] ?? "start"} and ${hoverData.between[1] ?? "end"}: no data`;
+    const parts = [String(hoverData.year)];
+    const o = hoverData.obs;
+    if (o && Number.isFinite(o.y)) parts.push(`${tierStyle(o.tier).label} ${fmtV(o.y)}${Number.isFinite(o.lo) ? ` (${fmtV(o.lo)} to ${fmtV(o.hi)})` : ""}`);
+    for (const { id, row } of hoverData.proj) parts.push(`${sspStyle(id).label} median ${fmtV(row.p50)}${Number.isFinite(row.p05) && Number.isFinite(row.p95) ? ` (p5 ${fmtV(row.p05)} to p95 ${fmtV(row.p95)})` : ""}`);
+    return parts.join(", ");
+  })();
 
   return (
     <div ref={boxRef} className="relative w-full">
@@ -263,6 +281,9 @@ export function FanChart({ series, status = "ready", reason = null, mode = "day"
           <line x1={0} x2={0} y1={M.top} y2={M.top + innerH} stroke={CHART.cursor} strokeWidth={1.5} />
         </g>
       </svg>
+      <p className="sr-only" aria-live="polite">
+        {spoken}
+      </p>
       {hoverData && hoverPx && (
         <ChartTip x={hoverPx.x} y={hoverPx.y} width={width}>
           {hoverData.between ? (

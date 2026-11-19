@@ -375,12 +375,15 @@ export function alluvialColumns(transitionsBySeries, { ssp = null } = {}) {
   }
   if (ssp && transitionsBySeries?.[ssp]) for (const p of transitionPairs(transitionsBySeries[ssp])) pairs.push({ ...p, matrix: transitionsBySeries[ssp][p.key], projected: true });
   pairs.sort((a, b) => a.from - b.from || a.to - b.to);
+  // Malformed matrices are dropped BEFORE chaining: the chain then ends at the gap instead of
+  // jumping over it, so every flow still joins two adjacent columns (columns = flows + 1).
   const chain = [];
   for (const p of pairs) {
+    if (!transitionStats(p.matrix)) continue;
     const prev = chain[chain.length - 1];
     if (!prev || p.from === prev.to) chain.push(p);
   }
-  const valid = chain.filter((p) => transitionStats(p.matrix));
+  const valid = chain;
   if (!valid.length) return { columns: [], flows: [] };
   const columns = [];
   valid.forEach((p, k) => {

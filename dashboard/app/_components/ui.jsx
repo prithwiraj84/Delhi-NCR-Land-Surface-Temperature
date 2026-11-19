@@ -1,7 +1,7 @@
 /**
  * Layout primitives of the content pages (server components).
  *   <PageIntro>  sub-page hero: eyebrow, H1, lead paragraph (one entrance, CSS, once)
- *   <Section>    titled section; its header reveals on scroll
+ *   <Section>    titled section; its header reveals on scroll (labelled by its h2 only when it has a title)
  *   <Eyebrow>    small label above a heading (brand-gradient dot)
  */
 import { Reveal } from "./Reveal.jsx";
@@ -46,7 +46,7 @@ export function PageIntro({ eyebrow, title, lead, children }) {
 
 export function Section({ id, eyebrow, title, intro, children, className = "" }) {
   return (
-    <section id={id} aria-labelledby={id ? `${id}-title` : undefined} className={`mx-auto max-w-6xl scroll-mt-24 px-5 py-14 sm:px-8 sm:py-20 ${className}`}>
+    <section id={id} aria-labelledby={id && title ? `${id}-title` : undefined} className={`mx-auto max-w-6xl scroll-mt-24 px-5 py-14 sm:px-8 sm:py-20 ${className}`}>
       {(eyebrow || title || intro) && (
         <Reveal className="mb-10 max-w-2xl">
           {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}

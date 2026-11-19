@@ -25,7 +25,8 @@ import { ChartTip } from "./ChartTip.jsx";
 import { useLinkStore } from "./linking.js";
 import { useSize } from "./useSize.js";
 
-const ROW_H = 14;
+// 24 px rows: each row is also its label button's hit target (WCAG 2.5.8 minimum target size).
+const ROW_H = 24;
 const LABEL_W = 132;
 const AXIS_H = 18;
 
@@ -83,10 +84,12 @@ export function ThermalBarcode({ rows = [], years = [], xDomain = [1990, 2050], 
         ctx.strokeRect(0.5, y0 + 0.5, plotW - 1, ROW_H - 2);
       }
     });
-    // NOW rule + axis
+    // NOW rule + axis: at the end of the NOW frame's span (halfway to the next frame, whatever
+    // the frame spacing), or at NOW itself when NOW is not a frame year.
     if (Number.isFinite(now)) {
+      const nowSpan = spans.find((s) => s.year === now);
       ctx.fillStyle = CHART.now;
-      ctx.fillRect(Math.round(x(now + 2.5)), 0, 1, rows.length * ROW_H);
+      ctx.fillRect(Math.round(x(nowSpan ? nowSpan.x1 : now)), 0, 1, rows.length * ROW_H);
     }
     ctx.fillStyle = CHART.axis;
     ctx.font = `${CHART.fontSize}px ${CHART.font}`;
@@ -122,7 +125,7 @@ export function ThermalBarcode({ rows = [], years = [], xDomain = [1990, 2050], 
                 onBlur={() => setHoverScope(null)}
                 aria-pressed={row.id === selectedId}
                 className={cn(
-                  "focus-ring block h-full w-full truncate rounded-sm pr-2 text-right text-[11px] leading-[14px]",
+                  "focus-ring block h-full w-full truncate rounded-sm pr-2 text-right text-[11px] leading-6",
                   row.id === selectedId ? "text-ink-strong" : row.id === hoverScope ? "text-ink" : "text-ink-muted hover:text-ink",
                 )}
               >

@@ -12,12 +12,13 @@ import { PLAYHEAD_HIT_PX } from "./ribbonScale.js";
 
 /**
  * @param {{top:number, bottom:number, handleY:number, buffering?: boolean, ghost?: boolean,
- *          interpolated?: boolean, onPointerDown?: Function}} props
+ *          interpolated?: boolean, onPointerDown?: Function, x?: number}} props
+ *   `x` = initial position of the ghost (it mounts on hover; later moves are imperative)
  */
-export const Playhead = forwardRef(function Playhead({ top, bottom, handleY, buffering = false, ghost = false, interpolated = false, onPointerDown }, ref) {
+export const Playhead = forwardRef(function Playhead({ top, bottom, handleY, buffering = false, ghost = false, interpolated = false, onPointerDown, x }, ref) {
   if (ghost) {
     return (
-      <g ref={ref} aria-hidden="true" style={{ pointerEvents: "none" }}>
+      <g ref={ref} aria-hidden="true" style={{ pointerEvents: "none" }} transform={Number.isFinite(x) ? `translate(${x},0)` : undefined}>
         <line x1={0} x2={0} y1={top} y2={bottom} stroke="var(--ink)" strokeOpacity={0.4} strokeWidth={1} strokeDasharray="3 3" />
       </g>
     );

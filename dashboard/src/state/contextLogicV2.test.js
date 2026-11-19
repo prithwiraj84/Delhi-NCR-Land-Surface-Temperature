@@ -127,6 +127,11 @@ describe("DataProvider on the in-memory v2 fixture", () => {
     await waitFor(() => expect(d.shapGlobal ?? out.data.shapGlobal).toBeTruthy());
     expect(out.data.shapGlobal.features).toEqual(synth.manifest.groups.map((g) => g.id));
     await waitFor(() => expect(out.data.shapFeature).toBeTruthy());
+    // The provisional first-group default gives way to the global-importance argmax once
+    // shap_global has loaded (no user / URL choice was made).
+    const meanAbs = out.data.shapGlobal.global.mean_abs.map(Number);
+    const best = out.data.shapGlobal.features[meanAbs.indexOf(Math.max(...meanAbs))];
+    await waitFor(() => expect(useViewStore.getState().shapFeature).toBe(best));
 
     act(() => out.data.setView("thresholds"));
     expect(useViewStore.getState().route).toBe("drivers");

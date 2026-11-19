@@ -43,11 +43,14 @@ function exactStats({ timeline, series, year, mode, ssp, cube, cellAreaKm2, tota
   const v = seriesValueAt(ncr, year, ssp);
   const tier = tierOf(timeline, year, mode) ?? v?.tier ?? null;
   if (!v) return { year, mode, ssp, tier, mean: null, ci: null, p90: null, uhi: null, hotCoreKm2: null, hotCorePct: null, hottestDistrict: null, nCells: null, kind: null, reason: "no NCR statistics for this frame" };
-  let hotCoreKm2 = v.hot_core_km2;
+  // DTR (day − night) has no hot-core area: the threshold is a day / night LST level, which is
+  // meaningless for a temperature range (null for observed and projected DTR frames alike).
+  const isDtr = mode === "dtr";
+  let hotCoreKm2 = isDtr ? NaN : v.hot_core_km2;
   let nCells = v.n_cells;
-  if (v.kind === "projected" && cube) {
+  if (v.kind === "projected" && cube && !isDtr) {
     const f = cubeFrameIndex(cube, year);
-    const threshold = Number(series?.hotCoreThreshold?.[mode === "dtr" ? "day" : mode]);
+    const threshold = Number(series?.hotCoreThreshold?.[mode]);
     if (f >= 0 && Number.isFinite(threshold)) {
       const values = decodeCubeFrame(cube, f, { q: "p50" });
       hotCoreKm2 = hotCoreFromValues(values, threshold, cellAreaKm2);

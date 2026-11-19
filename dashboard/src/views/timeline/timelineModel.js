@@ -149,9 +149,38 @@ export function projectionAoa(metrics, mode, year, ssp = null, { cube = null } =
   return last ? { year: last.year, ssp: null, pct: last.pct, source: "observed" } : null;
 }
 
-/** District scopes with their numeric id. */
+/** True when a scope has no finite value in any frame or projection of any mode (a district with no cells). */
+function scopeIsEmpty(series, id) {
+  for (const mode of ["day", "night"]) {
+    const s = scopeSeries(series, id, mode);
+    if (!s) continue;
+    if ((s.frames ?? []).some((f) => isNum(f.mean))) return false;
+    if (Object.values(s.ssp ?? {}).some((rows) => Array.isArray(rows) && rows.some((r) => isNum(r.p50)))) return false;
+  }
+  return true;
+}
+
+/**
+ * District scopes with their numeric id. Districts with no cells at all (e.g. Charkhi Dadri, merged
+ * in the boundary layer) are left out of every list, rank and axis; `emptyDistricts` names them.
+ */
 export function districtList(series) {
-  return scopesOfKind(series, "district").map((s) => ({ ...s, did: Number(String(s.id).slice(2)) }));
+  return scopesOfKind(series, "district")
+    .filter((s) => !scopeIsEmpty(series, s.id))
+    .map((s) => ({ ...s, did: Number(String(s.id).slice(2)) }));
+}
+
+/** District scopes that carry no data at all (no cells in the grid), for a short note. */
+export function emptyDistricts(series) {
+  return scopesOfKind(series, "district")
+    .filter((s) => scopeIsEmpty(series, s.id))
+    .map((s) => ({ id: s.id, label: s.label, did: Number(String(s.id).slice(2)) }));
+}
+
+/** Note for the empty districts ("Charkhi Dadri: no cells (merged in the boundary layer)."), or null. */
+export function emptyDistrictNote(series) {
+  const list = emptyDistricts(series);
+  return list.length ? `${list.map((d) => d.label).join(", ")}: no cells (merged in the boundary layer).` : null;
 }
 
 /** Exact observed year at or before `year` that has data in the series (for snapshots). */
@@ -253,9 +282,11 @@ export function rankBump(series, { mode, years, metric = "mean", ssp = null }) {
 export function dumbbellRows(series, year) {
   return districtList(series)
     .map((d) => {
-      const day = seriesValueAt(scopeSeries(series, d.id, "day"), year, null)?.mean;
-      const night = seriesValueAt(scopeSeries(series, d.id, "night"), year, null)?.mean;
-      return { id: d.id, label: d.label, day: isNum(day) ? day : NaN, night: isNum(night) ? night : NaN, dtr: isNum(day) && isNum(night) ? day - night : NaN };
+      const dv = seriesValueAt(scopeSeries(series, d.id, "day"), year, null);
+      const nv = seriesValueAt(scopeSeries(series, d.id, "night"), year, null);
+      const day = dv?.mean;
+      const night = nv?.mean;
+      return { id: d.id, label: d.label, day: isNum(day) ? day : NaN, night: isNum(night) ? night : NaN, dtr: isNum(day) && isNum(night) ? day - night : NaN, dayTier: dv?.tier ?? null, nightTier: nv?.tier ?? null };
     })
     .filter((r) => isNum(r.day) || isNum(r.night))
     .sort((a, b) => (isNum(b.dtr) ? b.dtr : -Infinity) - (isNum(a.dtr) ? a.dtr : -Infinity) || a.label.localeCompare(b.label));

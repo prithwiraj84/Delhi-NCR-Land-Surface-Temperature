@@ -10,7 +10,7 @@ import { buildTimeline } from "../data/timeline.js";
 import { createSynthV2 } from "../data/fixtures/synthV2.js";
 import { timeStoreInitializer } from "../state/stores/timeStore.js";
 import { crossingDetector } from "./nowCrossing.js";
-import { createPlaybackScheduler, cubicBezier, LOOP_FADE_MS, NOW_EXTRA_HOLD_MS, playbackTiming } from "./playback.js";
+import { createPlaybackScheduler, cubicBezier, LOOP_FADE_MS, NOW_EXTRA_HOLD_MS, playbackTiming, startPlaybackLoop } from "./playback.js";
 
 const timeline = buildTimeline(createSynthV2().manifest);
 
@@ -22,11 +22,15 @@ function setup({ level = "full", ready = () => true, year = 2010, speed = 1, loo
   const status = create(() => ({ phase: "idle", buffering: false, bufferingYear: null, nextYear: null, stopAt: null }));
   const events = [];
   const prefetched = [];
+  const prefetchCalls = [];
   const scheduler = createPlaybackScheduler({
     store,
     getLevel: () => level,
     isFrameReady: ready,
-    prefetch: (y) => prefetched.push(y),
+    prefetch: (y, m, s) => {
+      prefetched.push(y);
+      prefetchCalls.push({ year: y, mode: m, ssp: s });
+    },
     onEvent: (e) => events.push(e),
     status,
   });
@@ -38,7 +42,7 @@ function setup({ level = "full", ready = () => true, year = 2010, speed = 1, loo
       scheduler.tick(now);
     }
   };
-  return { store, status, scheduler, events, prefetched, run, tickNow: () => scheduler.tick(now) };
+  return { store, status, scheduler, events, prefetched, prefetchCalls, run, tickNow: () => scheduler.tick(now) };
 }
 
 describe("timing matrix", () => {
@@ -155,6 +159,61 @@ describe("buffering", () => {
     expect(store.getState().year).toBe(2015);
     expect(status.getState().buffering).toBe(false);
     expect(events.some((e) => e.type === "buffered")).toBe(true);
+  });
+
+  it("an external jump while buffering restarts from the new position", () => {
+    const { store, run, status } = setup({ year: 2010, ready: (y) => y !== 2015 });
+    store.getState().play();
+    run(200);
+    expect(status.getState().bufferingYear).toBe(2015);
+    store.getState().setYear(2030); // keyboard step past the missing frame
+    run(800 + 800 + 50);
+    expect(store.getState().year).toBe(2035);
+    expect(status.getState().buffering).toBe(false);
+  });
+
+  it("a mode or SSP change while buffering re-targets the wait and its prefetch", () => {
+    let nightReady = false;
+    const { store, run, status, prefetchCalls } = setup({ year: 2010, ready: (y, m) => y !== 2015 || (m === "night" && nightReady) });
+    store.getState().play();
+    run(200);
+    expect(prefetchCalls).toEqual([{ year: 2015, mode: "day", ssp: store.getState().ssp }]);
+    expect(store.getState().setMode("night")).toBe(true);
+    run(50);
+    expect(prefetchCalls).toHaveLength(2);
+    expect(prefetchCalls[1]).toMatchObject({ year: 2015, mode: "night" });
+    expect(status.getState().bufferingYear).toBe(2015);
+    nightReady = true;
+    run(900);
+    expect(store.getState().year).toBe(2015);
+  });
+});
+
+describe("stopping mid-tween", () => {
+  it("reset() settles the playhead on a frame and clears dragging", () => {
+    const { store, run, scheduler } = setup({ year: 2010 });
+    store.getState().play();
+    run(300);
+    expect(store.getState().dragging).toBe(true); // tweening via scrubTo
+    scheduler.reset();
+    expect(timeline.years).toContain(store.getState().scrubT);
+    expect(store.getState().year).toBe(store.getState().scrubT);
+    expect(store.getState().dragging).toBe(false);
+  });
+
+  it("releasing the last loop user mid-tween settles on a frame and pauses", async () => {
+    const store = create(timeStoreInitializer);
+    store.getState().configure(timeline, { year: 2010 });
+    const release = startPlaybackLoop({ store, getLevel: () => "full" });
+    store.getState().play();
+    await new Promise((r) => setTimeout(r, 300));
+    expect(store.getState().scrubT).toBeGreaterThan(2010);
+    expect(store.getState().scrubT).toBeLessThan(2015);
+    release();
+    const s = store.getState();
+    expect(s.playing).toBe(false);
+    expect(s.dragging).toBe(false);
+    expect(timeline.years).toContain(s.scrubT);
   });
 });
 

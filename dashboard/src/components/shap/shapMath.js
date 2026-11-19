@@ -294,7 +294,9 @@ export function slopeUnit(meta) {
  * Slider specification for a scenario delta, per the explorer contract:
  * - fractions ("percent"): −50..+50 percentage points, stored as a fraction (−0.5..0.5);
  * - spectral indices ("index"): −0.3..+0.3;
- * - landscape metrics / other numbers: ±50 % of the feature median, in native units.
+ * - landscape metrics / other numbers: ±50 % of the feature median (else its mean, else its
+ *   standard deviation, whichever is the first non-zero statistic), in native units; the
+ *   description names the statistic actually used.
  * Returns { min, max, step, format(delta) -> string, describe(delta) -> string }.
  */
 export function deltaSpec(meta) {
@@ -318,16 +320,26 @@ export function deltaSpec(meta) {
     };
   }
   const stats = meta?.stats ?? {};
-  const reference =
-    [stats.median, stats.mean, stats.std].map((v) => (isNum(v) ? Math.abs(v) : 0)).find((v) => v > 0) ?? 1;
+  const found = [
+    ["median", stats.median],
+    ["mean", stats.mean],
+    ["standard deviation", stats.std],
+  ]
+    .map(([name, v]) => [name, isNum(v) ? Math.abs(v) : 0])
+    .find(([, v]) => v > 0);
+  const [referenceName, reference] = found ?? [null, 1];
   const half = reference * 0.5;
   const unit = meta?.unit ? ` ${meta.unit}` : "";
+  const format = (d) => `${d >= 0 ? "+" : ""}${fmtSig(d, 3)}${unit}`;
   return {
     min: -half,
     max: half,
     step: niceStep(half / 50),
-    format: (d) => `${d >= 0 ? "+" : ""}${fmtSig(d, 3)}${unit}`,
-    describe: (d) => `${fmtSigned((d / reference) * 100, 0)}% of the NCR median (${fmtSig(reference, 3)}${unit})`,
+    format,
+    describe: (d) =>
+      referenceName
+        ? `${fmtSigned((d / reference) * 100, 0)}% of the NCR ${referenceName} (${fmtSig(reference, 3)}${unit})`
+        : `${format(d)} (no NCR reference statistic exported)`,
   };
 }
 

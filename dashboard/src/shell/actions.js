@@ -22,8 +22,15 @@ export const SHELL_EVENTS = Object.freeze({
   focusLayerDock: "ncr:focus-layer-dock",
 });
 
-const clampYear = (y) => Math.max(1990, Math.min(2050, y));
 const RENDER_CYCLE = Object.freeze(["grid", "raster", "auto"]);
+
+/** First / last year of the bundle's timeline: the time store's span, else the frame years, else 1990–2050. */
+function yearBounds(t, years) {
+  if (Number.isFinite(t.first) && Number.isFinite(t.last)) return [t.first, t.last];
+  const ys = (years ?? []).filter(Number.isFinite);
+  if (ys.length) return [Math.min(...ys), Math.max(...ys)];
+  return [1990, 2050];
+}
 
 function emit(win, name, detail) {
   if (!win || typeof win.dispatchEvent !== "function" || typeof win.CustomEvent !== "function") return;
@@ -110,8 +117,11 @@ export function runAction(action, ctx) {
       return callAction(time, "jumpTier", action.dir);
     case "stepYear":
     case "setYear": {
+      const [lo, hi] = yearBounds(t, years);
       const base = Number.isFinite(t.year) ? t.year : 2025;
-      const year = clampYear(action.type === "setYear" ? action.year : Math.round(base) + action.delta);
+      const target = action.edge === "first" ? lo : action.edge === "last" ? hi : action.type === "setYear" ? action.year : Math.round(base) + action.delta;
+      if (!Number.isFinite(target)) return false;
+      const year = Math.max(lo, Math.min(hi, target));
       if (!callAction(time, "setYear", year)) time.setState({ year, scrubT: year });
       return true;
     }
@@ -119,11 +129,14 @@ export function runAction(action, ctx) {
       if (availableModes[action.mode] === false) {
         const label = action.mode === "dtr" ? "Diurnal range" : action.mode === "night" ? "Night" : "Day";
         const message = `${label} is unavailable in this bundle (rerun notebook v2 for night and projections).`;
+        // The toast is the spoken message (ToastHost is a polite live region): no second announce.
         toast({ id: `mode-unavailable-${action.mode}`, title: `${label} unavailable`, body: message, tone: "warn" });
-        announce(message);
         return true;
       }
-      if (!callAction(time, "setMode", action.mode)) time.setState({ mode: action.mode });
+      // The store refuses a mode the timeline lacks (setMode returns false): not handled.
+      const setMode = t.setMode;
+      if (typeof setMode === "function") return setMode(action.mode) !== false;
+      time.setState({ mode: action.mode });
       return true;
     }
     case "toggleDayNight": {

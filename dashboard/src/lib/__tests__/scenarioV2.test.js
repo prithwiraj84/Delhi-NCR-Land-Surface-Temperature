@@ -238,6 +238,25 @@ describe("runScenario on a v2 epoch (focal recompute)", () => {
     expect(res.stats.meanApplied).toBeLessThanOrEqual(0.25 + 1e-9);
   });
 
+  it("counts as affected only rows whose inputs changed (ndvi_drop is not re-derived where NDVI did not move)", () => {
+    const mdl = focalModel();
+    const b = epoch.baseFeatures;
+    // spring − ndvi differs from the exported (separately quantised) ndvi_drop by quantisation noise.
+    let noisy = 0;
+    for (let i = 0; i < epoch.n; i += 1) {
+      const d = Math.fround(b.ndvi_spring[i] - b.ndvi[i]);
+      if (Number.isFinite(d) && Math.abs(d - b.ndvi_drop[i]) > 1e-6 * Math.max(1, Math.abs(b.ndvi_drop[i]))) noisy += 1;
+    }
+    expect(noisy).toBeGreaterThan(0);
+    const none = runScenario({ epoch, model: mdl, coupling, manifest, scenario: { feature: "ndvi", delta: 0, region: { type: "all", ids: [] }, coupled: false } });
+    expect(none.stats.changedCount).toBe(0);
+    expect(none.stats.affectedCount).toBe(0);
+    expect(none.spillover.count).toBe(0);
+    const res = runScenario({ epoch, model: mdl, coupling, manifest, scenario: { feature: "ndvi", delta: 0.05, region: { type: "district", ids: [1] }, coupled: false } });
+    expect(res.stats.changedCount).toBeGreaterThan(0);
+    expect(res.stats.affectedCount).toBe(res.indices.length + res.spillover.count);
+  });
+
   it("accepts the v1 preset name frac_impervious on a v2 model", () => {
     const res = runScenario({ epoch, model, coupling, manifest, scenario: { feature: "frac_impervious", delta: 0.1, region: { type: "district", ids: [17] }, coupled: true } });
     expect(res.changedFeatures).toContain("frac_built");

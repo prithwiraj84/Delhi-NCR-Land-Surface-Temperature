@@ -196,7 +196,11 @@ export function aoaSummary(slice) {
     .map(([y, v]) => ({ id: y, year: Number(y), pct: num(v) }))
     .filter((r) => Number.isInteger(r.year) && r.pct !== null)
     .sort((x, y) => x.year - y.year);
-  const deciles = (Array.isArray(a.rmse_by_di_decile) ? a.rmse_by_di_decile : []).map((v, i) => ({ id: String(i + 1), decile: i + 1, rmse: num(v) }));
+  // Entries are numbers (older bundles) or {decile, di_lo, di_hi, rmse, n} objects (the notebook export).
+  const deciles = (Array.isArray(a.rmse_by_di_decile) ? a.rmse_by_di_decile : []).map((v, i) => {
+    const o = v !== null && typeof v === "object" ? v : null;
+    return { id: String(i + 1), decile: i + 1, rmse: num(o ? o.rmse : v), diLo: o ? num(o.di_lo) : null, diHi: o ? num(o.di_hi) : null, n: o ? num(o.n) : null };
+  });
   return { threshold: num(a.di_threshold), pct, deciles };
 }
 
@@ -210,7 +214,7 @@ export function downscalingSummary(metrics) {
     // Fine-grid resolution of the "250 m" layer (500 m on the 2 km smoke grid): labels follow the bundle.
     fineResM: num(d.fine_res_m),
     night: si ? { r2: num(si.r2), rmse: num(si.rmse), bias: num(si.bias), bilinear: num(si.bilinear_rmse), coarseM: num(si.coarse_res_m), fineM: num(si.fine_res_m) } : null,
-    byLc: (Array.isArray(d.night?.by_lc) ? d.night.by_lc : []).map((r) => ({ id: String(r.class), cls: r.class, r2: num(r.r2), rmse: num(r.rmse), n: num(r.n) })),
+    byLc: (Array.isArray(d.night?.by_lc) ? d.night.by_lc : []).map((r) => ({ id: String(r.class), cls: typeof r.label === "string" && r.label ? r.label : r.class, r2: num(r.r2), rmse: num(r.rmse), bilinear: num(r.bilinear_rmse), n: num(r.n) })),
     day: demo ? { r2: num(demo.r2), rmse: num(demo.rmse), bilinear: num(demo.bilinear_rmse), years: Array.isArray(demo.years) ? demo.years : [] } : null,
   };
 }

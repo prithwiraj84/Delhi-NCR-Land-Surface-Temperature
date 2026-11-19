@@ -23,6 +23,8 @@ import { ramps } from "../../design/tokens.js";
 /** Polar arms (tokens.js): cool azure / warm rose; neutral connectors in hairline-strong. */
 const COOLING = ramps.polar[1];
 const WARMING = ramps.polar[5];
+/** A contribution of exactly 0 °C (no polarity). */
+const NEUTRAL = THEME.inkFaint;
 
 const LAYOUT = {
   compact: { width: 340, row: 19, labelW: 108, rawW: 56, valueW: 48, font: 11 },
@@ -148,10 +150,12 @@ export function CellWaterfall({ waterfall, manifest, topN = 6, animated = false,
         const i = idx + 1;
         const left = x(Math.min(s.start, s.end));
         const width = Math.max(Math.abs(x(s.end) - x(s.start)), 1.5);
-        const color = s.shap < 0 ? COOLING : WARMING;
+        // Exactly zero is neither cooling nor warming: neutral bar, "no effect".
+        const color = s.shap < 0 ? COOLING : s.shap > 0 ? WARMING : NEUTRAL;
+        const polarity = s.shap < 0 ? "cooling" : s.shap > 0 ? "warming" : "no effect";
         return (
           <Row key={s.key} {...rowMotion(i)}>
-            <title>{`${s.label}${s.raw ? ` = ${s.raw}${s.unit ? ` ${s.unit}` : ""}` : ""}: ${fmtSigned(s.shap, 3)} °C (${s.shap < 0 ? "cooling" : "warming"})`}</title>
+            <title>{`${s.label}${s.raw ? ` = ${s.raw}${s.unit ? ` ${s.unit}` : ""}` : ""}: ${fmtSigned(s.shap, 3)} °C (${polarity})`}</title>
             {/* Connector from the previous running total. */}
             <line x1={x(s.start)} x2={x(s.start)} y1={rowY(i) - (layout.row - barH) / 2} y2={rowY(i) + (layout.row - barH) / 2} stroke={THEME.hairlineStrong} strokeWidth={1} />
             <text x={0} y={textY(i)} fill={s.isOther ? THEME.inkMuted : THEME.ink}>

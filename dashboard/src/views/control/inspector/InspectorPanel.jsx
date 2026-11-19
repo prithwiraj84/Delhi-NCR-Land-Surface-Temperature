@@ -66,7 +66,9 @@ export function InspectorPanel({ variant = "panel", className }) {
   const cells = useCells();
   if (!timeline) return null;
   const districtOfCell = pinned !== null && cells.status === "ready" ? Number(cells.data.district[pinned]) : null;
-  const districtId = selectedDistrict ?? districtOfCell;
+  // A pinned cell's own district wins over an earlier district pick (a map click pins without
+  // touching selectionStore.districtId), so the summary, CSV and Simulate name the right district.
+  const districtId = Number.isInteger(districtOfCell) ? districtOfCell : selectedDistrict;
   const open = pinned !== null || districtId !== null;
   const header = (
     <div className="flex items-center justify-between gap-2">

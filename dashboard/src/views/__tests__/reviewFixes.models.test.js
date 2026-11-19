@@ -11,8 +11,8 @@ import { buildTimeline } from "../../data/timeline.js";
 import { validateV2 } from "../../data/validateV2.js";
 import { annualRuns, buildFanModel } from "../../viz/fanModel.js";
 import { cellHeadline, describeMapSentence, firstComparableFrame, hoverQuantity, uhiCopy } from "../control/controlModel.js";
-import { legendSpec, zoneEntries } from "../control/layerModel.js";
-import { barcodeRows, changeFrames, firstLastChange, LEVELS_NOT_HARMONISED, ledgerRows, projectedChange } from "../timeline/timelineModel.js";
+import { layerAvailability, legendFromEngine, legendSpec, zoneEntries } from "../control/layerModel.js";
+import { barcodeRows, changeFrames, dumbbellRows, firstLastChange, LEVELS_NOT_HARMONISED, ledgerRows, projectedChange } from "../timeline/timelineModel.js";
 import { ablationSummary, blockSizeRows, landModelSummary, v1v2Story } from "../lab/labModel.js";
 
 const synth = createSynthV2();
@@ -193,5 +193,41 @@ describe("Δ legend on non-harmonised levels (T-F4-08 / T-F4-02)", () => {
     expect(legendSpec({ layer: "lst", variable: "delta", mode: "day", timeline: v1Like }).note).toBe(LEVELS_NOT_HARMONISED);
     const harmonised = { schema: "v2", harmonised: true, domains: {} };
     expect(legendSpec({ layer: "lst", variable: "delta", mode: "day", timeline: harmonised }).note).not.toBe(LEVELS_NOT_HARMONISED);
+  });
+});
+
+describe("legend arms, driver families and layer reasons (R4 / R16)", () => {
+  const tl = buildTimeline(synth.manifest);
+  it("temperature scales read cooler / warmer; uncertainty spread and DTR carry their own arms", () => {
+    expect(legendSpec({ layer: "lst", variable: "abs", mode: "day", timeline: tl }).arms).toBeNull();
+    expect(legendSpec({ layer: "unc", variable: "abs", mode: "day", timeline: tl }).arms).toEqual(["narrower", "wider"]);
+    expect(legendSpec({ layer: "lst", variable: "abs", mode: "dtr", timeline: tl }).arms).toEqual(["smaller swing", "larger swing"]);
+    // The engine merge keeps the arms.
+    const unc = legendSpec({ layer: "unc", variable: "abs", mode: "day", timeline: tl });
+    expect(legendFromEngine(unc, { layer: "unc", mode: "day", kind: "sequential", ramp: "mist", lo: 0, hi: 3, crossFrame: true }, { layer: "unc", mode: "day" }).arms).toEqual(["narrower", "wider"]);
+  });
+
+  it("the dominant-driver legend lists the engine's categories (families with human labels when grouped)", () => {
+    const groups = Array.from({ length: 18 }, (_, i) => ({ id: i, label: `g${i}`, color: "#000" }));
+    const spec = legendSpec({ layer: "driver", variable: "abs", mode: "day", timeline: tl, groups });
+    const engine = { layer: "driver", mode: "day", kind: "categorical", categories: [{ id: 0, label: "spectral", color: "#111" }, { id: 1, label: "meteorology", color: "#222" }] };
+    const out = legendFromEngine(spec, engine, { layer: "driver", mode: "day" });
+    expect(out.entries.map((e) => e.label)).toEqual(["Spectral indices", "Climate & weather"]);
+    expect(out.title).toMatch(/family/);
+    // Zones keep their spec entries (display names and caveats).
+    const zones = legendSpec({ layer: "zones", variable: "abs", mode: "night", timeline: tl, manifest: synth.manifest });
+    expect(legendFromEngine(zones, { ...engine, layer: "zones", mode: "night" }, { layer: "zones", mode: "night" })).toBe(zones);
+  });
+
+  it("the uncertainty reason names every uncertain tier", () => {
+    const observed = tl.frames.find((f) => f.kind === "observed" && f.day.tier === "observed");
+    expect(layerAvailability("unc", { timeline: tl, year: observed.year, mode: "day" }).reason).toMatch(/projected, modelled and reconstructed/);
+  });
+
+  it("the day/night dumbbell carries each side's tier (a modelled night is never silent)", () => {
+    const rows = dumbbellRows(series, 1990);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]).toHaveProperty("nightTier");
+    expect(rows.every((r) => r.nightTier === synth.manifest.timeline.frames[0].night.tier)).toBe(true);
   });
 });

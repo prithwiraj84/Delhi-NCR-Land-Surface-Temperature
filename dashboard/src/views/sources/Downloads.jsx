@@ -41,7 +41,7 @@ export function Downloads({ manifest, source }) {
             {inMemory ? (
               <span className="truncate font-mono text-ink-muted">{f.file}</span>
             ) : (
-              <a href={bundleFileUrl(source.baseUrl, f.file)} download className="focus-ring truncate rounded font-mono text-ink hover:text-signal">
+              <a href={bundleFileUrl(source.baseUrl, f.file, source.version)} download className="focus-ring truncate rounded font-mono text-ink hover:text-signal">
                 {f.file}
               </a>
             )}

@@ -14,6 +14,7 @@
 import { Fragment, useMemo } from "react";
 import { TierGlyph } from "../../components/ui/TierGlyph.jsx";
 import { cn } from "../../lib/cn.js";
+import { scopeBaseline } from "../../data/series.js";
 import { fmt, fmtSigned, fmtSsp } from "../../lib/format.js";
 import { firstComparableFrame, tierChipText, uhiCopy } from "./controlModel.js";
 import { TelemetryItem } from "./TelemetryItem.jsx";
@@ -46,6 +47,22 @@ export function TelemetryStrip({ compact = false, className }) {
   // epoch is a single season, so "2025 minus 2010" mixes sensor drift and weather with real change.
   const levelsComparable = timeline?.harmonised === true;
   const deltaFirst = levelsComparable && stats && first && Number.isFinite(stats.mean) ? stats.mean - first.mean : NaN;
+  // After NOW the NCR value is a scenario p50: its change is measured against the scope's
+  // WEATHER-NORMALISED baseline (D14, as on the Timeline), never against an observed frame.
+  const afterNow = Boolean(timeline) && Number.isFinite(live.t) && live.t > timeline.now;
+  const baseline = afterNow && ncr && ssp ? scopeBaseline(ncr, ssp) : null;
+  const deltaBase = afterNow && baseline && stats && Number.isFinite(stats.mean) ? stats.mean - baseline.base : NaN;
+  const deltaItem = afterNow
+    ? {
+        key: "delta",
+        label: `Δ vs ${timeline.now} baseline`,
+        value: Number.isFinite(deltaBase) ? fmtSigned(deltaBase, 1) : null,
+        unit: "°C",
+        status: status(deltaBase),
+        reason: baseline ? "no NCR value for this frame" : "no weather-normalised baseline exported for this scenario",
+        title: baseline ? `NCR p50 minus the weather-normalised ${timeline.now} baseline (${fmt(baseline.base, 1)} °C) under ${scenario?.label ?? fmtSsp(ssp)}: model + CMIP6 scenario, not observations` : undefined,
+      }
+    : null;
 
   const items = [
     {
@@ -80,7 +97,7 @@ export function TelemetryStrip({ compact = false, className }) {
       status: stats?.hottestDistrict ? (interpolating ? "interpolating" : "exact") : status(NaN),
       reason: "no district statistics for this frame",
     },
-    {
+    deltaItem ?? {
       key: "delta",
       label: first ? `Δ vs ${first.year}` : "Δ vs first",
       value: Number.isFinite(deltaFirst) ? fmtSigned(deltaFirst, 1) : null,

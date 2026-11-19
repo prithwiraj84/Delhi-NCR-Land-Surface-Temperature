@@ -586,7 +586,7 @@ function RibbonBody({ timeline, mode, variant, className, showModeControls, defa
                   <motion.line key={crossingSeq} x1={nowX} x2={nowX} y1={sparkTop} y2={trackY + trackH} stroke="var(--signal)" initial={{ strokeWidth: 3, opacity: 1 }} animate={{ strokeWidth: 1, opacity: 0 }} transition={{ duration: 0.6 }} />
                 )}
                 {showStripes && <WarmingStripes cells={stripes.cells} maxAbs={stripes.maxAbs} y={layout.stripes[0]} height={layout.stripes[1]} referenceLabel={stripes.reference.label} sspLabel={fmtSsp(ssp)} />}
-                {hover && <Playhead ref={ghostRef} ghost top={sparkTop} bottom={trackY + trackH} handleY={trackY} />}
+                {hover && <Playhead ref={ghostRef} ghost x={scale.x(scale.invert(hover.x))} top={sparkTop} bottom={trackY + trackH} handleY={trackY} />}
                 <Playhead ref={playheadRef} top={sparkTop} bottom={trackY + trackH + 2} handleY={trackY} buffering={buffering} interpolated={interpolated} onPointerDown={undefined} />
               </svg>
             </div>

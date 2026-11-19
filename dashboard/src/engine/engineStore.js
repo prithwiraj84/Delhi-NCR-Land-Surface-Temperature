@@ -10,7 +10,8 @@
  *   reason   user-facing text for unavailable / buffering / error (null otherwise)
  *   path     "gpu" | "cpu" (+ `pathReason` when the CPU path is forced)
  *   legend   {layer, kind: "sequential"|"diverging"|"categorical", ramp, lo, hi, unit, stretched,
- *             variable, mode, heightMode, categories, note} | null
+ *             variable, mode, heightMode, categories, note, hatch} | null
+ *            (`hatch`: the drawn frame hatches / darkens outside-AOA cells → show the hatch key)
  *   raster   {visible, available, reason, preview, key}
  *   lens     {on, available, reason}
  *   compare  {on, kind, splitPx, labels: [left, right]}

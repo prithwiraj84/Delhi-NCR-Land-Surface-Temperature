@@ -1,14 +1,15 @@
 /**
  * Social preview card (1200 x 630), generated at build time with the real 2025 daytime map
  * (public/media/hero-og.png, written by scripts/build-media.mjs) and the headline numbers.
- * Twitter / X reuses it (twitter-image.jsx).
+ * Twitter / X reuses it: lib/site/meta.js points every page's twitter:image at /opengraph-image.
+ * A stat whose numbers are missing from the bundle is left out, never printed as a placeholder.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { ImageResponse } from "next/og";
 import { getFacts, signed } from "../lib/site/facts.js";
 
-export const alt = "Delhi NCR Heat Atlas: land surface temperature 1990–2050, explained with AI";
+export const alt = "Delhi NCR Heat Atlas: land surface temperature, observed and projected, explained with AI";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -20,11 +21,13 @@ export default async function OpengraphImage() {
   } catch {
     map = null;
   }
+  const trend = f.day?.trend;
+  const all = f.years.all;
   const stats = [
-    [signed(f.day?.change, 1), `daytime warming ${f.day?.first?.year}–${f.day?.last?.year}`],
-    [f.accuracy.day?.spatial ? `R² ${f.accuracy.day.spatial.r2.toFixed(2)}` : "", "spatial cross-validation"],
-    [`${f.years.all[0]}–${f.years.all.at(-1)}`, "day and night, 3 SSPs"],
-  ].filter(([v]) => v);
+    trend && trend.period ? [`${signed(trend.perDecade, 2, "")} °C/decade`, `daytime trend ${trend.period[0]}–${trend.period[1]}`] : null,
+    f.accuracy.day?.spatial ? [`R² ${f.accuracy.day.spatial.r2.toFixed(2)}`, "spatial cross-validation"] : null,
+    all.length > 1 ? [`${all[0]}–${all.at(-1)}`, `day and night${f.scenarios.length ? `, ${f.scenarios.length} SSPs` : ""}`] : null,
+  ].filter(Boolean);
 
   return new ImageResponse(
     (
@@ -37,7 +40,9 @@ export default async function OpengraphImage() {
           </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ fontSize: 64, fontWeight: 700, lineHeight: 1.04, letterSpacing: -2 }}>How hot is Delhi NCR getting, and why?</div>
-            <div style={{ marginTop: 22, fontSize: 27, color: "#A7AEBC", lineHeight: 1.35 }}>Land surface temperature 1990–2050, explained with machine learning and SHAP.</div>
+            <div style={{ marginTop: 22, fontSize: 27, color: "#A7AEBC", lineHeight: 1.35 }}>
+              {`Land surface temperature${all.length > 1 ? ` ${all[0]}–${all.at(-1)}` : ""}, explained with machine learning and SHAP.`}
+            </div>
           </div>
           <div style={{ display: "flex", gap: 40 }}>
             {stats.map(([v, l]) => (

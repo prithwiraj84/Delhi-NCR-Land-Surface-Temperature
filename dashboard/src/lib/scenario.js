@@ -626,8 +626,12 @@ function perturbBaseV2({ base, manifest, coupling, scenario, indices }) {
     const spring = columns.ndvi_spring ?? cols.ndvi_spring;
     const ndvi = columns.ndvi ?? cols.ndvi;
     const drop = Float32Array.from(cols[NDVI_DROP]);
+    // Only rows whose ndvi / ndvi_spring really changed: spring − ndvi recomputed elsewhere differs
+    // from the exported ndvi_drop by quantisation noise and would mark unchanged rows as affected.
+    const changedAt = (col, base, i) => col !== base && col[i] !== base[i] && !(Number.isNaN(col[i]) && Number.isNaN(base[i]));
     for (let j = 0; j < rows.length; j += 1) {
       const i = rows[j];
+      if (!changedAt(ndvi, cols.ndvi, i) && !changedAt(spring, cols.ndvi_spring, i)) continue;
       if (spring && Number.isFinite(spring[i]) && Number.isFinite(ndvi[i])) drop[i] = spring[i] - ndvi[i];
     }
     columns[NDVI_DROP] = drop;

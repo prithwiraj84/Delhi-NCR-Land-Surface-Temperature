@@ -35,6 +35,7 @@ import { ErrorBoundary } from "../components/common/ErrorBoundary.jsx";
 import { ErrorState } from "../components/common/ErrorState.jsx";
 import { UNSUPPORTED_BROWSER_MESSAGE } from "../data/bundleStore.js";
 import { ScanSkeleton } from "../components/ui/ScanSkeleton.jsx";
+import { PlaybackHost } from "../time/PlaybackHost.jsx";
 import { announce } from "./announcer.js";
 import { BootSequence } from "./BootSequence.jsx";
 import { useBundleMeta } from "./bundleMeta.js";
@@ -279,36 +280,47 @@ export function AppShell() {
   const onBootDone = useCallback(() => setBooted(true), []);
   const behaviour = stageBehaviour(routeId, mobile ? 320 : Infinity);
   const stageMounted = ready && behaviour !== "unmounted";
+  const booting = !booted || status === "loading";
+
+  // The boot overlay is a modal dialog: the shell behind it is inert (no focus, no AT) meanwhile.
+  const shellRef = useRef(null);
+  useEffect(() => {
+    if (shellRef.current) shellRef.current.inert = booting;
+  }, [booting]);
 
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-bg text-ink">
-      <a
-        href="#main-content"
-        onClick={(e) => {
-          e.preventDefault();
-          document.getElementById("main-content")?.focus();
-        }}
-        className="focus-ring sr-only-focusable absolute left-3 top-3 z-boot rounded-md bg-signal px-3 py-1.5 text-sm font-medium text-void"
-      >
-        Skip to content
-      </a>
-      <CommandBar />
-      <DataModeBanner manifest={manifest} />
-      <div className="flex min-h-0 flex-1">
-        <NavRail orientation="vertical" />
-        <main id="main-content" tabIndex={-1} className="relative min-w-0 flex-1 overflow-hidden outline-none">
-          {stageMounted && <StageSlot behaviour={behaviour} />}
-          {ready && <RouteOutlet routeId={routeId} behaviour={behaviour} level={level} />}
-          {(status === "empty" || status === "error") && <BundleProblem status={status} error={error} reload={reload} />}
-          {ready && !manifest && <EmptyState icon={Boxes} title="The manifest is empty" description="The bundle loaded but carries no manifest content." />}
-        </main>
+      <div ref={shellRef} className="contents">
+        <a
+          href="#main-content"
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById("main-content")?.focus();
+          }}
+          className="focus-ring sr-only-focusable absolute left-3 top-3 z-boot rounded-md bg-signal px-3 py-1.5 text-sm font-medium text-void"
+        >
+          Skip to content
+        </a>
+        <CommandBar />
+        <DataModeBanner manifest={manifest} />
+        <div className="flex min-h-0 flex-1">
+          <NavRail orientation="vertical" />
+          <main id="main-content" tabIndex={-1} className="relative min-w-0 flex-1 overflow-hidden outline-none">
+            {stageMounted && <StageSlot behaviour={behaviour} />}
+            {ready && <RouteOutlet routeId={routeId} behaviour={behaviour} level={level} />}
+            {(status === "empty" || status === "error") && <BundleProblem status={status} error={error} reload={reload} />}
+            {ready && !manifest && <EmptyState icon={Boxes} title="The manifest is empty" description="The bundle loaded but carries no manifest content." />}
+          </main>
+        </div>
+        <NavRail orientation="mobile" />
+        <CommandPalette />
+        <ShortcutSheet />
       </div>
-      <NavRail orientation="mobile" />
-      <CommandPalette />
-      <ShortcutSheet />
+      {/* The playback loop runs on every route (Space plays anywhere); the hook is ref-counted. */}
+      {ready && <PlaybackHost />}
       <ToastHost />
       <LiveAnnouncer />
-      {(!booted || status === "loading") && <BootSequence status={status} progress={data.progress ?? data.bundle?.progress ?? null} meta={meta} onDone={onBootDone} />}
+      {booting && <BootSequence status={status} progress={data.progress ?? data.bundle?.progress ?? null} meta={meta} onDone={onBootDone} />}
     </div>
   );
 }

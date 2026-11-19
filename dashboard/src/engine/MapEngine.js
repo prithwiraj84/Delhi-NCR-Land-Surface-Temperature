@@ -203,7 +203,9 @@ export class MapEngine {
       bundle.subscribe((s, prev) => {
         if (!prev || s.generation !== prev.generation || s.status !== prev.status || s.resources !== prev.resources) inv();
       }),
-      onUrlCamera(() => {
+      onUrlCamera((event) => {
+        // The engine's own debounced report comes back through the same channel: not a new camera.
+        if (event?.source === "report") return;
         const cam = getUrlCamera();
         if (cam) this.flyTo(cam);
       }),
@@ -285,6 +287,7 @@ export class MapEngine {
     // builds a new device): reusing one would raise "does not belong to this context" and drop the
     // boundaries and labels. Rebuild them all on the new device.
     this._resetLayerCaches();
+    this._resetDeviceFlags();
     this.device = device;
     try {
       const atlas = thermalAtlas();
@@ -312,8 +315,21 @@ export class MapEngine {
   resetGpu() {
     this.disposeGpu();
     this._resetLayerCaches();
+    this._resetDeviceFlags();
     this.device = null;
     if (this.deck) this.deck = null;
+  }
+
+  /**
+   * Per-device failure and warm-up state: a shader / texture failure or a finished warm-up on the
+   * old (lost) device says nothing about the new one, so Retry really retries the GPU paths.
+   */
+  _resetDeviceFlags() {
+    this.gpuFailed = false;
+    this.rasterFailed = false;
+    this._warmScheduled = false;
+    this._warmRaster = undefined;
+    this._warmReticle = undefined;
   }
 
   /** Drop every cached layer instance and per-layer buffer (new GPU device). */
@@ -345,6 +361,12 @@ export class MapEngine {
       // already destroyed with the context
     }
     this.lut = null;
+    try {
+      this._warmTex?.destroy();
+    } catch (_error) {
+      // already destroyed with the context
+    }
+    this._warmTex = null;
   }
 
   /** Stage active (interactive + rendering) and dimmed (visible but paused) flags from AppShell. */
@@ -938,14 +960,15 @@ export class MapEngine {
     const elevationScale = zoomFactor * Math.max(0, sink);
     const pickable = !interacting;
     const opacity = v.analyst?.opacity ?? 0.92;
-    const lensOn = Boolean(v.lens) && fx.lensAllowed && !this.mobile && !raster.visible;
+    const compareOn = Boolean(t.compare?.kind);
+    // No lens while comparing (_rasterPlan): its unsplit raster would cover both sides.
+    const lensOn = Boolean(v.lens) && fx.lensAllowed && !this.mobile && !raster.visible && !compareOn;
     this.lensOn = lensOn;
     // The columns are masked out under the ring only while the ring is actually drawn AND there is
     // a 250 m raster to show inside it: with no pointer the mask layer does not exist (deck warns
     // "Could not find a mask layer" and luma "Binding mask_texture not found"), and in a v1 bundle
     // (no rasters) masking would just punch an empty hole — the ring + reason label still show.
     const lensMask = lensOn && Boolean(this.pointer) && Boolean(raster.lensLayer);
-    const compareOn = Boolean(t.compare?.kind);
     const layers = [];
     this._memoUsed = new Set();
 
@@ -956,13 +979,13 @@ export class MapEngine {
     if (raster.warmLayer) {
       layers.push(raster.warmLayer());
       this._warmRaster = "drawn";
-      requestAnimationFrame(() => this.invalidate());
+      raf(() => this.invalidate());
     } else if (this._warmRaster === "drawn") this._warmRaster = "done";
     if (this._warmReticle === "wanted" && this.geo) {
       const [w, so, e, no] = this.geo.bounds;
       layers.push(createReticleWarmLayer((w + e) / 2, (so + no) / 2));
       this._warmReticle = "drawn";
-      requestAnimationFrame(() => this.invalidate());
+      raf(() => this.invalidate());
     } else if (this._warmReticle === "drawn") this._warmReticle = "done";
 
     let columnsDrawn = false;
@@ -1273,12 +1296,15 @@ export class MapEngine {
 
     const g = this.geo;
     const resolution = h3ResolutionFor(g.cellSizeM);
+    // h3-js loaded but indexing THIS cell set failed: say so (a new bundle retries).
+    if (st.indexFailed === g.cells) return { layer: null, reason: "H3 aggregation unavailable (indexing failed)" };
     if (!st.index || st.index.cells !== g.cells || st.index.resolution !== resolution) {
       try {
         st.index = buildHexIndex(g.cells, resolution, st.mod.latLngToCell);
       } catch (error) {
         console.warn("[engine] H3 index failed", error);
-        st.status = "error";
+        st.index = null;
+        st.indexFailed = g.cells;
         return { layer: null, reason: "H3 aggregation unavailable (indexing failed)" };
       }
       const nHex = st.index.hexIds.length;
@@ -1286,6 +1312,11 @@ export class MapEngine {
       st.elevations = new Float32Array(nHex);
       st.means = new Float32Array(nHex);
       st.codes = new Int16Array(nHex);
+      // Per-hexagon VSUP codes and outside-AOA flags of both slots (modal over the cells).
+      st.vsupA = new Int16Array(nHex);
+      st.vsupB = new Int16Array(nHex);
+      st.aoaA = new Uint8Array(nHex);
+      st.aoaB = new Uint8Array(nHex);
       st.key = null;
     }
     const idx = st.index;
@@ -1304,14 +1335,32 @@ export class MapEngine {
       } else {
         hexMeans(this._mixedValues(display), idx.cellHex, nHex, st.means);
         const hc = heightChannel({ lo: ch.lo, hi: ch.hi, ref: this._heightRef(display), cap: HEIGHT_CAP_C });
+        // The same decoration as the columns: VSUP fog on projected slots (absent when the fog is
+        // switched off: the frames then carry no codes) and the outside-AOA darkening, per hexagon
+        // from the modal code of its cells, blended by the display mix like the cell slots.
+        const hexVsup = (codes, out) => (codes ? hexModes(codes, idx.cellHex, nHex, 5, out) : null);
+        const hexAoa = (flags, out) => {
+          if (!flags) return null;
+          hexModes(flags, idx.cellHex, nHex, 2, st.codes);
+          for (let h = 0; h < nHex; h += 1) out[h] = st.codes[h] === 1 ? 1 : 0;
+          return out;
+        };
+        const vsupA = hexVsup(display.A.vsup, st.vsupA);
+        const vsupB = display.B.vsup === display.A.vsup ? vsupA : hexVsup(display.B.vsup, st.vsupB);
+        const aoaA = hexAoa(display.A.aoa, st.aoaA);
+        const aoaB = display.B.aoa === display.A.aoa ? aoaA : hexAoa(display.B.aoa, st.aoaB);
         colorizeSlots({
           valuesA: st.means,
           valuesB: st.means,
-          weight: 0,
+          weight: display.mix,
           channelA: ch,
           channelB: ch,
           valueMix: true,
-          hatchOn: false,
+          vsupA,
+          vsupB,
+          aoaA,
+          aoaB,
+          hatchOn: true,
           outColors: st.colors,
           outElevations: st.elevations,
           height: { mode: hCode, from: this.height.from, blend: heightBlend, A: hc, B: hc },
@@ -1437,15 +1486,21 @@ export class MapEngine {
       bufs.k = 1 - bufs.k;
       const colors = bufs.colors[bufs.k];
       const elevations = bufs.elevations[bufs.k];
+      // The Drivers brush dims unselected cells on both sides, as on the single map.
+      const brush = brushMask && brushMask.length === n ? brushMask : null;
+      // Attribute wrappers are made once per recolour and kept with the side, so their identity
+      // changes only with the content (ThermalColumnLayer reuses its data object, deck re-uploads
+      // nothing on frames where only the other side or a uniform changed).
+      const attributes = { getFillColor: { value: colors, size: 4, normalized: true }, getElevation: { value: elevations, size: 1 } };
       if (d.kind === "categorical") {
-        colorizeCategorical({ codes: d.frame.codes, palette: d.frame.palette, outColors: colors });
+        colorizeCategorical({ codes: d.frame.codes, palette: d.frame.palette, outColors: colors, brush, maskOn: Boolean(brush) });
         elevations.fill(0);
-        return { key, brush: brushMask, colors, elevations, flat: true, display: d };
+        return { key, brush: brushMask, colors, elevations, attributes, flat: true, display: d };
       }
       const ref = this._heightRef(d);
       const hc = heightChannel({ lo: d.channel.lo, hi: d.channel.hi, ref, cap: HEIGHT_CAP_C });
-      colorizeSlots({ valuesA: d.A.values, valuesB: d.B.values, weight: d.mix, channelA: d.channel, channelB: d.channel, valueMix: true, vsupA: d.A.vsup, vsupB: d.B.vsup, aoaA: d.A.aoa, aoaB: d.B.aoa, outColors: colors, outElevations: elevations, height: { mode: hCode, A: hc, B: hc } });
-      return { key, brush: brushMask, colors, elevations, flat: false, display: d };
+      colorizeSlots({ valuesA: d.A.values, valuesB: d.B.values, weight: d.mix, channelA: d.channel, channelB: d.channel, valueMix: true, vsupA: d.A.vsup, vsupB: d.B.vsup, aoaA: d.A.aoa, aoaB: d.B.aoa, brush, maskOn: Boolean(brush), outColors: colors, outElevations: elevations, height: { mode: hCode, A: hc, B: hc } });
+      return { key, brush: brushMask, colors, elevations, attributes, flat: false, display: d };
     };
     cc.sides.left = build("left", sides.left);
     cc.sides.right = build("right", sides.right);
@@ -1468,7 +1523,7 @@ export class MapEngine {
             splitEnabled: true,
             splitSide: keep,
             splitX: split,
-            attributes: { getFillColor: { value: side.colors, size: 4, normalized: true }, getElevation: { value: side.elevations, size: 1 } },
+            attributes: side.attributes,
           })
         : null;
     const l = mk(left, "thermal-compare-left", "left");
@@ -1491,9 +1546,33 @@ export class MapEngine {
     const zoom = this.viewState.zoom ?? HOME_ZOOM;
     const lensWanted = Boolean(v.lens) && fx.lensAllowed && !this.mobile;
     const wantRaster = wantMode === "raster" || (wantMode === "auto" && !this.mobile && zoom >= RASTER_AUTO_ZOOM);
-    // Idle warm-up (_scheduleWarmup): load the textures and hand back an invisible layer only.
+    // Split compare draws two 1 km instances: an unsplit raster (or lens) would develop under or
+    // over both sides, so neither is shown (nor reported visible) while comparing.
+    if (t.compare?.kind && (wantRaster || lensWanted)) return none("split compare draws the 1 km grid", true);
+    // Idle warm-up (_scheduleWarmup): an invisible draw that compiles the raster shader. It is
+    // NEUTRAL: it reports nothing (the plan stays "not wanted") and downloads nothing — it draws a
+    // 1×1 placeholder texture, so no 250 m raster is fetched at the home zoom.
     const warming = this._warmRaster === "wanted" && wantMode === "auto" && !this.mobile && !wantRaster && !lensWanted;
-    if (!wantRaster && !lensWanted && !warming) return none(null, true);
+    if (warming) {
+      if (this.rasterFailed || !this.device || !this.lut || tl.schema === "v1" || !display || display.kind !== "continuous" || !this.geo) return none(null, true);
+      const placeholder = this._warmRasterTexture();
+      if (!placeholder) return none(null, true);
+      const ch = display.channel;
+      const bounds = this.geo.bounds;
+      const warmLayer = () =>
+        new ThermalRasterLayer({
+          id: "thermal-raster-warm",
+          bounds,
+          _imageCoordinateSystem: "lnglat",
+          textureA: placeholder,
+          textureB: placeholder,
+          thermalLut: this.lut,
+          thermalRaster: { boundsLL: bounds, channel: [ch.lo, ch.hi, ch.rampIndex, 1], channelB: [ch.lo, ch.hi, ch.rampIndex, 0], lonRange: [bounds[0], bounds[2], 0, 0], fx: [1, fx.isotherms ? 1 : 0, 0, 0] },
+          pickable: false,
+        });
+      return { ...none(null, true), warmLayer };
+    }
+    if (!wantRaster && !lensWanted) return none(null, true);
     if (this.rasterFailed) return none("raster shader unavailable on this device");
     if (!this.device || !this.lut) return none("GPU not ready");
     if (tl.schema === "v1") return none("250 m rasters are unavailable in a v1 bundle — rerun notebook v2");
@@ -1557,7 +1636,6 @@ export class MapEngine {
         pickable: false,
         ...(extra ?? {}),
       });
-    if (warming) return { ...none(null, true), warmLayer: () => make("thermal-raster-warm", 0) };
     return {
       visible: wantRaster,
       available: true,
@@ -1668,6 +1746,18 @@ export class MapEngine {
     return { status: "ready", texture: entry.texture, data: res.data, preview: Boolean(preview) };
   }
 
+  /** 1×1 placeholder raster texture of the idle warm-up (per device; released in disposeGpu). */
+  _warmRasterTexture() {
+    if (this._warmTex) return this._warmTex;
+    try {
+      this._warmTex = createRasterTexture(this.device, { key: "warm", width: 1, height: 1, values: new Uint8Array(1), flags: null });
+    } catch (error) {
+      console.warn("[engine] raster warm-up texture could not be created", error);
+      this._warmTex = null;
+    }
+    return this._warmTex;
+  }
+
   _gpuMB() {
     const n = this.geo?.cells.n ?? 0;
     let bytes = n * (12 + 8 + 4 + 4 + 4 + 4 + 4);
@@ -1770,7 +1860,7 @@ export class MapEngine {
 
   /** Legend of content that is not drawn: no ramp or domain, the engine's reason as the note. */
   _unavailableLegend(desc, status, reason) {
-    return { layer: desc.layer, kind: "unavailable", ramp: null, lo: null, hi: null, unit: null, stretched: false, crossFrame: false, domainYear: null, variable: desc.variable, mode: desc.mode, heightMode: "flat", categories: null, note: reason ?? (status === "error" ? "this layer failed to load" : "not available for this frame"), held: false };
+    return { layer: desc.layer, kind: "unavailable", ramp: null, lo: null, hi: null, unit: null, stretched: false, crossFrame: false, domainYear: null, variable: desc.variable, mode: desc.mode, heightMode: "flat", categories: null, note: reason ?? (status === "error" ? "this layer failed to load" : "not available for this frame"), held: false, hatch: false };
   }
 
   _drawnLegend(display, desc, heightMode) {
@@ -1789,7 +1879,7 @@ export class MapEngine {
         }
         this._legendCats.byFrame.set(display.frame, categories);
       }
-      return { layer: desc.layer, kind: "categorical", ramp: null, lo: null, hi: null, unit: null, stretched: false, crossFrame: false, domainYear: null, variable: desc.variable, mode: desc.mode, heightMode: "flat", categories, note: null, held: false };
+      return { layer: desc.layer, kind: "categorical", ramp: null, lo: null, hi: null, unit: null, stretched: false, crossFrame: false, domainYear: null, variable: desc.variable, mode: desc.mode, heightMode: "flat", categories, note: null, held: false, hatch: false };
     }
     const ch = display.channel;
     return {
@@ -1808,7 +1898,28 @@ export class MapEngine {
       categories: null,
       note: display.A.note ?? null,
       held: Boolean(display.held),
+      // Outside-AOA cells of the drawn slot are hatched (GPU) / darkened (CPU, H3): the legend
+      // shows its hatch key only then (observed or projected frames alike).
+      hatch: this._hasOutside((display.mix >= 0.5 ? display.B : display.A).aoa),
     };
+  }
+
+  /** True when an outside-AOA mask flags any cell (memoised per mask array). */
+  _hasOutside(aoa) {
+    if (!aoa) return false;
+    if (!this._outsideMemo) this._outsideMemo = new WeakMap();
+    let v = this._outsideMemo.get(aoa);
+    if (v === undefined) {
+      v = false;
+      for (let i = 0; i < aoa.length; i += 1) {
+        if (aoa[i]) {
+          v = true;
+          break;
+        }
+      }
+      this._outsideMemo.set(aoa, v);
+    }
+    return v;
   }
 
   // -------------------------------------------------------------------------------------

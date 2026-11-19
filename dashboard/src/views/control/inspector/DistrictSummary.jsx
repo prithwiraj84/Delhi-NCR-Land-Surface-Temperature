@@ -70,6 +70,11 @@ export function DistrictSummary({ districtId, district, t, mode, ssp, timeline }
   const dayData = day.status === "ready" ? day.data : null;
   const nightData = night.status === "ready" ? night.data : null;
   const dtr = exactYear !== null && dayData && nightData ? (seriesValueAt(dayData, exactYear, ssp)?.mean ?? NaN) - (seriesValueAt(nightData, exactYear, ssp)?.mean ?? NaN) : NaN;
+  // A DTR that pairs a modelled frame (e.g. night 1990/1995, ERA5-Land hindcast) with an observation is flagged.
+  const modelledSides = exactYear !== null ? ["day", "night"].filter((m) => tierOf(timeline, exactYear, m) === "modelled") : [];
+  const dtrCaveat = finite(dtr) && modelledSides.length ? ` (${modelledSides.join(" and ")} modelled: not an observation)` : "";
+  // A district with no cells in the grid (merged in the boundary layer) has no values at all.
+  const noCells = Boolean(dayData) && !dayData.frames.some((f) => finite(f.mean)) && !(nightData?.frames ?? []).some((f) => finite(f.mean));
   let rank = null;
   if (exactYear !== null && series.status === "ready" && mode !== "dtr") {
     const entries = scopesOfKind(series.data, "district").map((s) => ({ id: s.id, value: seriesValueAt(scopeSeries(series.data, s.id, mode), exactYear, null)?.uhi ?? NaN }));
@@ -119,9 +124,14 @@ export function DistrictSummary({ districtId, district, t, mode, ssp, timeline }
         </span>
         {finite(v?.mean) && finite(n?.mean) && <Delta value={v.mean - n.mean} dp={1} context="vs NCR" approx={Boolean(v.interpolated)} className="text-[12px]" />}
       </p>
+      {noCells && (
+        <p className="text-[12px] text-ink-muted" data-testid="district-no-cells">
+          No cells (merged in the boundary layer): this district has no values of its own.
+        </p>
+      )}
       <MiniFanChart panels={panels} first={timeline.first} last={timeline.last} now={timeline.now} year={t} ssp={ssp} caption={`${district?.name ?? "District"} mean LST by frame${timeline.modeIds.includes("night") ? ", day and night" : ", day"}${ssp && timeline.scenarioIds.includes(ssp) ? `, with the ${fmtSsp(ssp)} fan` : ""}`} />
       <p className="font-mono text-[11px] text-ink-muted">
-        {finite(dtr) ? `DTR ${fmt(dtr, 1)} °C` : "DTR n/a"}
+        {finite(dtr) ? `DTR ${fmt(dtr, 1)} °C${dtrCaveat}` : "DTR n/a"}
         {rank ? ` · Surface UHI (urban − rural) rank ${rank.rank}/${rank.of}` : ""}
         {rank && exactYear !== null && dayData && mode === "day" ? ` · ${fmtSigned(seriesValueAt(dayData, exactYear, null)?.uhi, 1)} °C by day` : ""}
       </p>

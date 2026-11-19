@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { getFacts, signed } from "./facts.js";
+import { annualContrast, getFacts, rangeText, signed, spell } from "./facts.js";
 import { pageMetadata } from "./meta.js";
 import { absoluteUrl } from "./config.js";
 
@@ -25,6 +25,18 @@ describe("signed()", () => {
     expect(signed(-0.45, 2)).toBe("−0.45 °C");
     expect(signed(0, 1, "")).toBe("±0.0");
     expect(signed(null)).toBe("n/a");
+  });
+  it("takes the sign of the rounded value (no '−0.0')", () => {
+    expect(signed(-0.02, 1, "")).toBe("±0.0");
+    expect(signed(0.04, 1, "")).toBe("±0.0");
+  });
+  it("formats intervals, signed or plain, and small counts in words", () => {
+    expect(rangeText([0.73, 1.4])).toBe("+0.73 to +1.40 °C");
+    expect(rangeText([0.0067, 1.537], 2, "", true)).toBe("0.01 to 1.54");
+    expect(rangeText([1, null])).toBeNull();
+    expect(spell(3, true)).toBe("Three");
+    expect(spell(35)).toBe("35");
+    expect(spell(undefined)).toBe("");
   });
 });
 
@@ -74,5 +86,24 @@ describe.skipIf(!isV2)("build-time facts from public/data", () => {
     expect(f.drivers.day[0].value).toBeGreaterThanOrEqual(f.drivers.day[1].value);
     expect(f.districts.length).toBeGreaterThan(3);
     expect(f.districts[0].day2025).toBeGreaterThanOrEqual(f.districts.at(-1).day2025);
+  });
+
+  it("lists the raster/ PNGs with the bundle files (the /data page counts them)", () => {
+    const png = f.files.filter((x) => x.name.endsWith(".png"));
+    expect(png.length).toBeGreaterThan(0);
+    expect(png.every((x) => x.name.startsWith("raster/") && x.bytes > 0)).toBe(true);
+  });
+
+  it("exports the frame trend with its CI and the annual series it is compared with", () => {
+    const t = f.day.trend;
+    expect(Number.isFinite(t.perDecade)).toBe(true);
+    expect(t.ci[0]).toBeLessThanOrEqual(t.perDecade);
+    expect(t.ci[1]).toBeGreaterThanOrEqual(t.perDecade);
+    expect(t.n).toBeGreaterThanOrEqual(2);
+    const text = annualContrast(f.day, "day", f.seasonLabel);
+    if (f.day.annual.air || f.day.annual.satellite) {
+      expect(text).toMatch(/per decade/);
+      expect(text).not.toMatch(/undefined|NaN|null/);
+    }
   });
 });

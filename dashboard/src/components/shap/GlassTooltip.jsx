@@ -2,6 +2,10 @@
  * Glass tooltip shell shared by the explorer's charts (Recharts `content` renderers and the
  * HTML heatmap). Values lead, labels follow: the number is the strong element and the
  * series name is secondary; series are keyed by a short line/swatch, never by coloured text.
+ *
+ * Hover tooltips only enhance: what they show is also in an aria-label, a table view or the
+ * focused control's name, so the card is aria-hidden (no live region that re-announces on every
+ * pointer move, no double announcement of a focused heatmap cell).
  */
 import { cn } from "../../lib/cn.js";
 
@@ -9,7 +13,7 @@ import { cn } from "../../lib/cn.js";
 export function GlassTooltipCard({ title, children, className, style }) {
   return (
     <div
-      role="status"
+      aria-hidden="true"
       className={cn(
         "pointer-events-none min-w-[11rem] max-w-[18rem] rounded-lg border border-panel-border",
         "bg-slate-900/85 px-3 py-2 text-xs text-ink shadow-glass backdrop-blur-md",

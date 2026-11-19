@@ -19,17 +19,22 @@ function ticks(lo, hi, step) {
 }
 
 /**
- * NCR mean LST through time: observed frames (CI band + markers, hollow for sparse / modelled
- * tiers) and the SSP fans (p05-p95 band + p50 line) from the weather-normalised 2025 baseline.
+ * NCR mean LST through time: observed frames (CI band + markers) and the SSP fans (p05-p95 band
+ * + p50 line) from the weather-normalised baseline of the last observed frame. Tier encoding
+ * (UI_SPEC_v2 §4.6): observed = filled circle on a solid line; observed-sparse / reconstructed =
+ * hollow circle; modelled hindcast = hollow diamond, joined by a dotted line.
  */
 export function TrendChart({ mode, summary, scenarios, title, id }) {
   if (!summary?.frames?.length) return null;
   const W = 600;
   const H = 330;
   const M = { l: 40, r: 78, t: 20, b: 34 };
-  const x0 = 1988;
-  const x1 = 2052;
   const proj = scenarios.flatMap((s) => summary.projections[s]?.rows ?? []);
+  // Time axis from the bundle: first frame to the last projected year, ticks every decade.
+  const firstYear = summary.frames[0].year;
+  const lastYear = Math.max(summary.frames.at(-1).year, ...proj.map((r) => r.year).filter(Number.isFinite));
+  const x0 = firstYear - 2;
+  const x1 = lastYear + 2;
   const vals = [...summary.frames.flatMap((f) => [f.ci?.[0] ?? f.mean, f.ci?.[1] ?? f.mean]), ...proj.flatMap((r) => [r.p05, r.p95])].filter(Number.isFinite);
   const lo = Math.floor(Math.min(...vals) - 0.5);
   const hi = Math.ceil(Math.max(...vals) + 0.5);
@@ -39,8 +44,9 @@ export function TrendChart({ mode, summary, scenarios, title, id }) {
   const obs = summary.frames;
   const band = obs.filter((f) => f.ci);
   const bandPath = band.length > 1 ? `M${band.map((f) => `${x(f.year)},${y(f.ci[1])}`).join("L")}L${[...band].reverse().map((f) => `${x(f.year)},${y(f.ci[0])}`).join("L")}Z` : null;
-  const line = `M${obs.map((f) => `${x(f.year)},${y(f.mean)}`).join("L")}`;
-  const now = obs.at(-1)?.year ?? 2025;
+  // One segment per pair of consecutive frames; a segment touching a modelled frame is dotted.
+  const segments = obs.slice(1).map((f, i) => ({ a: obs[i], b: f, modelled: obs[i].tier === "modelled" || f.tier === "modelled" }));
+  const now = obs.at(-1).year;
   const yStep = hi - lo > 8 ? 2 : 1;
   // End labels of the SSP strands: sorted by height and pushed apart to >= 15 px (no overlap).
   const labelY = {};
@@ -59,7 +65,9 @@ export function TrendChart({ mode, summary, scenarios, title, id }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-labelledby={`${id}-title ${descId}`}>
         <title id={`${id}-title`}>{title}</title>
         <desc id={descId}>
-          NCR mean land surface temperature by frame from {obs[0].year} to {now}, then SSP scenario projections to 2050 (median line, 5-95 % band).
+          NCR mean land surface temperature by frame from {obs[0].year} to {now}
+          {proj.length ? `, then SSP scenario projections to ${lastYear} (median line, 5-95 % band)` : ""}.
+          {obs.some((f) => f.tier === "modelled") ? " Model hindcasts are drawn as diamonds on a dotted line." : ""}
         </desc>
         {/* grid */}
         {ticks(lo, hi, yStep).map((v) => (
@@ -70,7 +78,7 @@ export function TrendChart({ mode, summary, scenarios, title, id }) {
             </text>
           </g>
         ))}
-        {[1990, 2000, 2010, 2020, 2030, 2040, 2050].map((yr) => (
+        {ticks(firstYear, lastYear, 10).map((yr) => (
           <text key={yr} x={x(yr)} y={H - 10} textAnchor="middle" fontSize="12.5" fill={color.inkFaint} fontFamily="Geist Mono Variable, monospace">
             {yr}
           </text>
@@ -83,10 +91,27 @@ export function TrendChart({ mode, summary, scenarios, title, id }) {
         </text>
         {/* observed */}
         {bandPath && <path d={bandPath} fill={accent} opacity="0.13" />}
-        <path d={line} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" />
+        {segments.map(({ a, b, modelled }) => (
+          <line
+            key={`${a.year}-${b.year}`}
+            x1={x(a.year)}
+            y1={y(a.mean)}
+            x2={x(b.year)}
+            y2={y(b.mean)}
+            stroke={accent}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeDasharray={modelled ? "0.5 5" : undefined}
+          />
+        ))}
         {obs.map((f) => {
+          const cx = x(f.year);
+          const cy = y(f.mean);
+          if (f.tier === "modelled") {
+            return <path key={f.year} d={`M${cx},${cy - 5.5}L${cx + 5.5},${cy}L${cx},${cy + 5.5}L${cx - 5.5},${cy}Z`} fill="#08090D" stroke={accent} strokeWidth="1.6" strokeLinejoin="round" />;
+          }
           const hollow = f.tier !== "observed";
-          return <circle key={f.year} cx={x(f.year)} cy={y(f.mean)} r="4" fill={hollow ? "#08090D" : accent} stroke={accent} strokeWidth="1.6" />;
+          return <circle key={f.year} cx={cx} cy={cy} r="4" fill={hollow ? "#08090D" : accent} stroke={accent} strokeWidth="1.6" />;
         })}
         {/* scenarios */}
         {scenarios.map((s) => {
@@ -185,15 +210,15 @@ export function BarList({ items, max, unit = "", digits = 2, accent = "var(--bra
   );
 }
 
-/** 2050 uncertainty budget: share of the projection variance per source, one bar per SSP. */
-export function BudgetBars({ budget, scenarios }) {
+/** Uncertainty budget of one projected year: share of the projection variance per source, one bar per SSP. */
+export function BudgetBars({ budget, scenarios, year = "2050" }) {
   const SRC = [
     { key: "gcm", label: "Climate-model spread", color: "#6D8DFF" },
     { key: "sensitivity", label: "Surface sensitivity β", color: "#A78BFA" },
     { key: "model", label: "ML model error", color: "#45E0FF" },
     { key: "land", label: "Land-use path", color: color.ok },
   ];
-  const rows = scenarios.map((s) => ({ s, b: budget?.[s]?.["2050"] })).filter((r) => r.b);
+  const rows = scenarios.map((s) => ({ s, b: budget?.[s]?.[year] })).filter((r) => r.b);
   if (!rows.length) return null;
   return (
     <div>
