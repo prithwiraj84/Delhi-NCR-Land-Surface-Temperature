@@ -756,15 +756,19 @@ def _s11_cmip6_deltas():
                 d = gcm_deltas("ssp245", var)
                 if d is None:
                     raise RuntimeError(f"11: no CMIP6 data for {s} and no ssp245 to pattern-scale from")
-                ratios = {}
+                ratios, gsat_missing = {}, []
                 for y in _S11_PROJ:
                     g245 = float((gsat.get("ssp245") or {}).get(y, float("nan")))
                     gs = float((gsat.get(s) or {}).get(y, float("nan")))
-                    ratios[y] = gs / g245 if (np.isfinite(g245) and g245 > 0 and np.isfinite(gs)) else 1.0
+                    gsat_ok = bool(np.isfinite(g245) and g245 > 0 and np.isfinite(gs))
+                    ratios[y] = gs / g245 if gsat_ok else 1.0
+                    if not gsat_ok:
+                        gsat_missing.append(int(y))
                 d = {"models": d["models"], "delta": {y: d["delta"][y] * ratios[y] for y in _S11_PROJ}}
                 rec["method"] = "pattern-scaled"
                 rec["gsat_ratio"] = ratios
                 rec["source_scenario"] = "ssp245"
+                rec["gsat_missing_years"] = gsat_missing
             summary = {}
             for y in _S11_PROJ:
                 v = d["delta"][y]
@@ -772,6 +776,16 @@ def _s11_cmip6_deltas():
                               "p50": float(np.median(v)), "p95": float(np.percentile(v, 95)), "n": int(v.size)}
             rec["variables"][var] = {"models": d["models"], "delta": d["delta"], "summary": summary}
         rec["n_gcm"] = min(len(rec["variables"][v]["models"]) for v in ("tasmax", "tasmin"))
+        if rec.get("gsat_missing_years"):
+            # Without the AR6 GSAT increments the pattern scaling degenerates to a copy of ssp245: say so loudly,
+            # in the caveats (manifest notes) and in the scenario metadata, instead of silently publishing it.
+            rec["method_note"] = (f"AR6 GSAT increment missing for {rec['gsat_missing_years']}: ratio 1, i.e. "
+                                  f"{s} copies ssp245 in those frames")
+            _s11_cav = (f"{s} climate is NOT pattern-scaled for {rec['gsat_missing_years']}: the AR6 assessed GSAT "
+                        f"increments were missing, so its CMIP6 deltas copy ssp245 there (ratio 1).")
+            log(f"11: {'!' * 20} {_s11_cav}", "WARNING")
+            if _s11_cav not in DATA_CAVEATS:
+                DATA_CAVEATS.append(_s11_cav)
         out["scenarios"][s] = rec
     pat = FUTURE_INPUTS.get("cmip6_pattern") or {}
     out["pattern"] = {}
@@ -921,10 +935,16 @@ def _s11_land_scenario(s, ctx):
 # ρ = `AOA[m]['resid_rho_block20']` ∈ [0, 0.95]; ρ = 0 uses $U_{k,i}$ directly (bit-identical to independent
 # draws). A DI of +inf (row with a missing weighted feature, section 07) falls into the top decile and is flagged
 # outside the AOA. Scope sums of every draw are accumulated with a dense (cells × scopes) membership matrix per chunk.
+# The NCR scope is the mode's `FIXED_MASK` (the support of the observed NCR levels, SPEC §4.7), so its baseline_c is
+# $L_{base} + \overline{\bar r}_{FIXED}$ and the projected NCR series continues the observed one; districts and zones
+# use all their cells.
 
 # %%
 def _s11_scopes(m):
-    out = [("ncr", None)]
+    # NCR = the FIXED_MASK cells of the mode: the support of the observed NCR levels (SPEC §4.7), so the projected
+    # NCR fan, decomposition baseline_c and threshold years continue the observed level series without a
+    # composition step at 2025 (an all-cell mean differs from the fixed-mask level).
+    out = [("ncr", ("fixed", m) if m in _S11_FIXED else None)]
     out += [(f"d:{d}", d) for d in _S11_DIST_IDS]
     if m in ZONE_MODEL:
         out += [(f"z:{m}:{k}", ("zone", k)) for k in range(4)]
@@ -938,6 +958,8 @@ def _s11_membership(scopes, zones_y, sl):
     for j, (_sid, key) in enumerate(scopes):
         if key is None:
             M[:, j] = 1.0
+        elif isinstance(key, tuple) and key[0] == "fixed":
+            M[:, j] = _S11_FIXED[key[1]][sl]
         elif isinstance(key, tuple):
             M[:, j] = (zones_y[sl] == key[1])
         else:
@@ -1118,13 +1140,18 @@ def _s11_hash(*parts):
 def _s11_land_fingerprint():
     parts = [_S11_VERSION, _S11_PROJ, _S11_SCEN, _S11_NOW]
     for y in _S11_FRAMES_OBS:
-        for f in _S11_FRACS + _S11_H_TARGETS + ["log_pop", "dist_urban"]:
+        # the ERA5 grids enter the stage through the 2015-2025 climatology of the projected features
+        for f in _S11_FRACS + _S11_H_TARGETS + ["log_pop", "dist_urban"] + _S11_ERA5:
             v = np.asarray(FEATURE_GRIDS[y][f], np.float64)
             parts.append(np.array([np.nansum(v), np.isfinite(v).sum()]))
         parts.append(np.array([np.nansum(np.asarray(RAW_OBS[y]["pop"], np.float64))]))
     for m in _S11_MODES:
         parts.append(bytes(FINAL_MODELS[m].save_raw("ubj")))
         parts += [float(AOA[m]["threshold"]), float(AOA[m]["d_bar"])]
+        # COMPUTE_DI (run inside the stage) also uses the AOA standardisation, weights and training sample
+        for k in ("weights", "mean", "std", "train_sample"):
+            if AOA[m].get(k) is not None:
+                parts.append(np.asarray(AOA[m][k], np.float64))
         if m in ZONE_MODEL:
             parts.append(np.asarray(ZONE_MODEL[m]["centroids"], np.float64))
     parts += [FUTURE_INPUTS["urban_growth"], FUTURE_INPUTS["pop_growth"]]

@@ -662,7 +662,8 @@ def _failed(ns: dict, path: Path, cell: int, exc: BaseException, t0: float, run:
 
 def run_pipeline(code_dir: Path | str, ns: dict, until: str | None = None,
                  expected_bundle: str | None = None) -> dict[str, Any]:
-    """Execute sections 00..12 (or up to ``until``, e.g. ``"06"``) from ``code_dir`` in the namespace ``ns``.
+    """Execute sections 00..12 (or up to ``until``, e.g. ``"06"``, then a clean stop like ``LST_STOP_AFTER``) from
+    ``code_dir`` in the namespace ``ns``.
 
     Pass ``globals()`` from the launcher notebook so every pipeline variable stays available for inspection.
     Returns ``{"status": "ok" | "stopped" | "failed", ...}``; raises on a real failure unless ``LST_FAIL_SOFT`` is on
@@ -696,11 +697,17 @@ def run_pipeline(code_dir: Path | str, ns: dict, until: str | None = None,
     ns["_CURRENT_SECTION"] = "00"
     t0 = time.time()
     last_done: str | None = None
+    if until is not None:
+        until = f"{int(until):02d}"
+        run = {**run, "until": until}
     try:
         for path in paths:
             sid = path.name[:2]
             if until is not None and sid > until:
-                break
+                # a deliberate early end: a clean stop after `until` (RUN_STOPPED.json, packed cache), not "ALL OK"
+                if callable(ns.get("request_stop")):
+                    ns["request_stop"](f"until={until}: stopping before section {sid}")
+                return _stopped(ns, last_done or until, t0, run)
             cells = snapshot[path]
             print(f"\n{bar}\n>>> {path.name}  ({len(cells)} code cells)\n{bar}", flush=True)
             if sid == "00":

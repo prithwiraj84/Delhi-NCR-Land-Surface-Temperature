@@ -4,8 +4,9 @@ Usage:
     python notebook/make_kaggle_cache_bundle.py --src outputs/pilot_ee      # -> outputs/kaggle/ncr-lst-v2-ee-cache.zip
     python notebook/make_kaggle_cache_bundle.py --src DIR --out ZIP
 
-Why: the Earth Engine part of a run (sections 03-05) can run on your PC (``run_local.py --mode gee`` with
-``LST_STOP_AFTER=06``), with no Kaggle time limit and no GPU quota. Attached to the Kaggle launcher, its cache makes
+Why: the Earth Engine part of a run (sections 03-05) can run on your PC (``run_local.py --mode gee --grid-res 1000
+--no-fast-dev`` with ``LST_STOP_AFTER=06`` and the Kaggle run's ``LST_PROFILE``; run_local's defaults, a 2 km grid and
+FAST_DEV, would make every stage key miss on Kaggle), with no Kaggle time limit and no GPU quota. Attached to the Kaggle launcher, its cache makes
 sections 03-06 cache hits, so the Kaggle session only trains. This needs the same code bundle (the stage keys carry
 the section code hashes) and the same profile; Earth Engine tiles and GDDP blocks are reused even when a section's
 code changed, because their keys are the request expressions.
@@ -18,6 +19,7 @@ cache came from. ``LST_CACHE_IMPORT=auto`` finds it under ``/kaggle/input``.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import tarfile
@@ -37,20 +39,86 @@ def _safe_member(name: str) -> bool:
 
 _STAGE_RE = re.compile(r"^stages/(?P<name>.+)-(?P<key>[0-9a-f]{8,})\.(?P<ext>[A-Za-z0-9]+)$")
 
+# Stage-key fields (from each entry's .json sidecar) that identify a generation of a stage: the run identity fields
+# of CFG.key (00_setup.py), the code hashes (code, code01, codeNN, shared), version and the data fingerprint df.
+# Per-item fields of multi-entry stages (07_job_*: one entry per CV job, ``ident``; 08_boot_*: one per bootstrap
+# replicate, ``b``) are not among them, so all entries of the newest generation stay together.
+_GENERATION_FIELDS = ("data_mode", "profile", "grid_res_m", "fine_factor", "lc_fine_res_m", "frames_obs", "seed",
+                      "shared", "version", "df")
+
+
+def _read_files(chosen: dict, rels) -> dict:
+    """``{rel: bytes}`` of chosen files (loose, or members of packed tars - each tar opened once); unreadable files are
+    left out."""
+    out: dict = {}
+    by_tar: dict = {}
+    for rel in rels:
+        src_ref = chosen[rel][2]
+        if src_ref[0] == "loose":
+            try:
+                out[rel] = src_ref[1].read_bytes()
+            except OSError:
+                pass
+        else:
+            by_tar.setdefault(src_ref[1], {})[src_ref[2]] = rel
+    for tar_path, names in by_tar.items():
+        try:
+            with tarfile.open(tar_path, "r:") as tf:
+                for m in tf.getmembers():
+                    rel = names.get(m.name)
+                    if rel is None or rel in out or not m.isfile():
+                        continue
+                    data = tf.extractfile(m)
+                    if data is not None:
+                        with data:
+                            out[rel] = data.read()
+        except (OSError, tarfile.TarError):
+            continue
+    return out
+
+
+def _generation(sidecar: bytes | None) -> str | None:
+    """The generation signature of a stage entry from its sidecar bytes (None when missing or unreadable)."""
+    if sidecar is None:
+        return None
+    try:
+        key = json.loads(sidecar.decode("utf-8")).get("key")
+    except (ValueError, UnicodeDecodeError, AttributeError):
+        return None
+    if not isinstance(key, dict):
+        return None
+    sig = {k: v for k, v in key.items() if k in _GENERATION_FIELDS or str(k).startswith("code")}
+    return json.dumps(sig, sort_keys=True, default=str)
+
 
 def _latest_stages(chosen: dict) -> tuple:
-    """Keep, per stage name, only the files of its newest ``.pkl`` (and that key's sidecars): a cache reused across
-    code changes holds older versions of a stage whose keys no current run asks for."""
-    newest: dict = {}
+    """Keep, per stage name, only its newest generation: the newest ``.pkl`` and every other entry whose key has the
+    same generation fields (``_GENERATION_FIELDS``, read from the ``.json`` sidecars), each with its sidecar. A cache
+    reused across code changes holds older versions of a stage whose keys no current run asks for; multi-entry stages
+    (07_job_*, 08_boot_*) keep all entries of the newest generation. An entry whose generation cannot be read (no or
+    unreadable sidecar) is kept, and so is every entry of a stage whose newest entry has no readable sidecar."""
+    entries: dict = {}                                           # stage name -> {key: mtime of its .pkl}
     for rel, (mtime, _size, _src) in chosen.items():
         m = _STAGE_RE.match(rel)
-        if m and m.group("ext") == "pkl" and mtime >= newest.get(m.group("name"), ("", -1.0))[1]:
-            newest[m.group("name")] = (m.group("key"), mtime)
+        if m and m.group("ext") == "pkl":
+            entries.setdefault(m.group("name"), {})[m.group("key")] = mtime
+    sidecars = {f"stages/{name}-{key}.json": (name, key) for name, keys in entries.items() for key in keys}
+    sidecars = {rel: nk for rel, nk in sidecars.items() if rel in chosen}
+    raw = _read_files(chosen, sidecars)
+    gen = {nk: _generation(raw.get(rel)) for rel, nk in sidecars.items()}
+    drop = set()
+    for name, keys in entries.items():
+        newest = max(sorted(keys), key=lambda k: keys[k])
+        ref = gen.get((name, newest))
+        if ref is None:
+            continue
+        drop.update((name, k) for k in keys if gen.get((name, k)) not in (None, ref))
     kept = {}
     for rel, val in chosen.items():
         m = _STAGE_RE.match(rel)
-        if m and m.group("name") in newest and m.group("key") != newest[m.group("name")][0]:
-            continue
+        if m and m.group("name") in entries and (m.group("key") not in entries[m.group("name")]
+                                                 or (m.group("name"), m.group("key")) in drop):
+            continue                                             # superseded generation, or a sidecar without .pkl
         kept[rel] = val
     return kept, len(chosen) - len(kept)
 

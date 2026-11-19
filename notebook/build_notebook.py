@@ -125,27 +125,39 @@ def marker_cell(section_id: str) -> str:
     return f"_lst_enter_section({section_id!r})  {MARKER_COMMENT}"
 
 
-def notebook_cells(paths: list[Path]) -> list[tuple[str, str]]:
-    """All cells: section cells + the generated _CODE_SHA cell (first code cell, after the title markdown) and one
-    section-marker cell before the first code cell of every section 01-12."""
+def _cell_id_prefix(path: Path) -> str:
+    """Cell-id prefix of a section file (its stem, restricted to the characters nbformat allows in cell ids)."""
+    return re.sub(r"[^A-Za-z0-9_-]", "_", Path(path).stem)[:56]
+
+
+def _notebook_cells(paths: list[Path]) -> list[tuple[str, str, str]]:
+    """``notebook_cells`` with a deterministic cell id per cell: ``<section stem>-<index in the section>``,
+    ``<section stem>-marker`` and ``code-sha``, so rebuilding unchanged sources gives a byte-identical notebook."""
     hashes = section_code_hashes(paths)
-    out: list[tuple[str, str]] = []
+    out: list[tuple[str, str, str]] = []
     sha_done = False
     for path in paths:
         sid = path.name[:2]
+        prefix = _cell_id_prefix(path)
         marker_done = sid == "00"
-        for kind, src in parse_sections([path]):
+        for n, (kind, src) in enumerate(parse_sections([path])):
             if kind == "code":
                 if not sha_done:
-                    out.append(("code", code_sha_cell(hashes)))
+                    out.append(("code", code_sha_cell(hashes), "code-sha"))
                     sha_done = True
                 if not marker_done:
-                    out.append(("code", marker_cell(sid)))
+                    out.append(("code", marker_cell(sid), f"{prefix}-marker"))
                     marker_done = True
-            out.append((kind, src))
+            out.append((kind, src, f"{prefix}-{n:03d}"))
     if not sha_done:
-        out.insert(0, ("code", code_sha_cell(hashes)))
+        out.insert(0, ("code", code_sha_cell(hashes), "code-sha"))
     return out
+
+
+def notebook_cells(paths: list[Path]) -> list[tuple[str, str]]:
+    """All cells: section cells + the generated _CODE_SHA cell (first code cell, after the title markdown) and one
+    section-marker cell before the first code cell of every section 01-12."""
+    return [(kind, src) for kind, src, _ in _notebook_cells(paths)]
 
 
 def build(out_path: Path, check: bool, sections_dir: Path = SECTIONS_DIR) -> None:
@@ -155,7 +167,8 @@ def build(out_path: Path, check: bool, sections_dir: Path = SECTIONS_DIR) -> Non
     paths = section_paths(sections_dir)
     if not paths:
         sys.exit(f"No section files found in {sections_dir}")
-    cells = notebook_cells(paths)
+    cells_ids = _notebook_cells(paths)
+    cells = [(kind, src) for kind, src, _ in cells_ids]
     if check:
         for i, (kind, src) in enumerate(cells):
             if kind == "code":
@@ -171,7 +184,7 @@ def build(out_path: Path, check: bool, sections_dir: Path = SECTIONS_DIR) -> Non
         if "_CODE_SHA = " not in first_code:
             sys.exit("the first code cell must define _CODE_SHA")
     nb = new_notebook()
-    nb.cells = [new_markdown_cell(s) if k == "markdown" else new_code_cell(s) for k, s in cells]
+    nb.cells = [new_markdown_cell(s, id=i) if k == "markdown" else new_code_cell(s, id=i) for k, s, i in cells_ids]
     nb.metadata = {
         "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
         "language_info": {"name": "python", "version": "3.10"},

@@ -52,8 +52,12 @@
 #   dimensions, pyramiding mean). All frames are submitted at once, but **noncommercial projects run about 2 batch
 #   tasks at a time**, so the 8 frame exports take about 4 rounds (about 1.5-6 h). Every task has its own limits:
 #   `LST_GEE_EXPORT_TIMEOUT_S` (3 h) counted from the first poll that saw it RUNNING and `LST_GEE_EXPORT_QUEUE_S`
-#   (4 h) while it waits in the queue. A FAILED, CANCELLED or timed-out frame does not stop the others: a still
-#   active task is cancelled and that frame is extracted interactively. Each poll logs the number of RUNNING tasks
+#   (4 h) while it is not yet RUNNING, counted from the **start of the wait** (all tasks are submitted together). In
+#   a slow run the last round may therefore still be queued after 4 h: those frames are cancelled and extracted
+#   interactively (raise `LST_GEE_EXPORT_QUEUE_S`, e.g. to 6-8 h, to keep every frame in the batch queue). A FAILED,
+#   CANCELLED or timed-out frame, a task whose status cannot be read, or a completed asset whose stored expression
+#   hash differs, does not stop the others: a still active task is cancelled and that frame is extracted
+#   interactively. Each poll logs the number of RUNNING tasks
 #   (the maximum is kept in `_S03_QA['export_concurrency']`). Completed exports are read with cheap `computePixels`.
 #   The asset name contains the expression hash, so a rerun (or a new Kaggle session) reuses finished assets and
 #   attaches to tasks that are still running instead of paying the EECU again.
@@ -390,7 +394,12 @@ def gee_wait_for_exports(handles: Sequence[dict], *, timeout_s: Optional[float] 
       server; rerun to attach to it).
     * ``raise_on_failure=False``: each handle ends with ``h["state"]`` in ``COMPLETED | FAILED | CANCELLED |
       TIMEOUT_RUNNING | TIMEOUT_QUEUED`` (plus ``h["error"]``); the others keep being polled. The caller cancels
-      still-active tasks (``gee_cancel_export``) and extracts those jobs interactively.
+      still-active tasks (``gee_cancel_export``) and extracts those jobs interactively. A task whose status (or
+      completed asset) cannot be read after the retries also ends FAILED instead of aborting the wait.
+
+    A COMPLETED handle is accepted only when its asset exists and stores the handle's expression hash
+    (``lst_expr_sha1`` = ``h["digest"]``); otherwise it ends FAILED (e.g. a stale task of another session wrote a
+    different expression to the same asset id).
 
     Every poll logs the number of RUNNING tasks; the maximum observed concurrency is logged at the end and written to
     ``stats["max_running"]`` (with ``polls`` and ``seconds``). Every poll checks the run's time budget and raises
@@ -423,14 +432,32 @@ def gee_wait_for_exports(handles: Sequence[dict], *, timeout_s: Optional[float] 
         still, n_running = [], 0
         now = time.time()
         for h in pending:
-            status = _s03_task_status(h)
+            try:
+                status = _s03_task_status(h)
+            except Exception as exc:  # noqa: BLE001 - permanent or retried-out; LSTStop (BaseException) propagates
+                _fail(h, "FAILED", f"status of Earth Engine export {h['description']} unavailable after its retries "
+                                   f"({type(exc).__name__}: {str(exc)[:200]}); the task may keep running on the "
+                                   "server - this job is extracted interactively")
+                continue
             state = str(status.get("state", "UNKNOWN"))
             h["state"] = state
             if state == "COMPLETED":
                 h["eecu_s"] = status.get("batch_eecu_usage_seconds")
-                if _s03_get_asset(h["asset_id"]) is None:
+                try:
+                    info = _s03_get_asset(h["asset_id"])
+                except Exception as exc:  # noqa: BLE001 - as above
+                    _fail(h, "FAILED", f"export {h['description']} reports COMPLETED but asset {h['asset_id']} "
+                                       f"cannot be read ({type(exc).__name__}: {str(exc)[:200]})")
+                    continue
+                if info is None:
                     _fail(h, "FAILED", f"export {h['description']} reports COMPLETED but asset {h['asset_id']} "
                                        "does not exist")
+                    continue
+                stored = (info.get("properties") or {}).get(_S03_ASSET_PROPERTY)
+                if h.get("digest") and stored != h["digest"]:
+                    # e.g. a task of an interrupted session that exported another expression to the same asset id
+                    _fail(h, "FAILED", f"export {h['description']} COMPLETED but asset {h['asset_id']} holds "
+                                       f"expression {str(stored)[:12]}, not {str(h['digest'])[:12]} - not used")
                     continue
                 log(f"export {h['description']} COMPLETED in {time.time() - h['started']:.0f}s"
                     + (f" ({float(h['eecu_s']) / 3600:.2f} EECU-h)" if h["eecu_s"] else ""))

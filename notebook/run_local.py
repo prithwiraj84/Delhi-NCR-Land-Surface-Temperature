@@ -25,6 +25,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from build_notebook import SECTIONS_DIR, parse_sections, section_code_hashes, section_paths  # noqa: E402
+from kaggle_runner import _is_stop, _safe_str  # noqa: E402 - the launcher's clean-stop rule
 
 
 def _stopped_cleanly(ns: dict, after: str) -> int:
@@ -90,14 +91,20 @@ def main() -> int:
             t0 = time.time()
             for i, src in enumerate(cells):
                 try:
-                    exec(compile(src, f"{path.name}[cell {i}]", "exec"), ns)
+                    # dont_inherit: this module's __future__ imports must not leak into the cells (as in Jupyter)
+                    exec(compile(src, f"{path.name}[cell {i}]", "exec", dont_inherit=True), ns)
                 except SystemExit:
                     raise
                 except BaseException as exc:
-                    stop_cls = ns.get("LSTStop")          # defined by section 00
-                    if isinstance(stop_cls, type) and isinstance(exc, stop_cls):
+                    # Clean stop exactly as in kaggle_runner: LSTStop (defined by section 00), an exception group
+                    # holding one, or any error raised after a stop was requested.
+                    if not isinstance(exc, KeyboardInterrupt) and _is_stop(exc, ns):
+                        stop_cls = ns.get("LSTStop")
+                        if not (isinstance(stop_cls, type) and isinstance(exc, stop_cls)):
+                            print(f"(raised after the stop request: {type(exc).__name__}: {_safe_str(exc)[:300]} - "
+                                  "treated as part of the clean stop)", flush=True)
                         if callable(ns.get("request_stop")):
-                            ns["request_stop"](str(exc) or "LSTStop")
+                            ns["request_stop"](_safe_str(exc) or "LSTStop")   # no-op when already requested
                         return _stopped_cleanly(ns, sid)
                     traceback.print_exc()
                     print(f"\n!!! FAILED in {path.name} code cell {i}:\n{src[:1500]}", file=sys.stderr)

@@ -58,7 +58,8 @@ from scipy import sparse as _s02_sparse
 
 _S02_ACTIVE = globals().get("DATA_MODE") == "synthetic"
 _S02_GENERATOR = "delhi-ncr-synthetic-v2"
-_S02_REF_OVERPASS_IST_H = 10.75          # SPEC §4.7 reference overpass (10:45 IST)
+# SPEC §4.7 reference overpass (10:45 IST), the same value section 09 corrects to
+_S02_REF_OVERPASS_IST_H = float(getattr(CFG, "DAY_REFERENCE_OVERPASS_IST_H", 10.75))
 
 # Harmonised land-cover classes (SPEC_v1 §1): 0 nodata, 1 built, 2 forest, 3 water, 4 cropland, 5 barren, 6 other veg
 _S02_BUILT, _S02_FOREST, _S02_WATER, _S02_CROP, _S02_BARREN, _S02_OTHER = 1, 2, 3, 4, 5, 6
@@ -220,8 +221,9 @@ if _S02_ACTIVE:
 else:
     log("section 02 skipped: data mode is not 'synthetic' (sections 03-05 provide the acquisition globals)")
     # SPEC §3.2: SYNTHETIC_TRUTH is None in gee mode; define it early so later sections can always reference it.
-    if "SYNTHETIC_TRUTH" not in globals():
-        SYNTHETIC_TRUTH = None
+    # Always reset it: a dict left by an earlier synthetic run in the same kernel would make sections 08/09 print
+    # planted-vs-recovered reports against real data.
+    SYNTHETIC_TRUTH = None
 
 # %% [markdown]
 # ## 2.1 Numerical helpers
@@ -1653,7 +1655,9 @@ def _s02_truth(frames, windows, levels, lev_ann, years, anom, ref_period, qa, pl
         "planted_parameters": {"day": dict(_S02_DAY), "night": dict(_S02_NIGHT)},
         "planted_mean_abs_effect_c": mean_effects,
         "irrelevant_by_construction": {m: [g for g in all_groups if g not in thresholds[m]] for m in ("day", "night")},
-        "monotone_expectations": {"day": {"ndvi": -1, "forest": -1, "water": -1, "moisture_index": -1},
+        # Planted groups only: forest and moisture_index have no planted term (they are irrelevant by construction
+        # and only correlate with ndvi / water), so no direction is expected of them.
+        "monotone_expectations": {"day": {"ndvi": -1, "water": -1},
                                   "night": {"built": 1, "built_volume": 1}},
         "uhi": {"definition": "mean anomaly over cells with frac_built >= 0.5 minus cells with frac_built <= 0.05 "
                               "and frac_water < 0.2 (SPEC §4.7)",
@@ -1665,8 +1669,8 @@ def _s02_truth(frames, windows, levels, lev_ann, years, anom, ref_period, qa, pl
                      "raw_day_level_bias_c": {
                          y: round(-(_S02_REF_OVERPASS_IST_H - acq[y]["overpass"]) * acq[y]["heating"], 4)
                          for y in frames},
-                     "note": "RAW lst_day_f = truth - (10.75 - overpass_h) * heating_rate; SPEC §4.7 correction "
-                             "recovers the 10:45 IST truth"},
+                     "note": f"RAW lst_day_f = truth - ({_S02_REF_OVERPASS_IST_H:g} - overpass_h) * heating_rate; "
+                             "SPEC §4.7 correction recovers the 10:45 IST truth"},
         "heating_rate_k_per_h": {y: acq[y]["heating"] for y in frames},
         "path_offsets": {"convention": "per-path bias relative to the harmonised mosaic (value removed from that "
                                        "path's composite); planted symmetric +-delta/2 with delta = 146 - 147",
@@ -1715,11 +1719,13 @@ def _s02_truth(frames, windows, levels, lev_ann, years, anom, ref_period, qa, pl
     return truth
 
 
-def _s02_cmip6_summary(cmip6: pd.DataFrame) -> dict:
-    """Ensemble mean/sd of the 2050-minus-2025 delta per scenario and variable."""
+def _s02_cmip6_summary(cmip6: pd.DataFrame) -> Optional[dict]:
+    """Ensemble mean/sd of the 2050-minus-2025 delta per scenario and variable (None without projection frames)."""
     out = {}
     now = int(_s02_cfg("NOW", 2025))
     last = int(max(cmip6["frame"]))
+    if last <= now:
+        return None            # e.g. the pilot profile: only the 2025 baseline exists, there is no delta to report
     for (scenario, var), grp in cmip6.groupby(["scenario", "var"]):
         piv = grp.pivot_table(index="model", columns="frame", values="value_k")
         delta = piv[last] - piv[now]

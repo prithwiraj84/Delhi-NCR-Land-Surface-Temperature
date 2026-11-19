@@ -21,8 +21,8 @@
 #
 # **Data mode.** Earth Engine is initialised here (service account → persisted credentials → interactive login).
 # `auto` falls back to the clearly-labelled synthetic twin with a loud banner when Earth Engine is unavailable; once a
-# service-account key was supplied, a failure while building the study area stops the run instead (the user clearly
-# asked for real data). Sections 03-05 run only in gee mode, section 02 only in synthetic mode.
+# service-account key was supplied, a failed Earth Engine login or a failure while building the study area stops the
+# run instead (the user clearly asked for real data). Sections 03-05 run only in gee mode, section 02 only in synthetic mode.
 
 # %% [markdown]
 # ## 1.1 Constants: districts, reference geography, land-cover classes
@@ -606,15 +606,20 @@ else:
                 _S01_ASSET_CAVEAT = ("Batch asset export was requested but unavailable (" + _asset_msg[:200]
                                      + "); extraction used interactive computePixels.")
             del _asset_ok, _asset_msg
-    elif CFG.RUN_MODE == "gee":
+    elif CFG.RUN_MODE == "gee" or _S01_KEY_SUPPLIED:
+        # A supplied service-account key means the user asked for real data: in auto mode a failed login stops the
+        # run (as a failed study area does in 1.6) instead of silently running hours on the synthetic twin.
+        _s01_why = ("LST_RUN_MODE=gee" if CFG.RUN_MODE == "gee"
+                    else "LST_RUN_MODE=auto and an Earth Engine service-account key was supplied,")
         raise RuntimeError(
-            "LST_RUN_MODE=gee but Earth Engine could not be initialised.\n"
+            f"{_s01_why} but Earth Engine could not be initialised.\n"
             f"Details: {_gee_msg}\n"
             "Fix: on Kaggle add Secrets GEE_SERVICE_ACCOUNT_KEY (full service-account JSON key; the account "
             "must be registered for Earth Engine) and GEE_PROJECT (Cloud project with the Earth Engine API "
             "enabled), enable Internet, or run interactively to authenticate; elsewhere set "
             "LST_GEE_SERVICE_ACCOUNT_KEY / GOOGLE_APPLICATION_CREDENTIALS and LST_GEE_PROJECT. "
-            "Use LST_RUN_MODE=auto to fall back to synthetic data instead.")
+            + ("Use LST_RUN_MODE=auto to fall back to synthetic data instead." if CFG.RUN_MODE == "gee" else
+               "Set LST_RUN_MODE=synthetic (or remove the key) to run on synthetic data instead."))
     else:
         DATA_MODE = "synthetic"
         _MODE_REASON = f"Earth Engine unavailable ({_gee_msg})"

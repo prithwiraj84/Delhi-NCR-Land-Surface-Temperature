@@ -5,7 +5,8 @@ Usage:
 
 Standalone: needs only numpy (no pipeline globals, no Pillow), so it can be run on a bundle downloaded from Kaggle.
 The schema is auto-detected from manifest.schema_version ("1.x" -> v1 contract, "2.x" -> v2 contract).
-Exit status 0 = valid (warnings allowed), 1 = contract violations, 2 = bundle unreadable.
+Exit status 0 = valid (warnings allowed), 1 = contract violations, 2 = bundle unreadable (corrupt / truncated gzip,
+malformed LSTB or JSON, missing keys), 3 = internal validator error (no verdict line).
 
 Every file may be gzip-compressed; gzip is detected by its magic bytes (0x1f 0x8b), never by the file name, so a
 server that already inflated a .gz response is handled too.
@@ -72,6 +73,7 @@ import json
 import math
 import struct
 import sys
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -1083,6 +1085,18 @@ def check_manifest_v2(man: dict, rep: Report) -> _V2Context:
                 "manifest.synthetic_truth must be null exactly in gee mode")
     rep.require(man["data_mode_reason"] is None or isinstance(man["data_mode_reason"], str),
                 "manifest.data_mode_reason must be a string or null")
+    rep.warn(not (isinstance(man["data_mode_reason"], str) and "@" in man["data_mode_reason"]),
+             "manifest.data_mode_reason looks like it contains an account e-mail (the bundle is public)")
+    if "code" in man:   # optional traceability block (SPEC 5.3): {code_sha: {sec: sha} | null, bundle_id, git_commit}
+        code = man["code"]
+        ok = isinstance(code, dict) and not _missing(code, ["code_sha", "bundle_id", "git_commit"])
+        if ok:
+            cs = code["code_sha"]
+            ok = (cs is None or (isinstance(cs, dict) and all(isinstance(k, str) and isinstance(v, str)
+                                                              for k, v in cs.items())))
+            ok = ok and all(code[k] is None or isinstance(code[k], str) for k in ("bundle_id", "git_commit"))
+        rep.require(ok, "manifest.code must be {code_sha: {section: sha} | null, bundle_id: str | null, "
+                        "git_commit: str | null}")
     # study area + grid
     sa = man["study_area"]
     sa_miss = _missing(sa, ["name", "area_km2", "crs", "grid_res_m", "fine_res_m", "grid", "bbox", "center"])
@@ -2228,9 +2242,15 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     try:
         rep = validate_bundle(args.web_dir, args.max_mb, args.schema)
-    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError) as exc:
+    except (OSError, EOFError, zlib.error, struct.error, ValueError, KeyError, TypeError, IndexError, AttributeError,
+            OverflowError) as exc:
+        # unreadable or malformed files (truncated / corrupt gzip, bad LSTB bytes, invalid JSON or UTF-8, missing
+        # keys): a verdict, never a bare traceback (section 12 fails the run on this verdict)
         print(f"BUNDLE UNREADABLE: {type(exc).__name__}: {exc}")
         return 2
+    except Exception as exc:  # noqa: BLE001 - a validator fault: report it without judging the bundle
+        print(f"VALIDATOR ERROR (no verdict): {type(exc).__name__}: {exc}")
+        return 3
     if not args.quiet:
         for line in rep.info:
             print(f"info: {line}")

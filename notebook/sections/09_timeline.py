@@ -537,7 +537,9 @@ def _s09_night_hindcast():
     mode = "night"
     if mode not in _S09_MODES or 2000 not in _S09_FRAMES or FRAME_TIERS[mode].get(2000) != "reconstructed":
         return {"available": False, "reason": "no reconstructed night 2000 frame"}
-    if 2000 in set(int(v) for v in np.unique(DF["year"].to_numpy()[DF["w_night"].to_numpy() > 0])):
+    # frames the night model was actually trained on (weight > 0; a frame below LST_FRAME_MIN_COVERAGE has w = 0)
+    trained = sorted(int(v) for v in np.unique(DF["year"].to_numpy()[DF["w_night"].to_numpy() > 0]))
+    if 2000 in trained:
         return {"available": False, "reason": "2000 is a night training frame (not an independent test)"}
     _, anom_pred, resid = _s09_modelled_field(mode, 2000)
     obs = _s09_col("anom_night", 2000)
@@ -548,7 +550,7 @@ def _s09_night_hindcast():
     m_resid = _s09_metrics(obs[both], (anom_pred + resid)[both])
     m_pers = _s09_metrics(obs[both], persist[both])
     lev = LEVELS[mode][2000].get("regression_check") or {}
-    return {"available": True, "frame": 2000, "train_frames": sorted(int(v) for v in CFG.NIGHT_TRAIN_FRAMES),
+    return {"available": True, "frame": 2000, "train_frames": trained,
             "r2": m_model["r2"], "rmse": m_model["rmse"], "bias": m_model["bias"], "n": m_model["n"],
             "r2_with_persistent_residual": m_resid["r2"], "rmse_with_persistent_residual": m_resid["rmse"],
             "persistence_frame": later[0] if later else None, "persistence_r2": m_pers["r2"],
@@ -568,6 +570,7 @@ def _s09_day_hindcast():
     train = np.flatnonzero((w > 0) & (years >= 2005))
     if train.size < 100:
         return {"available": False, "reason": "too few late training rows"}
+    trained = sorted(int(v) for v in np.unique(years[train]))       # frames >= 2005 actually trained on (w > 0)
     rounds = int(FINAL_MODELS[mode].num_boosted_rounds())
     X = DF[FEATURES].to_numpy(np.float32)
     y = DF["anom_day"].to_numpy(np.float32)
@@ -601,11 +604,11 @@ def _s09_day_hindcast():
         mp = _s09_metrics(obs[ok], persist[ok], wt[ok])
         by_frame.append({"frame": int(t), "r2": mm["r2"], "rmse": mm["rmse"], "bias": mm["bias"], "n": mm["n"],
                          "persistence_r2": mp["r2"], "persistence_rmse": mp["rmse"],
-                         "years_from_training": int(later[0] - t)})
+                         "years_from_training": int(trained[0] - t)})
         pool_o.append(obs[ok]), pool_p.append(pred[ok]), pool_q.append(persist[ok]), pool_w.append(wt[ok])
     po, pp, pq, pw = (np.concatenate(v) for v in (pool_o, pool_p, pool_q, pool_w))
     mm, mp = _s09_metrics(po, pp, pw), _s09_metrics(po, pq, pw)
-    return {"available": True, "frames": early, "train_frames": later, "r2": mm["r2"], "rmse": mm["rmse"],
+    return {"available": True, "frames": early, "train_frames": trained, "r2": mm["r2"], "rmse": mm["rmse"],
             "bias": mm["bias"], "n": mm["n"], "persistence_r2": mp["r2"], "persistence_rmse": mp["rmse"],
             "persistence_frame": later[0], "by_frame": by_frame, "recentred": True, "rounds": rounds,
             "device": res["device"]}

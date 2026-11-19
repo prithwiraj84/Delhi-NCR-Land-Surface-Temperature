@@ -349,7 +349,13 @@ def _s05_build_drivers() -> dict:
     # identical bands (e.g. a frame reusing the 2022 map) are fetched once
     unique = {}
     for job in lc_jobs:
-        unique.setdefault(job["name"], job)
+        first = unique.setdefault(job["name"], job)
+        # the job name holds the band only (renaming it would refetch cached tiles): both GLC_FCS30D collections have
+        # b1..b3, so two frames on the same band of DIFFERENT collections must not be merged into one fetch/asset
+        if tuple(first["src"][:2]) != tuple(job["src"][:2]):
+            raise RuntimeError(f"05: LC_FINE job {job['name']} would merge {first['src'][0]} {first['src'][1]} "
+                               f"(frame {first['year']}) with {job['src'][0]} {job['src'][1]} (frame {job['year']}); "
+                               "give the LC_FINE job name a collection tag before using these frames")
     fetched = _s04_fetch_jobs(list(unique.values()), use_assets=True)
     for job in lc_jobs:
         lc = np.ascontiguousarray(fetched[job["name"]][0], dtype=np.uint8).copy()

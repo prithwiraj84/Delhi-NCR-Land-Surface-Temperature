@@ -1262,7 +1262,9 @@ def _s06_contract_check():
     assert np.array_equal(cell, np.tile(CELL_IDS, len(frames))), "cells must follow the canonical order per frame"
     by_cell = DF.groupby("cell_id")[["fold_block5", "fold_block20", "block10_id", "block20_id", "fold_district"]]
     assert int(by_cell.nunique().max().max()) == 1, "a cell must keep its folds/blocks in every frame"
-    assert DF["fold_block20"].between(0, CFG.N_FOLDS_BLOCK - 1).all() and DF["fold_block5"].between(0, 4).all()
+    # fold_block5 is built with CFG.N_FOLDS folds (_s06_cv_grids), fold_block20 with CFG.N_FOLDS_BLOCK
+    assert DF["fold_block20"].between(0, CFG.N_FOLDS_BLOCK - 1).all()
+    assert DF["fold_block5"].between(0, int(CFG.N_FOLDS) - 1).all()
     assert DF["fold_random"].between(0, CFG.N_FOLDS - 1).all()
     b20 = DF.groupby("block20_id")["fold_block20"].nunique()
     assert int(b20.max()) == 1, "every 20 km block must map to exactly one fold"

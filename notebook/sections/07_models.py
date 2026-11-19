@@ -59,8 +59,11 @@ from scipy import sparse as _s07_sparse
 from scipy.spatial import cKDTree as _s07_cKDTree
 
 _S07_VERSION = "07-v2.1"          # final model / AOA / residual models (07_post)
-# CV fits themselves are unchanged since v2.0: their identities (job de-duplication and the 07_job cache) keep
-# the job-recipe version, so a scheduling-only change reuses the cached fits.
+# Job-recipe version: part of every job's ``ident`` (de-duplication of identical fits within a run) and of the 07_job
+# cache key. Bump it when a fit's recipe changes without a code change in this section (e.g. a semantic change of a
+# section-00 helper). It does NOT make cached fits survive code edits: CFG.key() always embeds the AST hash of this
+# section's code, so ANY code change in section 07 (scheduling, plots, contract check included) recomputes every
+# 07_job and 07_post entry on the next run (comment/docstring/markdown edits do not).
 _S07_JOB_VERSION = "07-v2.0"
 _S07_SCHEMES = ["block20", "block5", "district", "loeo", "place_time", "random"]
 _S07_SCHEME_MODELS = {
@@ -772,8 +775,10 @@ def _s07_model_available(model):
 # The LightGBM lane is serial because LightGBM's OpenCL learner is not thread safe (never two boosters at once).
 # XGBoost, LightGBM, scikit-learn trees and PyTorch release the GIL inside their native code, so the lanes overlap
 # for real; all lanes join at the mode barrier. A failing job is logged with its traceback and leaves NaN
-# predictions; it never stops the suite. **Time budget:** before every job a lane asks `budget_exhausted(1.25 ×
-# the longest job seen in that lane)` (section 00); on exhaustion it stops scheduling and sets a shared stop event,
+# predictions; it never stops the suite. **Time budget:** before every job that is not a cache hit a lane asks
+# `budget_exhausted(1.25 × the longest job seen in that lane)` (section 00; before the lane's first fit: the job
+# time recorded by the newest `07_job` sidecar of an earlier run, maximum over the lane's models; a cache hit needs
+# only the reserve); on exhaustion it stops scheduling and sets a shared stop event,
 # the other lanes stop too, and after the barrier `check_budget("07 jobs")` raises `LSTStop` — a mode is never
 # published with partial CV results (the finished jobs are cached and a resumed run continues from them). The busy
 # seconds and job counts per lane are logged after each mode (`MODEL_RESULTS[m]["lane_busy_seconds"]`).
@@ -818,11 +823,35 @@ def _s07_make_job(ctx, label, model, fold, feat="all", rounds=None):
             "cost": float(fold["train"].size) * _S07_COST[model]}
 
 
-def _s07_execute(job, gpu_id):
+def _s07_job_cache(job):
+    """Stage-cache handle of one job (``07_job_<mode>_<model>``, keyed by the job identity and the DF fingerprint)."""
+    return stage_cache(f"07_job_{job['mode']}_{job['model']}",
+                       CFG.key(version=_S07_JOB_VERSION, ident=job["ident"], df=_S07_DF_FP))
+
+
+def _s07_lane_estimate(mode, lane_jobs):
+    """Look-ahead seed (s) of a lane before its first fit of this session.
+
+    The section-00 estimate of each of the lane's models (``compute_s`` of the newest ``07_job_<mode>_<model>``
+    sidecar of an earlier or imported run), maximum over the models; 0.0 when nothing is known. Without it the lane's
+    first job - the most expensive one, lanes are sorted by cost - would start with no look-ahead at all.
+    """
+    est, norm = globals().get("_stage_compute_estimate"), globals().get("_stage_norm_name")
+    if est is None or norm is None or not mode:
+        return 0.0
+    out = 0.0
+    for model in sorted({j["model"] for j in lane_jobs}):
+        try:
+            out = max(out, float(est(norm(f"07_job_{mode}_{model}")) or 0.0))
+        except Exception:  # noqa: BLE001 - an estimate must never stop the suite
+            continue
+    return out
+
+
+def _s07_execute(job, gpu_id, sc=None):
     """Run (or load from the stage cache) one job; never raises - failures are returned as ``{"error": ...}``."""
     ctx = _S07_CTX[job["mode"]]
-    sc = stage_cache(f"07_job_{job['mode']}_{job['model']}",
-                     CFG.key(version=_S07_JOB_VERSION, ident=job["ident"], df=_S07_DF_FP))
+    sc = sc if sc is not None else _s07_job_cache(job)
     if sc.hit:
         try:
             res = sc.load()
@@ -844,7 +873,7 @@ def _s07_execute(job, gpu_id):
     with _S07_PRINT_LOCK:
         log(f"07 {job['mode']:<5} {job['label']:<14} {job['model']:<13} fold {job['fold']:>4}: R2 {met['r2']:.3f} "
             f"RMSE {met['rmse']:.3f} | {res['seconds']:.1f}s on {info.get('device')} (n_train {res['n_train']:,})")
-    sc.save(res)
+    sc.save(res, compute_s=res["seconds"])          # the sidecar's compute_s seeds the next session's look-ahead
     res["cached"] = False
     return res
 
@@ -864,7 +893,8 @@ def _s07_run_jobs(jobs, mode=""):
     results = {}
     busy = {"gpu": 0.0, "cpu": 0.0, "lgbm": 0.0}
     counts = {"gpu": 0, "cpu": 0, "lgbm": 0}
-    longest = {"gpu": 0.0, "cpu": 0.0, "lgbm": 0.0}
+    # look-ahead per lane: seeded from an earlier run's job times, then the longest fit of this call
+    longest = {name: _s07_lane_estimate(mode, lanes[name]) for name in ("gpu", "cpu", "lgbm")}
     lock = _s07_threading.Lock()
     stop = _s07_threading.Event()
     stop_info = {"reason": None, "expected_s": 0.0, "errors": []}
@@ -881,12 +911,13 @@ def _s07_run_jobs(jobs, mode=""):
                 busy[lane] += float(res["seconds"])
                 longest[lane] = max(longest[lane], float(res["seconds"]))
 
-    def may_start(lane):
-        """False once the run is stopping or the next job would not fit into the time budget."""
+    def may_start(lane, cached=False):
+        """False once the run is stopping or the next job would not fit into the time budget (a cached job only
+        needs the reserve)."""
         if stop.is_set():
             return False
         with lock:
-            expected = 1.25 * longest[lane]
+            expected = 0.0 if cached else 1.25 * longest[lane]
         if _s07_budget_exhausted(expected):
             with lock:
                 if stop_info["reason"] is None:
@@ -899,18 +930,20 @@ def _s07_run_jobs(jobs, mode=""):
     def serial_lane(lane, gpu_id):
         try:
             for job in lanes[lane]:
-                if not may_start(lane):
+                sc = _s07_job_cache(job)
+                if not may_start(lane, sc.hit):
                     break
-                record(lane, job, _s07_execute(job, gpu_id))
+                record(lane, job, _s07_execute(job, gpu_id, sc))
         except BaseException as exc:  # noqa: BLE001 - recorded and re-raised by the main thread after the barrier
             with lock:
                 stop_info["errors"].append(exc)
             stop.set()
 
     def gpu_item(job, gpu_id):
-        if not may_start("gpu"):
+        sc = None if stop.is_set() else _s07_job_cache(job)
+        if sc is None or not may_start("gpu", sc.hit):
             return {"error": "not run: the 07 lanes are stopping", "skipped": True}
-        return _s07_execute(job, gpu_id)
+        return _s07_execute(job, gpu_id, sc)
 
     threads = []
     for lane, gpu_id in (("cpu", 0), ("lgbm", lgbm_gpu)):
@@ -1080,31 +1113,45 @@ def _s07_moran_numpy(y, W, permutations, seed):
     return out
 
 
+_S07_ESDA_STATE = {"broken": False}    # set after the first esda/libpysal failure of the session
+
+
 def _s07_morans_i(values, W, permutations=None):
-    """Global Moran's I (``{"I", "expected_I", "z", "p", "backend"}``), esda when installed, else NumPy."""
+    """Global Moran's I (``{"I", "expected_I", "z", "p", "backend"}``), esda when usable, else NumPy.
+
+    As for the optional libraries of section 0.2, ANY esda/libpysal failure (not only ``ImportError``, e.g. a version
+    skew in ``W.from_sparse``) makes esda unavailable: one warning, then the NumPy implementation for the rest of the
+    session, so a broken optional package never stops the section after all CV jobs have finished.
+    """
     y = np.asarray(values, dtype=np.float64).ravel()
     perms = int(CFG.MORAN_PERMS if permutations is None else permutations)
     if y.size < 3 or not np.all(np.isfinite(y)):
         return {"I": np.nan, "expected_I": np.nan, "z": np.nan, "p": np.nan, "backend": "none"}
-    try:
-        import esda
-        from libpysal.weights import W as _PysalW
-
-        state = np.random.get_state()
-        np.random.seed(int(CFG.SEED))   # esda permutes with the global NumPy RNG
+    if not _S07_ESDA_STATE["broken"]:
         try:
-            with _s07_warnings.catch_warnings():
-                _s07_warnings.simplefilter("ignore")
-                mi = esda.Moran(y, _PysalW.from_sparse(_s07_sparse.csr_matrix(W)), transformation="r",
-                                permutations=perms)
-        finally:
-            np.random.set_state(state)
-        z, p = (mi.z_sim, mi.p_sim) if perms else (mi.z_norm, mi.p_norm)
-        return {"I": float(mi.I), "expected_I": float(mi.EI), "z": float(z), "p": float(p), "backend": "esda"}
-    except ImportError:
-        res = _s07_moran_numpy(y, W, perms, int(CFG.SEED))
-        res["backend"] = "numpy"
-        return {k: (float(v) if k != "backend" else v) for k, v in res.items()}
+            import esda
+            from libpysal.weights import W as _PysalW
+
+            state = np.random.get_state()
+            np.random.seed(int(CFG.SEED))   # esda permutes with the global NumPy RNG
+            try:
+                with _s07_warnings.catch_warnings():
+                    _s07_warnings.simplefilter("ignore")
+                    mi = esda.Moran(y, _PysalW.from_sparse(_s07_sparse.csr_matrix(W)), transformation="r",
+                                    permutations=perms)
+            finally:
+                np.random.set_state(state)
+            z, p = (mi.z_sim, mi.p_sim) if perms else (mi.z_norm, mi.p_norm)
+            return {"I": float(mi.I), "expected_I": float(mi.EI), "z": float(z), "p": float(p), "backend": "esda"}
+        except ImportError:
+            pass
+        except Exception as exc:  # noqa: BLE001 - optional dependency, any failure means "unavailable"
+            _S07_ESDA_STATE["broken"] = True
+            log(f"07: esda/libpysal failed ({type(exc).__name__}: {str(exc)[:160]}); Moran's I uses the NumPy "
+                "implementation for the rest of the session", "WARNING")
+    res = _s07_moran_numpy(y, W, perms, int(CFG.SEED))
+    res["backend"] = "numpy"
+    return {k: (float(v) if k != "backend" else v) for k, v in res.items()}
 
 
 def _s07_moran_tables(ctx, oof_block20):
@@ -2018,7 +2065,8 @@ for _s07_mode in MODEL_RESULTS:
 # The check asserts the interface later sections rely on and re-verifies the leakage-relevant invariants on the
 # stored results (LOEO predictions of a frame come from a model that did not see it; OOF arrays cover only training
 # rows). The runtime table lists the wall-clock time of every 06/07 stage (`TIMINGS`), the basis for the Kaggle
-# budget (target ≤ 60–90 min for the whole suite on 2 × T4 at full resolution).
+# budget (the real full-profile run on 2 × T4 at 1 km took about 4.1 h for this section, both modes, all benchmarks;
+# see section 00 for the profile options that shorten it).
 
 # %%
 def _s07_contract_check():

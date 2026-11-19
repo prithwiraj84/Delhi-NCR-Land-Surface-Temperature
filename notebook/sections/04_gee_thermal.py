@@ -390,7 +390,9 @@ def _s04_fetch_jobs_s03(jobs: list) -> dict:
     """Asset mode through section 03's helpers: start every export (no wait), wait for all, read the assets.
 
     Assets get stable ids ``<GEE_ASSET_ROOT>/<job name>``; section 03 stores the expression hash on each asset, reuses
-    an identical one, re-exports a changed one and attaches to a still-running task of an interrupted session. The
+    an identical one, re-exports a changed one and attaches to a still-running task of an interrupted session only
+    when that task exported the same expression (hash in the task description); a completed asset whose stored hash
+    differs is not read (FAILED -> interactive). The
     wait uses per-task limits (LST_GEE_EXPORT_TIMEOUT_0405_S = 1 h running, 2 h queued) and never aborts on the first
     failure: COMPLETED jobs are read from their asset; a job that FAILED, was CANCELLED or timed out has its task
     cancelled (when still active) and is extracted interactively, once.
@@ -400,9 +402,13 @@ def _s04_fetch_jobs_s03(jobs: list) -> dict:
         asset_id = f"{CFG.GEE_ASSET_ROOT.rstrip('/')}/{re.sub(r'[^A-Za-z0-9_-]', '_', job['name'])[:90]}"
         pyramiding = "mode" if np.dtype(job["dtype"]).kind in "iu" else "mean"
         try:
+            # The task description carries the expression hash (as in section 03), so a later session only attaches
+            # to a still-running task of the SAME expression; gee_wait_for_exports also checks the completed asset's
+            # stored hash. The asset id stays stable (an identical finished asset is reused by its stored hash).
+            digest = _gee_expression_digest(job["image"])
             handles[job["name"]] = gee_export_to_asset(job["image"], asset_id, job["grid"],
-                                                       description=f"ncr_{job['name']}", pyramiding=pyramiding,
-                                                       wait=False)
+                                                       description=f"ncr_{job['name'][:70]}_{digest[:10]}",
+                                                       pyramiding=pyramiding, wait=False)
         except Exception as exc:  # noqa: BLE001 - interactive extraction still works
             log(f"asset export of {job['name']} could not start ({type(exc).__name__}: {str(exc)[:160]}); "
                 "using computePixels", "WARNING")

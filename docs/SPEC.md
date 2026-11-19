@@ -233,7 +233,7 @@ maximum observed export concurrency is logged and stored (`_S03_QA["export_concu
 * Annual series 1990–2025 (`ANNUAL_SERIES`, via `reduceRegions` at 1 km / native ERA5 scale over NCR + 25 districts):
   `era5_skin_day` (05 UTC Apr–Jun mean), `era5_skin_night` (20 UTC), `era5_tmax`, `era5_tmin` (daily aggregates, Apr–Jun
   mean of daily max/min 2 m temperature), `era5_swvl1`; satellites: `modis_terra_day` (QC + view-time filter, 2000–),
-  `modis_aqua_night` (2002–; an annual night median needs ≥ 1 valid 8-day composite, because real data give ≥ 3 on only
+  `modis_aqua_night` (2003–; an annual night median needs ≥ 1 valid 8-day composite, because real data give ≥ 3 on only
   13–50 % of the NCR cells per year), `viirs_night_cal` (2012–, Aqua-calibrated), with `flag = "drift"` for Terra ≥ 2022 and
   Aqua ≥ 2022.
 
@@ -539,7 +539,8 @@ frames (§4.7) and of the projections (§4.10).
 
 ### 4.7 Levels (absolute °C) and frame fields (section 09)
 * **Day:** `L_day(t) = RAW_LEVELS.day[t] + overpass_correction(t)`, `overpass_correction = (10.75 − mean_overpass_ist_h)
-  × heating_rate_k_per_h` (°C; positive for early scenes). Day frame field = raw anomaly + L_day(t). Interval: ±(0.25 ×
+  × heating_rate_k_per_h` (°C; positive for early scenes). Day frame field = observed value + overpass_correction(t)
+  (equal to raw anomaly + L_day(t) unless the frame has a composition correction, below). Interval: ±(0.25 ×
   |correction| + 0.3) °C (documented heuristic). `DAY_LEVEL_CHECK`: compare with MODIS Terra fixed-mask means 2000–2020.
 * **Night observed/reconstructed:** `L_night(t) = RAW_LEVELS.night[t]` (2000 = calibrated Terra).
 * **Composition correction (partially covered frames):** every non-modelled frame with `FIXED_MASK_COVERAGE < 0.999`
@@ -632,6 +633,9 @@ frames (§4.7) and of the projections (§4.10).
 ### 4.10 Climate delta and Monte-Carlo projections (section 11)
 * `ΔT_s,g(y) = value(y) − value(2025)` per GCM (tasmax for day, tasmin for night). ssp126:
   `ΔT_126,g(y) = ΔT_245,g(y) × gsat_increment[ssp126][y] / gsat_increment[ssp245][y]` (flag `method="pattern-scaled"`).
+  A frame without both AR6 increments uses ratio 1 (a copy of ssp245): a WARNING, a `DATA_CAVEATS` entry (→
+  `manifest.notes`) and `gsat_missing_years` + `method_note` on the scenario (`CMIP6_DELTAS`, `manifest.timeline.
+  scenarios[]`, `metrics.cmip6.scenarios`); `method` stays `"pattern-scaled"`.
 * Baseline level (weather-normalised): `L_base,m = L_m(2025) − β_m × anomaly`, `anomaly = mean(T over the NOW
   window years 2024–26) − T_trend(mean of those years)`, where `T_trend` is the OLS line of the ERA5-Land NCR annual
   series of the mode's temperature variable (ANNUAL_SERIES; `era5_tmax` day, `era5_tmin` night) over 2001–2025 (all
@@ -656,7 +660,10 @@ frames (§4.7) and of the projections (§4.10).
   < 0.3 °C; asserted in synthetic mode, a warning in gee mode); uncertainty budget = variance of the scope mean
   explained by each factor (main effects: variance of conditional means over g, β, r, and the model-error variance),
   normalised to sum 1; threshold years = first projected frame where the scope p50 exceeds `baseline_c + {1,2,3}` °C
-  (keys "+1", "+2", "+3"). AOA DI for projected features (flags bit0); VSUP tier from (p95 − p05)/2 (<0.5, <1, <2,
+  (keys "+1", "+2", "+3"). **Scope support:** the `ncr` scope is the mode's `FIXED_MASK` cells (the support of the
+  observed NCR levels, §4.7), so its series, decomposition (`baseline_c = L_base + mean_FIXED(r̄)`, since
+  `Â_2025 − mean_FIXED(Â_2025)` averages to 0 there), budget and threshold years continue the observed level series;
+  districts and zones use all their cells. AOA DI for projected features (flags bit0); VSUP tier from (p95 − p05)/2 (<0.5, <1, <2,
   ≥2 °C). Projected zones: zone ids from SHAP of the median land realisation's features.
 * Every projection output carries `"scenario projection, not a forecast"` in `manifest.notes` and the timeline.
 
@@ -720,7 +727,12 @@ v1 keys kept: `schema_version` ("2.0"), `generated_at`, `data_mode`, `data_mode_
 `data_sources`, `notes`, `bootstrap` (per mode), `synthetic_truth`. The per-mode `zones` entries are built from
 `ZONE_PROFILES[m]` in canonical order and may carry `display_name` (non-empty string) and `label_caveat` (string or
 null) next to the canonical id/name/color (§1.5). Observed frame entries may carry the optional level diagnostics
-`raw_level`, `composition_correction`, `fixed_mask_coverage` and `drift_correction_c` (§4.7). New:
+`raw_level`, `composition_correction`, `fixed_mask_coverage` and `drift_correction_c` (§4.7). The bundle is public:
+`data_mode_reason` says only how Earth Engine was reached (e.g. `"Earth Engine (service account)"`), and no exported
+file may contain the account e-mail, the Cloud project id or the asset root (section 12 scrubs every JSON string and
+checks the written files; the full reason stays in the notebook log). Optional traceability block
+`"code": {"code_sha": {"00": sha12, …} | null, "bundle_id": str | null, "git_commit": str | null}` (`_CODE_SHA`, and
+the Kaggle launcher's `CODE_INFO` bundle id / commit when present). New:
 ```json
 "modes": [{"id": "day", "label": "Day · ~10:30 IST", "target": "Landsat C2 L2 ST (harmonised, 10:45 IST reference)", "ramp": "solar"},
           {"id": "night", "label": "Night · ~01:30 IST", "target": "MODIS Aqua night (Aqua-equivalent; VIIRS/Terra calibrated)", "ramp": "nocturne"}],
@@ -768,8 +780,11 @@ Satellite annual series per mode: day → `modis_terra_day` (sensor "MODIS Terra
 in the boundary layer) keeps every frame row (`mean` null, `n_cells` 0) and every `ssp` year with null quantiles;
 its decomposition and budget are empty. Decomposition rows are `{climate, land, total,
 baseline_c}` at 2 dp with `total = p50 − baseline_c` (the scope's weather-normalised 2025 baseline, §4.10); readers
-must accept rows without `baseline_c` (older bundles: then `total` was relative to `L_base`). The top level also
-carries `baseline_level_c` = `{mode: L_base}` (NCR weather-normalised baseline, §4.10).
+must accept rows without `baseline_c` (older bundles: then `total` was relative to `L_base`). The `ncr` scope's
+`ssp` fans, decomposition, budget and threshold years aggregate the mode's `FIXED_MASK` cells, like its observed
+frame `mean` (the level, §4.7), so the observed and projected NCR series share one support (bundles before this rule
+used all ROI cells: a composition step at 2025). The top level also carries `baseline_level_c` = `{mode: L_base}`
+(NCR weather-normalised baseline, §4.10).
 
 ### 5.5 `zones.json`, `shap_global.json`, `dependence.json.gz`, `interactions.json`
 All are `{"modes": {"day": {...}, "night": {...}}}` with the v1 per-mode content, adapted:

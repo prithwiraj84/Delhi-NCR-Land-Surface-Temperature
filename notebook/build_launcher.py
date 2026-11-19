@@ -44,7 +44,9 @@ def build(out_path: Path, check: bool, expected_bundle: str = "") -> None:
                 except SyntaxError as exc:
                     sys.exit(f"Syntax error in launcher code cell {i}: {exc}")
     nb = new_notebook()
-    nb.cells = [new_markdown_cell(s) if k == "markdown" else new_code_cell(s) for k, s in cells]
+    # deterministic cell ids, so rebuilding an unchanged source gives a byte-identical notebook
+    nb.cells = [(new_markdown_cell if k == "markdown" else new_code_cell)(s, id=f"launcher-{i:02d}")
+                for i, (k, s) in enumerate(cells)]
     nb.metadata = {
         "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
         "language_info": {"name": "python", "version": "3.10"},

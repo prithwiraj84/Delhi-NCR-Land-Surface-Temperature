@@ -123,8 +123,8 @@
 # | Variable | Default | Effect |
 # |---|---|---|
 # | `LST_PROFILE` | `full` | run profile (table above) |
-# | `LST_FRAMES_OBS` | profile | observed frames, e.g. `1990,2005,2025` (validated, see above) |
-# | `LST_RUN_MODE` | `auto` | `auto` tries Earth Engine and falls back to a synthetic twin with a LOUD banner; `gee` fails hard without Earth Engine; `synthetic` never touches Earth Engine |
+# | `LST_FRAMES_OBS` | profile | observed frames, e.g. `1990,2005,2015,2025` (any profile) or `1990,2005,2025` (pilot only: without projections 2015 is not required; validated, see above) |
+# | `LST_RUN_MODE` | `auto` | `auto` tries Earth Engine and falls back to a synthetic twin with a LOUD banner (but stops with an error when a service-account key was supplied and the login fails); `gee` fails hard without Earth Engine; `synthetic` never touches Earth Engine |
 # | `LST_GRID_RES_M` | 1000 | analysis cell size (m) |
 # | `LST_FINE_FACTOR` | 4 | fine grid = cell size / factor (250 m at 1 km) |
 # | `LST_LC_FINE_RES_M` (legacy `LST_FINE_RES_M`) | profile | land-cover resolution for landscape metrics; snapped to a divisor of the cell size |
@@ -196,7 +196,8 @@
 # Download `web_bundle.zip` from the Kaggle *Output* tab and unzip it into `dashboard/public/data/` (so that
 # `dashboard/public/data/manifest.json` exists), then run `npm install && npm run dev` inside `dashboard/`. The
 # dashboard opens `public/data` by default (`?bundle=data`), or the synthetic demo in `public/demo` (`?bundle=demo`);
-# `VITE_DATA_BASE_URL` points it at a hosted bundle. Synthetic bundles always show a permanent "SIMULATED" banner.
+# `NEXT_PUBLIC_DATA_BASE_URL` points it at a hosted bundle. Synthetic bundles always show a permanent "SIMULATED"
+# banner.
 
 # %% [markdown]
 # ## 0.1 Environment detection and dependencies
@@ -567,8 +568,9 @@ _PROFILE_DEFAULTS = {
              "XGB_MAX_ROUNDS": 400, "XGB_EARLY_STOP": 30, "GNN_EPOCHS": 30, "MORAN_PERMS": 99,
              "BENCHMARKS": list(_ALL_BENCHMARKS), "LC_FINE_RES_M": {"gee": 200, "synthetic": 200},
              "FRAMES_OBS": list(_FRAMES_OBS_ALL), "FRAMES_PROJ": list(_FRAMES_PROJ_ALL)},
-    # Pilot = Earth Engine cost/runtime probe on the risky paths: TM-only Landsat 5 (1990), the Terra-reconstructed
-    # night frame and the early GHSL / GLC five-years-map epochs (2000), the dense L7/L8/L9 windows (2020, 2025);
+    # Pilot = Earth Engine cost/runtime probe on the risky paths: TM-only Landsat 5 and the GLC_FCS30D five-years
+    # map (1990), the Terra-reconstructed night frame and the early GHSL / first GLC annual epoch (2000), the dense
+    # L7/L8/L9 windows (2020, 2025);
     # no projections (N_MC / N_LAND_REAL are unused -> 0); section 05 probes the CMIP6 warming pattern instead.
     "pilot": {"N_BOOTSTRAP": 10, "N_MC": 0, "N_LAND_REAL": 0, "BLOCK_KM": 20, "N_FOLDS_BLOCK": 5,
               "XGB_MAX_ROUNDS": 1500, "XGB_EARLY_STOP": 60, "GNN_EPOCHS": 60, "MORAN_PERMS": 199,
@@ -1059,6 +1061,13 @@ log(f"CFG: PROFILE={CFG.PROFILE} RUN_MODE={CFG.RUN_MODE} GRID_RES_M={CFG.GRID_RE
     f"OUTPUT_DIR={CFG.OUTPUT_DIR}")
 if CFG.ENV_OVERRIDES:
     log("environment overrides: " + ", ".join(f"{k}={v}" for k, v in sorted(CFG.ENV_OVERRIDES.items())))
+# Accepted for v1 compatibility but read by no v2 section: say so instead of silently ignoring a changed value.
+if CFG.TARGET_MODE != "anomaly":
+    log(f"LST_TARGET_MODE={CFG.TARGET_MODE} is ignored in v2: the models always predict per-frame anomalies "
+        "(SPEC §1.3)", "WARNING")
+if CFG.LST_MIN_OBS != 3:
+    log(f"LST_LST_MIN_OBS={CFG.LST_MIN_OBS} is ignored in v2 (a v1 setting; night validity uses NIGHT_MIN_NOBS, "
+        "NIGHT_MIN_NOBS_TERRA and NIGHT_MIN_NOBS_VIIRS)", "WARNING")
 log(f"run control: time budget {f'{CFG.TIME_BUDGET_H:g} h' if CFG.TIME_BUDGET_H else 'unlimited'} (reserve "
     f"{CFG.TIME_RESERVE_S:.0f} s), stop after section {CFG.STOP_AFTER or '-'}, pack cache {CFG.PACK_CACHE}, "
     f"invalidate {CFG.INVALIDATE or '-'}, Earth Engine endpoint {CFG.GEE_ENDPOINT} (deadline "

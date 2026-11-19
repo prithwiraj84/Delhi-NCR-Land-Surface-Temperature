@@ -62,8 +62,9 @@
 # block; shrunk if < 50 blocks remain) unless `CFG.BOOT_BLOCK_KM` is set. Each replicate draws blocks with
 # replacement, gives every training row its block multiplicity × its sample weight, and refits the final model's
 # exact recipe (same rounds, same monotone constraints; no early stopping, so every replicate has the same capacity).
-# Replicates run one per GPU (`gpu_pool_map`), are stage-cached individually (an interrupted Kaggle session resumes)
-# and are **reduced immediately** (importance, binned dependence curves on a fixed evaluation sample, thresholds,
+# Replicates run one per GPU (`gpu_pool_map`), are stage-cached individually (an interrupted Kaggle session resumes;
+# before each replicate that must be computed the time budget is checked with 1.25 × the slowest replicate so far, so
+# the run stops cleanly and a partial bootstrap is never published) and are **reduced immediately** (importance, binned dependence curves on a fixed evaluation sample, thresholds,
 # recommendation counterfactuals), so memory stays bounded.
 #
 # **Intervals** are *recentred (bias-corrected) percentile intervals* $[\hat\theta + q_{2.5} - \tilde\theta^*,\
@@ -131,6 +132,7 @@
 # %%
 import hashlib as _s08_hashlib
 import math as _s08_math
+import threading as _s08_threading
 import time as _s08_time
 import warnings as _s08_warnings
 from decimal import ROUND_HALF_UP as _S08_ROUND_HALF_UP
@@ -188,12 +190,10 @@ _S08_N_ZONES = 4
 _S08_ZONE_NODATA = 255
 if int(CFG.K_ZONES) != _S08_N_ZONES:
     log(f"CFG.K_ZONES={CFG.K_ZONES} but the zone contract has 4 canonical zones; using K=4", "WARNING")
-# Monotone constraints of the final model (SPEC §4.3) - bootstrap refits and the surrogate use the same signs.
-_S08_MONOTONE = {
-    "day": {f: -1 for f in ("ndvi", "ndvi_m3", "ndvi_m15", "frac_forest", "frac_forest_m3", "frac_forest_m15",
-                            "frac_water", "frac_water_m3", "frac_water_m15", "mndwi")},
-    "night": {f: 1 for f in ("built_v", "frac_built", "frac_built_m3", "frac_built_m15")},
-}
+# Monotone constraints of the final model (SPEC §4.3) - bootstrap refits and the surrogate use the same signs. Single
+# source: section 07's definition (the one the final model was trained with), never a copy that could drift from it.
+# A change there changes FINAL_MODELS and therefore every 08 stage key (booster hash).
+_S08_MONOTONE = _S07_MONOTONE
 _S08_DEVICE = xgb_device_for(0)
 _S08_ON_GPU = _S08_DEVICE != "cpu"
 _S08_EVAL_ROWS = 60000 if _S08_ON_GPU else 20000        # bootstrap evaluation sample (dependence / importance)
@@ -1497,6 +1497,13 @@ def _s08_bootstrap_replicate(job, gpu_id):
             return sc.load()
         except StageCacheError as exc:
             log(f"{exc}; recomputing replicate {b}", "WARNING")
+    # Time budget (D3): gpu_pool_map checks it before every item with 1.25 x the slowest item of this call, which is 0
+    # for the first wave and counts cache hits. A replicate that must be computed is therefore also checked here with
+    # 1.25 x the slowest computed replicate (seeded from an earlier run's 08_boot sidecar). LSTStop propagates out of
+    # the 08_explain stage, so a partial bootstrap is never cached or published.
+    with st["boot_lock"]:
+        expected = 1.25 * float(st["boot_longest"])
+    check_budget(f"08 bootstrap replicate {b + 1}/{CFG.N_BOOTSTRAP} ({mode})", expected)
     t0 = _s08_time.time()
     device = xgb_device_for(gpu_id) if _S08_ON_GPU else "cpu"
     try:
@@ -1534,7 +1541,9 @@ def _s08_bootstrap_replicate(job, gpu_id):
         del group
         log(f"  08 {mode} bootstrap {b + 1}/{CFG.N_BOOTSTRAP} on {used}: {rows.size:,} rows, "
             f"{result['seconds']:.1f}s")
-        return sc.save(result)
+        with st["boot_lock"]:
+            st["boot_longest"] = max(float(st["boot_longest"]), float(result["seconds"]))
+        return sc.save(result, compute_s=result["seconds"])      # compute_s seeds the next session's look-ahead
     except Exception as exc:  # noqa: BLE001 - one failed replicate must not lose the others
         log(f"  08 {mode} bootstrap replicate {b} failed on {device}: {type(exc).__name__}: {exc}", "WARNING")
         return {"ok": False, "b": int(b), "device": device, "error": f"{type(exc).__name__}: {exc}"}
@@ -1768,6 +1777,12 @@ def _s08_run_mode(mode, booster_hash):
                              eval=_s08_hash(eval_rows), edges=_s08_hash(*edges),
                              plans=_s08_hash([(p["zone"], p["feature"], round(p["step"], 9)) for p in plans]))
     n_boot = int(CFG.N_BOOTSTRAP)
+    # per-replicate budget look-ahead (see _s08_bootstrap_replicate): newest 08_boot sidecar compute_s, then the slowest
+    # replicate computed in this call
+    _est, _norm = globals().get("_stage_compute_estimate"), globals().get("_stage_norm_name")
+    st["boot_lock"] = _s08_threading.Lock()
+    st["boot_longest"] = (float(_est(_norm(f"08_boot_{mode}")) or 0.0)
+                          if _est is not None and _norm is not None else 0.0)
     with timer(f"08_{mode}_bootstrap"):
         log(f"08 {mode}: block bootstrap {n_boot} replicates x {rounds} rounds, {n_blocks} blocks of "
             f"{block_km:.0f} km ({block_info['block_size_source']}), eval sample {eval_rows.size:,} rows")
@@ -1992,8 +2007,9 @@ for _s08_mode in IMPORTANCE:
 # otherwise go to `l[i]` if `x[f[i]] < t[i]`, to `r[i]` if `x[f[i]] >= t[i]`, and to `l[i]` if `d[i] == 1` else `r[i]`
 # when the value is missing. Prediction (anomaly °C) = `base_score + Σ leaves`; absolute °C = prediction + the frame
 # level (section 09). Thresholds are exact, finite float32 values (`_s08_threshold`). The surrogate is distilled
-# from the final model on every valid ROI cell × frame with the same monotone constraints, then shrunk (fewer
-# trees) only if the JSON exceeds 6 MB.
+# from the final model (label = its anomaly prediction) on every ROI cell × frame, rows with missing features
+# included, plus the NaN-augmented copies of complete rows (8.8), with the same monotone constraints, then shrunk
+# (fewer trees) only if the JSON exceeds 6 MB.
 
 # %%
 _S08_WEB_MAX_BYTES = 6 * 1024 * 1024
